@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- viewport-fit=cover lets us paint under the iPhone notch; safe-area padding keeps content clear of it -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>AI Tech Pulse</title>
+  <meta name="description" content="Your portable AI/ML learning companion: live tech news, AI-generated interview questions, quizzes and a voice-controlled AI tutor.">
+  <meta name="theme-color" content="#0f172a">
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Tech Pulse">
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- ================= APP SHELL ================= -->
+  <div class="app" id="app">
+
+    <!-- Header -->
+    <header class="header glass">
+      <div class="brand">
+        <div class="logo floating" aria-hidden="true">🤖</div>
+        <div class="brand-text">
+          <h1>AI Tech Pulse</h1>
+          <p>Hey <span id="userName" class="name">there</span>! Ready to learn?</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <span class="progress-pill" id="progressPill" title="MCQ score">0/0 · 🔥0</span>
+        <button class="icon-btn hidden" id="installBtn" aria-label="Install app" title="Install app">⬇</button>
+        <button class="icon-btn" id="settingsBtn" aria-label="Settings" title="Settings">⚙</button>
+      </div>
+    </header>
+
+    <!-- Offline banner -->
+    <div class="offline-banner hidden" id="offlineBanner" role="status">
+      📴 <strong>Offline Mode</strong>: showing saved content. AI features return when the backend is reachable.
+    </div>
+
+    <!-- Tabs -->
+    <nav class="tabs glass" role="tablist">
+      <button class="tab active" role="tab" data-tab="news" aria-selected="true">📰<span>News</span></button>
+      <button class="tab" role="tab" data-tab="interview" aria-selected="false">🎓<span>Interview</span></button>
+      <button class="tab" role="tab" data-tab="mcq" aria-selected="false">📝<span>MCQ</span></button>
+      <button class="tab" role="tab" data-tab="chat" aria-selected="false">💬<span>Chat</span></button>
+    </nav>
+
+    <!-- Content -->
+    <main class="content" id="content">
+
+      <!-- NEWS -->
+      <section id="tab-news" class="panel active" role="tabpanel">
+        <div class="panel-bar">
+          <span class="muted" id="newsMeta">Loading…</span>
+          <button class="chip" id="newsRefresh">↻ Refresh</button>
+        </div>
+        <div id="newsList" class="stack"></div>
+      </section>
+
+      <!-- INTERVIEW -->
+      <section id="tab-interview" class="panel" role="tabpanel">
+        <div class="chips scroll-x" id="categoryChips"></div>
+        <div class="panel-bar">
+          <select id="difficulty" class="select" aria-label="Difficulty">
+            <option value="">Any level</option>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+          <button class="btn btn-primary btn-sm" id="genQuestions">✨ Generate</button>
+        </div>
+        <div id="questionList" class="stack"></div>
+      </section>
+
+      <!-- MCQ -->
+      <section id="tab-mcq" class="panel" role="tabpanel">
+        <div class="chips scroll-x" id="mcqChips"></div>
+        <div id="mcqBox"></div>
+      </section>
+
+      <!-- CHAT -->
+      <section id="tab-chat" class="panel panel-chat" role="tabpanel">
+        <div class="kb-bar">
+          <span class="muted" id="kbInfo">Knowledge base: –</span>
+          <label class="chip" for="kbFile">📎 Add PDF / notes</label>
+          <input type="file" id="kbFile" accept=".pdf,.txt,.md" hidden>
+        </div>
+        <div id="chatLog" class="chat-log" aria-live="polite">
+          <div class="msg bot">
+            <div class="bubble">👋 Ask me anything about AI/ML. I'll search <b>your uploaded notes</b> or the <b>live web</b> when needed. Try <i>"What's new in LLMs this week?"</i></div>
+          </div>
+        </div>
+        <form id="chatForm" class="chat-input glass">
+          <button type="button" class="icon-btn mic" id="chatMic" aria-label="Speak your question">🎤</button>
+          <textarea id="chatText" rows="1" placeholder="Ask a question…" aria-label="Message" enterkeyhint="send"></textarea>
+          <button type="submit" class="icon-btn send" aria-label="Send">➤</button>
+        </form>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer glass">
+      <span class="status"><span class="dot" id="statusDot"></span><span id="statusText">Connecting…</span></span>
+      <!-- Voice button lives in the footer so it never covers content -->
+      <button class="voice-fab" id="voiceFab" aria-label="Voice command">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+      </button>
+      <span class="muted" id="clock"></span>
+    </footer>
+  </div>
+
+
+
+  <!-- Voice overlay -->
+  <div class="voice-overlay hidden" id="voiceOverlay" role="dialog" aria-label="Listening">
+    <div class="wave"><i></i><i></i><i></i><i></i><i></i></div>
+    <p id="voiceText">Listening…</p>
+    <p class="muted small">Try: "news", "quiz", "next", "my progress", or ask any question</p>
+    <button class="btn btn-ghost" id="voiceStop">Stop</button>
+  </div>
+
+  <!-- Settings sheet -->
+  <div class="sheet-backdrop hidden" id="settingsSheet">
+    <div class="sheet glass" role="dialog" aria-label="Settings">
+      <h2>Settings</h2>
+      <label class="field">Your name
+        <input id="setName" maxlength="24" autocomplete="nickname">
+      </label>
+      <label class="field">Backend URL
+        <input id="setApi" placeholder="http://localhost:8000" inputmode="url" autocomplete="off">
+        <small class="muted">Leave empty to use the server this app was loaded from.</small>
+      </label>
+      <label class="field check">
+        <input type="checkbox" id="setWhisper">
+        <span>Private voice mode: transcribe on your own server with Whisper (the browser's built-in recognition may send audio to the cloud)</span>
+      </label>
+      <div class="row">
+        <button class="btn btn-ghost" id="testApi">Test connection</button>
+        <span class="muted small" id="testResult"></span>
+      </div>
+      <div class="row">
+        <button class="btn btn-ghost danger" id="resetProgress">Reset local progress</button>
+      </div>
+      <div class="row end">
+        <button class="btn btn-ghost" id="closeSettings">Cancel</button>
+        <button class="btn btn-primary" id="saveSettings">Save</button>
+      </div>
+      <p class="muted small" id="installHint"></p>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast" role="status"></div>
+
+  <script src="mock-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

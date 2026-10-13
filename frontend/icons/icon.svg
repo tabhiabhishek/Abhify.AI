@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8b5cf6"/>
+      <stop offset="1" stop-color="#ec4899"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- robot head -->
+  <line x1="256" y1="96" x2="256" y2="136" stroke="#fff" stroke-width="16" stroke-linecap="round"/>
+  <circle cx="256" cy="88" r="18" fill="#fff"/>
+  <rect x="120" y="136" width="272" height="208" rx="56" fill="#0f172a" fill-opacity=".9"/>
+  <circle cx="200" cy="232" r="26" fill="#a5f3fc"/>
+  <circle cx="312" cy="232" r="26" fill="#a5f3fc"/>
+  <!-- pulse line as the mouth -->
+  <path d="M168 296 h48 l16 -26 l24 50 l20 -40 l14 16 h54" fill="none" stroke="#34d399" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- ears -->
+  <rect x="92" y="200" width="28" height="72" rx="14" fill="#fff"/>
+  <rect x="392" y="200" width="28" height="72" rx="14" fill="#fff"/>
+  <!-- label -->
+  <text x="256" y="430" text-anchor="middle" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="64" font-weight="800" fill="#fff" letter-spacing="2">AI PULSE</text>
+</svg>

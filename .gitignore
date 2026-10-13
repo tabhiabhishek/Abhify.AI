@@ -1,0 +1,13 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Local data (ChromaDB knowledge base + SQLite progress)
+backend/data/
+
+# Secrets / local config
+backend/.env
+
+# Logs
+*.log

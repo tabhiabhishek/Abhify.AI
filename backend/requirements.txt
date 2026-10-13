@@ -1,0 +1,23 @@
+# AI Tech Pulse backend: tested with Python 3.11
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
+pydantic-settings==2.15.0
+httpx>=0.27
+
+# AI brain: LangGraph agent on a local Ollama model
+langgraph==1.2.15
+langchain-core==1.6.10
+langchain-ollama==1.1.0
+langchain-community==0.4.2
+
+# Knowledge base: ChromaDB vector store + PDF parsing
+langchain-chroma==1.1.0
+chromadb==1.5.9
+pypdf==6.20.1
+
+# Live web search + news (DuckDuckGo, no API key)
+ddgs==9.16.0
+
+# Backend speech-to-text fallback (GPU if available, else CPU)
+faster-whisper==1.2.1

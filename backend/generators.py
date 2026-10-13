@@ -160,6 +160,9 @@ async def get_news(limit: int = 8, refresh: bool = False) -> list[dict]:
     if not refresh and _news_cache["items"] and time.time() - _news_cache["at"] < ttl:
         return _news_cache["items"]
 
+    from system_service import internet_available
+    if not internet_available():
+        raise GenerationError("Offline: live news needs an internet connection")
     try:
         headlines = await asyncio.to_thread(_fetch_headlines, limit)
     except Exception as e:
@@ -205,6 +208,10 @@ async def get_news(limit: int = 8, refresh: bool = False) -> list[dict]:
 
     _news_cache.update(at=time.time(), items=items)
     return items
+
+
+def news_cache_time() -> float:
+    return _news_cache["at"]
 
 
 # --------------------------------------------------------------------------- interview

@@ -79,7 +79,7 @@ def search_memory(query: str) -> str:
     """Search the personal memories the user asked you to keep (goals, preferences, facts about them)."""
     if not db.get_prefs().get("memory_enabled", True):
         return "Long-term memory is turned off by the user."
-    found = mem.search_memories(query, limit=6)
+    found = mem.search_memories(query, limit=6, fallback_recent=True)
     return "\n".join(f"- ({m['category']}) {m['content']}" for m in found) or "No saved memories match."
 
 

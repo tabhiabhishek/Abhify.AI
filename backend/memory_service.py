@@ -153,25 +153,42 @@ def _fts_query(text: str) -> str | None:
     return " OR ".join(f'"{t}"*' for t in terms) if terms else None   # quoted = no FTS syntax injection
 
 
-def search_memories(text: str, limit: int = 4) -> list[dict[str, Any]]:
-    """Memories relevant to `text` (BM25), plus all pinned ones."""
+SMALL_MEMORY = 8          # with this few memories, using all of them is cheap and avoids missed recalls
+
+
+def search_memories(text: str, limit: int = 4, fallback_recent: bool = False) -> list[dict[str, Any]]:
+    """Memories relevant to `text` (stemmed FTS5 + BM25), plus all pinned ones.
+
+    With `fallback_recent`, return the most recent memories when nothing matches
+    (used by the agent's search_memory tool for questions like "what are my goals?").
+    """
     out: dict[int, dict[str, Any]] = {}
     with db.connect() as c:
         for r in c.execute("SELECT * FROM memories WHERE pinned = 1 ORDER BY updated_at DESC LIMIT 5"):
             out[r["id"]] = dict(r)
         q = _fts_query(text)
+        matched = False
         if q:
             for r in c.execute("SELECT m.* FROM memories_fts f JOIN memories m ON m.id = f.rowid "
                                "WHERE memories_fts MATCH ? ORDER BY bm25(memories_fts) LIMIT ?", (q, limit)):
+                out.setdefault(r["id"], dict(r)); matched = True
+        if fallback_recent and not matched:
+            for r in c.execute("SELECT * FROM memories ORDER BY updated_at DESC LIMIT ?", (SMALL_MEMORY,)):
                 out.setdefault(r["id"], dict(r))
     return list(out.values())
+
+
+def count_memories() -> int:
+    with db.connect() as c:
+        return c.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
 
 
 def memory_context(text: str) -> str:
     """Short block appended to the system prompt; '' when memory is disabled/empty."""
     if not db.get_prefs().get("memory_enabled", True):
         return ""
-    mems = search_memories(text)
+    # Few memories: include them all (cheap, and recall never misses). Many: only relevant ones.
+    mems = list_memories() if count_memories() <= SMALL_MEMORY else search_memories(text)
     if not mems:
         return ""
     lines = "\n".join(f"- ({m['category']}) {m['content']}" for m in mems)

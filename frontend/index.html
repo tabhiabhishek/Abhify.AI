@@ -4,18 +4,20 @@
   <meta charset="UTF-8">
   <!-- viewport-fit=cover lets us paint under the iPhone notch; safe-area padding keeps content clear of it -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>AI Tech Pulse</title>
-  <meta name="description" content="Your portable AI/ML learning companion: live tech news, AI-generated interview questions, quizzes and a voice-controlled AI tutor.">
+  <title>Abhify.AI</title>
+  <meta name="description" content="Abhify.AI: your local-first AI/ML learning companion. Live tech news, AI-generated interview questions, quizzes, personal memory and a voice-controlled AI tutor, running on your own computer.">
+  <meta name="application-name" content="Abhify.AI">
   <meta name="theme-color" content="#0f172a">
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.json">
-  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Tech Pulse">
+  <meta name="apple-mobile-web-app-title" content="Abhify.AI">
 
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -26,9 +28,9 @@
     <!-- Header -->
     <header class="header glass">
       <div class="brand">
-        <div class="logo floating" aria-hidden="true">🤖</div>
+        <img class="logo" src="brand/logo-mark-96.png" alt="" width="44" height="44">
         <div class="brand-text">
-          <h1>AI Tech Pulse</h1>
+          <h1>Abhify<span class="brand-ai">.AI</span></h1>
           <p>Hey <span id="userName" class="name">there</span>! Ready to learn?</p>
         </div>
       </div>
@@ -88,13 +90,16 @@
       <!-- CHAT -->
       <section id="tab-chat" class="panel panel-chat" role="tabpanel">
         <div class="kb-bar">
-          <span class="muted" id="kbInfo">Knowledge base: –</span>
-          <label class="chip" for="kbFile">📎 Add PDF / notes</label>
+          <span class="muted" id="kbInfo" title="Chunks in your local knowledge base">📚 –</span>
+          <span class="row-tight">
+            <button class="chip" id="newChat" title="Start a new conversation">＋ New</button>
+            <label class="chip" for="kbFile" title="Add a PDF, .txt or .md file to your knowledge base">📎 Add file</label>
+          </span>
           <input type="file" id="kbFile" accept=".pdf,.txt,.md" hidden>
         </div>
         <div id="chatLog" class="chat-log" aria-live="polite">
           <div class="msg bot">
-            <div class="bubble">👋 Ask me anything about AI/ML. I'll search <b>your uploaded notes</b> or the <b>live web</b> when needed. Try <i>"What's new in LLMs this week?"</i></div>
+            <div class="bubble">👋 Ask me anything about AI/ML. I'll use <b>your documents</b>, <b>your saved memories</b> or the <b>live web</b> when needed. Say <i>"remember that…"</i> to save something about you. Try <i>"What's new in LLMs this week?"</i></div>
           </div>
         </div>
         <form id="chatForm" class="chat-input glass">
@@ -133,6 +138,10 @@
   <div class="sheet-backdrop hidden" id="settingsSheet">
     <div class="sheet glass" role="dialog" aria-label="Settings">
       <h2>Settings</h2>
+      <div class="row">
+        <button class="btn btn-ghost" id="openMemory">🧠 Memory &amp; history</button>
+        <button class="btn btn-ghost" id="openSystem">🖥️ System &amp; data</button>
+      </div>
       <label class="field">Your name
         <input id="setName" maxlength="24" autocomplete="nickname">
       </label>
@@ -156,6 +165,74 @@
         <button class="btn btn-primary" id="saveSettings">Save</button>
       </div>
       <p class="muted small" id="installHint"></p>
+    </div>
+  </div>
+
+
+  <!-- First-run setup wizard -->
+  <div class="sheet-backdrop hidden" id="setupSheet">
+    <div class="sheet glass sheet-tall" role="dialog" aria-label="Setup">
+      <div class="sheet-head">
+        <img src="brand/logo-320.png" alt="Abhify.AI" width="72" height="72">
+        <div><h2>Welcome to Abhify.AI</h2><p class="muted small">Let's check this computer and pick AI models that fit it.</p></div>
+      </div>
+      <div id="setupBody"></div>
+      <div class="row end">
+        <button class="btn btn-ghost" id="setupSkip">Skip for now (limited mode)</button>
+        <button class="btn btn-primary" id="setupFinish" disabled>Finish setup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Memory & history manager -->
+  <div class="sheet-backdrop hidden" id="memorySheet">
+    <div class="sheet glass sheet-tall" role="dialog" aria-label="Memory">
+      <h2>🧠 Memory &amp; history</h2>
+      <p class="muted small">Stored only on this computer. Abhify.AI never saves memories by itself: add them here or say "remember that…" in chat.</p>
+      <label class="field check"><input type="checkbox" id="prefMemory"><span>Use long-term memory in answers</span></label>
+      <label class="field check"><input type="checkbox" id="prefHistory"><span>Save chat history</span></label>
+      <label class="field">Delete chat history older than
+        <select id="prefRetention" class="select">
+          <option value="0">Never (keep forever)</option><option value="7">7 days</option>
+          <option value="30">30 days</option><option value="90">90 days</option><option value="365">1 year</option>
+        </select>
+      </label>
+      <form class="row" id="memoryForm">
+        <input id="memoryText" class="input grow" maxlength="500" placeholder="e.g. I'm preparing for ML engineer interviews" aria-label="New memory">
+        <select id="memoryCat" class="select" aria-label="Category">
+          <option value="general">General</option><option value="goal">Goal</option><option value="preference">Preference</option>
+          <option value="weak_topic">Weak topic</option><option value="fact">Fact</option>
+        </select>
+        <button class="btn btn-primary btn-sm" type="submit">Add</button>
+      </form>
+      <div id="memoryList" class="list"></div>
+      <div class="row">
+        <button class="btn btn-ghost danger" id="clearHistory">Delete all chat history</button>
+        <button class="btn btn-ghost danger" id="clearMemories">Delete all memories</button>
+      </div>
+      <div class="row end"><button class="btn btn-primary" data-close="memorySheet">Done</button></div>
+    </div>
+  </div>
+
+  <!-- System & data -->
+  <div class="sheet-backdrop hidden" id="systemSheet">
+    <div class="sheet glass sheet-tall" role="dialog" aria-label="System and data">
+      <h2>🖥️ System &amp; data</h2>
+      <div id="systemInfo" class="stats"></div>
+      <h3>Your data</h3>
+      <p class="muted small break" id="dataRoot">–</p>
+      <div class="row">
+        <button class="btn btn-ghost" id="backupNow">💾 Backup now</button>
+        <a class="btn btn-ghost link-as-btn" id="exportBackup" href="#" download>⬇ Export</a>
+        <label class="btn btn-ghost link-as-btn" for="restoreFile">♻ Restore…</label>
+        <input type="file" id="restoreFile" accept=".zip" hidden>
+      </div>
+      <div id="backupList" class="list small"></div>
+      <div class="row">
+        <button class="btn btn-ghost" id="moveData">📁 Move data folder…</button>
+        <button class="btn btn-ghost" id="rerunSetup">🔧 Models &amp; setup</button>
+      </div>
+      <div class="row end"><button class="btn btn-primary" data-close="systemSheet">Done</button></div>
     </div>
   </div>
 

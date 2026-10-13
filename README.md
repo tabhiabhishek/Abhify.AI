@@ -1,160 +1,157 @@
-# 🤖 AI Tech Pulse
+<p align="center"><img src="frontend/brand/logo-320.png" width="160" alt="Abhify.AI logo"></p>
 
-A cross-platform AI/ML learning companion. **One codebase** runs on the **web, phones (iOS/Android) and desktops (Windows/macOS)** as an installable PWA. AI features are powered by a local LLM, so they cost nothing to run and your data stays on your machine.
+<h1 align="center">Abhify.AI</h1>
+<p align="center"><b>Learn · Build · Share · Grow</b>: a local-first AI/ML learning companion that runs on your own computer.</p>
 
-| Tab | What it does | Powered by |
+Abhify.AI combines live AI news, AI-generated interview questions and quizzes, a chat agent that knows your documents and remembers what you ask it to, and voice control. The AI runs **locally through Ollama**, so there are no paid APIs and no cloud account, and your documents and memories stay on your machine.
+
+> **Status:** `2.0.0-dev.1`, milestone 1 of the v2 upgrade (see [docs/ROADMAP.md](docs/ROADMAP.md)). The v1.0.0 baseline is Git tag `v1.0.0`.
+
+| Feature | What it does | Needs internet? |
 |---|---|---|
-| 📰 **News** | Live AI/ML headlines, filtered for relevance and summarized for learners | DuckDuckGo News + qwen2.5 |
-| 🎓 **Interview** | Fresh interview questions with model answers and key points, by category and difficulty | qwen2.5 (JSON mode) |
-| 📝 **MCQ** | 5-question quizzes with explanations and score tracking | qwen2.5 + SQLite |
-| 💬 **Chat** | An agent that decides between **your uploaded PDFs/notes** and **live web search** | LangGraph ReAct + ChromaDB + DuckDuckGo |
-| 🎙️ **Voice** | Voice commands ("news", "quiz", "next", "my progress") or spoken questions, with spoken answers | Web Speech API → Faster-Whisper fallback |
+| 📰 News | Latest AI/ML headlines, filtered and summarized by your local LLM | Yes (shows saved news offline, with its age) |
+| 🎓 Interview | Fresh interview questions with model answers and key points | No* |
+| 📝 MCQ | 5-question quizzes, explanations, score and streak | No* |
+| 💬 Chat | Agent that uses **your documents**, **your memories**, or **web search** when needed | Only for web search |
+| 🧠 Memory | Personal facts *you* choose to save; editable, deletable, can be switched off | No |
+| 🎙️ Voice | Voice commands and spoken questions (Web Speech API or local Faster-Whisper) | No with Whisper |
 
-When the backend is unreachable, the app switches to **Offline Mode**: it shows saved content (or built-in samples), quizzes still work, and progress is queued and synced later.
+\* after setup, when a local model is installed.
 
 ---
+
+## 🚀 Quick start (Windows)
+
+1. Install **[Python 3.11](https://www.python.org/downloads/)** and **[Ollama](https://ollama.com/download)**, and start Ollama.
+2. Double-click **`start.bat`**. The first run creates `backend\.venv` and installs dependencies.
+3. Your browser opens **http://localhost:8000**, and the **setup wizard** guides you:
+   - **Checks this computer:** OS, CPU, RAM, NVIDIA GPU/VRAM, free disk, Ollama.
+   - **Recommends a model profile:**
+
+     | Profile | Models | Download | Good for |
+     |---|---|---|---|
+     | Minimal | `qwen2.5:1.5b` + `nomic-embed-text` | ~1.3 GB | Most laptops, CPU-only |
+     | Balanced | `qwen2.5` (7B) + `nomic-embed-text` | ~5 GB | 6 GB+ GPU, or 16 GB RAM on CPU |
+     | Quality | `qwen2.5:14b` + `nomic-embed-text` | ~9.3 GB | ~11 GB+ VRAM |
+
+   - **Downloads only after you confirm,** and only if the disk has room.
+   - **Runs a test** to confirm the AI works.
+
+You can skip setup ("limited mode"). News and saved quizzes still work.
+
+macOS / Linux: `./start.sh`. Docker: `docker compose up -d --build` (unverified, since Docker wasn't available on the development machine).
+
+## 🗂️ Where your data lives
+
+User data is kept **outside** the program folder:
+
+| OS | Location |
+|---|---|
+| Windows | `%LOCALAPPDATA%\AbhifyAI\` |
+| macOS | `~/Library/Application Support/AbhifyAI/` |
+| Linux | `~/.local/share/AbhifyAI/` |
+
+- Data from AI Tech Pulse v1.0.0 is **copied** in automatically on first start; the original stays where it was.
+- AI models stay in Ollama's own folder.
+
+See **[docs/DATA_AND_MIGRATION.md](docs/DATA_AND_MIGRATION.md)** for the folder layout, backups, restore, moving the data folder, and moving to another PC.
+
+## 🔒 Privacy & safety
+
+- The LLM, embeddings, documents, memories, chat history, progress and Whisper all run and stay **locally**.
+- Web search and news send search queries to DuckDuckGo. You can turn web search off in `settings.json` (`features.web_search`).
+- Memory is only saved when you add it, or explicitly say *"remember that…"*. You can view, edit and delete every memory.
+- Logs contain no chat text or document contents.
+- The server listens on **127.0.0.1** by default. To use it from your phone, set `ABHIFY_HOST=0.0.0.0` and use an HTTPS tunnel.
+- **Admin actions** (backup, restore, moving data, downloading models) only work from the computer running Abhify.AI.
 
 ## 🧱 Architecture
 
 ```
- ┌──────────── PWA (frontend/) ────────────┐        ┌──────────── FastAPI (backend/) ─────────────┐
- │ index.html · styles.css · app.js        │  HTTP  │ main.py        REST API + serves the PWA     │
- │ sw.js (offline shell) · manifest.json   │ ─────► │ agent.py       LangGraph ReAct agent         │
- │ localStorage cache · offline queue      │        │   ├─ knowledge_base_search → ChromaDB        │
- │ Web Speech API / MediaRecorder          │        │   └─ web_search           → DuckDuckGo      │
- └─────────────────────────────────────────┘        │ generators.py  news / questions / MCQs       │
-                                                    │ knowledge.py   PDF → chunks → embeddings     │
-                                                    │ transcribe.py  Faster-Whisper (GPU/CPU)      │
-                                                    │ db.py          SQLite progress + streaks     │
-                                                    └──────────────┬──────────────────────────────┘
-                                                                   │
-                                                     Ollama: qwen2.5 · nomic-embed-text
+ PWA (frontend/)                        FastAPI backend (backend/)                     Local services
+ ─────────────────                      ──────────────────────────                     ──────────────
+ index.html · app.js · styles.css   ──► main.py          REST API, serves the PWA
+ sw.js offline shell                    agent.py         LangGraph ReAct agent ──────► Ollama (LLM)
+ setup wizard · memory · system UI      ├ knowledge_base_search ─► knowledge.py ─────► ChromaDB  ┐
+ localStorage: prefs, caches, queue     ├ search/save_memory ────► memory_service.py ► SQLite    │ %LOCALAPPDATA%
+                                        └ web_search (online only) ► DuckDuckGo                  │ \AbhifyAI
+                                        generators.py    news / questions / MCQs                 │
+                                        system_service.py hardware, profiles, model pulls        │
+                                        database.py      SQLite + migrations + backups ──────────┤
+                                        local_file_service.py data dir, settings, backup/restore ┘
+                                        transcribe.py    Faster-Whisper (GPU → CPU fallback)
 ```
 
-## 📂 Project structure
+**Chat request flow**
+1. The PWA sends `POST /chat {message, thread_id}`.
+2. The agent loads the last 12 messages of that conversation from SQLite and adds your relevant memories to its instructions.
+3. The local model decides which tools to call: your documents, memory, or the web (web only when online).
+4. The answer and the tools it used are saved to SQLite and returned with sources.
 
-```
-ai_tech_pulse/
-├── backend/
-│   ├── main.py            FastAPI app: /chat /news /generate-question /generate-mcq /transcribe /voice ...
-│   ├── agent.py           LangGraph agent with knowledge-base + web-search tools
-│   ├── generators.py      AI-generated news summaries, interview questions, MCQs (validated)
-│   ├── knowledge.py       ChromaDB vector store (PDF / .txt / .md ingestion)
-│   ├── transcribe.py      Faster-Whisper transcription (CUDA float16 → CPU int8 fallback)
-│   ├── db.py              SQLite progress tracking
-│   ├── config.py          Settings (env vars / .env)
-│   ├── requirements.txt
-│   └── .env.example
-├── frontend/
-│   ├── index.html  styles.css  app.js  mock-data.js
-│   ├── manifest.json  sw.js
-│   └── icons/             SVG + 192/512 PNG + maskable + Apple touch icon
-├── Dockerfile
-├── docker-compose.yml
-└── start.bat / start.sh   one-click local start
-```
+## 🔌 API (summary)
 
-## 🚀 Quick start (local)
+| Area | Endpoints |
+|---|---|
+| Learning | `GET /health` · `POST /chat` · `GET /news` · `POST /generate-question` · `POST /generate-mcq` |
+| Voice | `POST /transcribe` · `POST /voice` |
+| Knowledge | `POST /knowledge/upload` · `GET /knowledge` |
+| Progress | `GET /progress/{user_id}` · `POST /progress` |
+| Memory | `GET/POST /memory` · `PATCH/DELETE /memory/{id}` · `GET/PUT /preferences` |
+| Conversations | `GET /conversations` · `GET/DELETE /conversations/{id}` |
+| Setup / system | `GET /system/diagnostics` · `GET /setup/profiles` · `POST /setup/profile`* · `POST/GET /setup/models/pull`* · `POST /setup/test` · `POST /setup/complete`* |
+| Backup / data | `GET /backup` · `POST /backup`* · `GET /backup/export`* · `POST /backup/restore`* · `POST /system/data-location`* |
 
-**1. Install [Ollama](https://ollama.com/download) and pull the models**
-```bash
-ollama pull qwen2.5
-ollama pull nomic-embed-text
-```
-
-**2. Start the backend.** It also serves the app.
-
-- Windows: double-click **`start.bat`**
-- macOS / Linux: `./start.sh`
-- Manually:
-  ```bash
-  cd backend
-  python -m venv .venv
-  .venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
-  pip install -r requirements.txt
-  uvicorn main:app --reload --port 8000
-  ```
-
-**3. Open http://localhost:8000**. The footer should show 🟢 **Online · AI ready**. API docs are at http://localhost:8000/docs.
-
-### With Docker (Ollama included)
-```bash
-docker compose up -d --build      # first run downloads the models (~5 GB)
-```
-Then open http://localhost:8000. Uncomment the `deploy:` blocks in `docker-compose.yml` to use an NVIDIA GPU.
-
-## 🔌 API
-
-| Method | Endpoint | Body / params | Returns |
-|---|---|---|---|
-| GET | `/health` | | Ollama status, models ready, knowledge-base size |
-| POST | `/chat` | `{message, thread_id?}` | `{answer, thread_id, tools_used, sources}` |
-| GET | `/news` | `?limit=8&refresh=false` | `{items:[{title, summary, source, url, time, isBreaking}]}` |
-| POST | `/generate-question` | `{category, difficulty?, count, user_id?}` | `{questions:[{question, answer, keyPoints, ...}]}` |
-| POST | `/generate-mcq` | `{category, count, user_id?}` | `{mcqs:[{question, options[4], correctAnswer, explanation}]}` |
-| POST | `/transcribe` | multipart `file` | `{text, language, duration}` |
-| POST | `/voice` | multipart `file`, `thread_id?` | transcript + agent answer |
-| POST | `/knowledge/upload` | multipart `file` (.pdf/.txt/.md) | chunks indexed |
-| GET | `/knowledge` | | documents in the knowledge base |
-| GET / POST | `/progress/{user_id}` · `/progress` | event | score, accuracy, streak, per-category stats |
-
-Categories: `python, ml, dl, nlp, cv, llm, mlops, ai` (or `all`).
-
-## 🌍 Deployment: make it available everywhere
-
-> **HTTPS matters.** Browsers only allow **PWA install, service workers and microphone access** on `https://` or `localhost`. Opening `http://192.168.x.x:8000` from your phone will load the page, but install and voice won't work. Use one of the options below.
-
-### Web & mobile
-
-**Option A: everything on one server (simplest).** The backend already serves the PWA, so deploy the Docker image anywhere that gives you HTTPS:
-- **Your own PC/GPU box + a tunnel:** run `docker compose up` (or `start.bat`), then expose it with `cloudflared tunnel --url http://localhost:8000`, `ngrok http 8000` or **Tailscale Funnel**. You get an `https://` URL that works on any phone, with the LLM running on your own GPU.
-- **Cloud VM** (any provider with a GPU, or CPU for small models): `docker compose up -d` behind Caddy/Nginx with a Let's Encrypt certificate.
-
-**Option B: static frontend + API elsewhere.**
-1. Host `frontend/` on **Netlify / Vercel / GitHub Pages**. There's no build step: just publish the folder.
-2. Run the backend on **Render / Railway / Fly.io** (Docker deploy). These platforms have no GPU and are memory-limited, so point `OLLAMA_BASE_URL` at an Ollama server you control (a GPU VM or your PC through a tunnel). Running a 7B model on a small PaaS instance isn't practical.
-3. Set `CORS_ORIGINS=https://your-app.netlify.app` on the backend. `*.netlify.app` and `*.vercel.app` preview URLs are already allowed by `CORS_ORIGIN_REGEX`.
-4. In the app, open ⚙ **Settings → Backend URL** and enter your API URL. It's saved on the device.
-
-**Option C: fully local.** Run Ollama and the backend on your laptop and open `http://localhost:8000`.
-
-**Install on a phone:** open the HTTPS URL, then
-- **Android (Chrome):** menu ⋮ → **Install app**, or tap the ⬇ button in the header.
-- **iPhone/iPad (Safari):** Share → **Add to Home Screen**.
-
-### Desktop (Windows / macOS)
-
-1. **Easiest: Install as App.** In Chrome or Edge, open the app and click the install icon in the address bar (or the ⬇ button). You get a standalone window, Start-menu / Dock icon and offline support, with no extra code.
-2. **Native wrapper with Tauri** (small installers, about 5–10 MB):
-   ```bash
-   npm create tauri-app@latest       # choose "vanilla"
-   # copy frontend/* into the generated project's web folder (e.g. src/)
-   # in tauri.conf.json set build.frontendDist to that folder, and allow
-   # http://localhost:8000 (or your API URL) in the CSP "connect-src"
-   npm run tauri build               # → .msi / .exe (Windows), .dmg / .app (macOS)
-   ```
-   Set the Backend URL in ⚙ Settings, since the app is no longer served by FastAPI.
-3. **Electron** (bigger installers but simple): create a `BrowserWindow` that loads `http://localhost:8000` (or `file://…/frontend/index.html` plus a Backend URL), and package it with `electron-builder`. Webviews inside Electron and Tauri may not provide the Web Speech API, so the app automatically falls back to **Faster-Whisper** on the backend.
-
-## 🔒 Privacy notes
-
-- The LLM, embeddings, knowledge base, progress database and Whisper all run on **your** machine or server.
-- Web search and news use DuckDuckGo, so search queries leave the machine.
-- Chrome's built-in speech recognition sends audio to Google. Turn on **⚙ Settings → Private voice mode** to always transcribe on your own server with Whisper.
+\* local machine only. Interactive docs are at http://localhost:8000/docs.
 
 ## ⚙️ Configuration
 
-All settings live in `backend/config.py` and can be overridden with environment variables or `backend/.env` (see `.env.example`): `OLLAMA_BASE_URL`, `LLM_MODEL`, `EMBED_MODEL`, `DATA_DIR`, `WHISPER_MODEL`, `WHISPER_DEVICE`, `CORS_ORIGINS`, `CORS_ORIGIN_REGEX`, `NEWS_CACHE_TTL`, `MAX_UPLOAD_MB`.
+| Where | What |
+|---|---|
+| In the app (`settings.json`) | Model profile, feature switches, setup status |
+| In the app (SQLite) | Your name, memory on/off, save history, history retention |
+| Environment / `backend/.env` | `OLLAMA_BASE_URL`, `LLM_MODEL` / `EMBED_MODEL` (override profile), `ABHIFY_DATA_DIR`, `WHISPER_MODEL`, `WHISPER_DEVICE`, `CORS_ORIGINS`, `ALLOW_REMOTE_ADMIN`, `ABHIFY_HOST` (start scripts) |
 
-## 🧪 Tested
+## 🧪 Tests
 
-Verified locally on Windows 11 with Ollama (qwen2.5 7B, nomic-embed-text) and an RTX A2000:
-- **Agent tool routing:** a question about uploaded notes uses `knowledge_base_search` and cites the file; "latest PyTorch version" uses `web_search` and returns live sources; fundamentals are answered without tools.
-- **Endpoints:** news, interview and MCQ generation return validated JSON (MCQ answer positions are shuffled server-side).
-- **Whisper:** loads on CUDA float16 and transcribes speech accurately; `/voice` chains it into the agent.
-- **Browser test** (Edge via Playwright, emulated 390×844 phone and 1280×800 desktop):
-  - all four tabs work end-to-end with no horizontal overflow and no JS errors
-  - the service worker is active
-  - with the backend blocked, Offline Mode shows sample news and the quiz still works
+```bash
+cd backend
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.venv\Scripts\python.exe -m pytest tests -q
+```
 
-Not tested here: the Docker build (Docker isn't installed on the dev machine) and installing on a real phone over HTTPS.
+**Unit and API suite:** 50 tests. Ollama, the network and downloads are mocked, and every test uses a throw-away data folder. They cover:
+- migrations: data preserved, newer schema refused, failed migration rolled back
+- memory and history
+- backup and restore safety, including zip-slip and newer-version backups
+- data relocation, and disk-space checks before downloads
+- missing Ollama, and local-only admin endpoints
+
+**Live checks run on the development PC** (Windows 11, RTX A2000, Ollama 0.40, qwen2.5 7B), not part of the pytest suite:
+- v1 → v2 data adoption, and upgrade migrations v2 → v3 on real data with automatic backups.
+- Memory saved via chat and recalled in a new conversation after a restart.
+- An identical upload indexed once.
+- Browser end-to-end test (Edge, emulated 390 px phone and 1280 px desktop):
+  - setup wizard, memory and system panels
+  - chat history restored after a page reload
+  - offline mode
+  - no horizontal overflow, no JavaScript errors
+
+## 🛠️ Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| Footer says *Backend up · Ollama offline* | Start the Ollama app (`ollama serve`) |
+| *Backend up · model not installed* | Settings → System & data → **Models & setup** → download your profile |
+| *Local AI ready · no internet* | Everything works except news and web search |
+| Chat is slow on a laptop | Choose the **Minimal** profile in Models & setup |
+| App won't start: "schema … is newer than this app" | You opened data from a newer version. Update Abhify.AI, or restore an older backup |
+| A migration failed | Nothing is changed (it rolls back). The pre-migration backup is in `data\backups\` |
+| Voice doesn't work in Firefox or an app window | Turn on Settings → Private voice mode (uses Whisper locally) |
+| Need to start over | Close the app and rename `%LOCALAPPDATA%\AbhifyAI`. A fresh folder is created and your old one is kept |
+
+## 📦 Deployment options
+
+- **Local (recommended):** `start.bat` on the computer with Ollama.
+- **Install as an app:** in Chrome or Edge, click the ⬇ install button for a standalone window and Start-menu icon.
+- **Phone:** run on your PC and expose it with an HTTPS tunnel (`cloudflared tunnel --url http://localhost:8000`). Browsers only allow install and microphone access over HTTPS.
+- **Native desktop installer (Tauri) and auto-updates:** planned for milestones M4–M5. See [docs/ROADMAP.md](docs/ROADMAP.md).

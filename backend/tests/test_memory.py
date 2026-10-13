@@ -24,6 +24,19 @@ def test_memory_validation(migrated):
     assert mem.add_memory("likes short answers", category="bogus")["category"] == "general"
 
 
+def test_stemming_matches_word_forms(migrated):
+    mem.add_memory("My weak topic is SQL window functions", "weak_topic")
+    assert mem.search_memories("which topics am I weak at?")                   # topics -> topic
+    assert mem.search_memories("help me with windowing")                       # windowing -> window
+
+
+def test_search_fallback_and_small_memory_context(migrated):
+    mem.add_memory("Preparing for fintech ML interviews", "goal")
+    assert mem.search_memories("what should I study", fallback_recent=False) == []
+    assert len(mem.search_memories("what should I study", fallback_recent=True)) == 1
+    assert "fintech" in mem.memory_context("what should I study")            # few memories -> all included
+
+
 def test_relevant_memories_only(migrated):
     mem.add_memory("My weakest topic is backpropagation math", "weak_topic")
     mem.add_memory("I prefer answers with Python examples", "preference")

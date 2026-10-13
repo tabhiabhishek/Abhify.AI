@@ -1,5 +1,5 @@
 /* =====================================================================
-   AI Tech Pulse: dark glassmorphism, mobile-first.
+   Abhify.AI: dark glassmorphism, mobile-first.
    No build step and no CDN, so the app shell renders fully offline.
    ===================================================================== */
 :root {
@@ -65,9 +65,8 @@ a { color: var(--violet-2); }
 }
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .logo {
-  width: 44px; height: 44px; flex: none; border-radius: 14px; display: grid; place-items: center;
-  font-size: 1.4rem; background: linear-gradient(135deg, var(--violet), var(--pink));
-  box-shadow: 0 0 22px rgba(139, 92, 246, .55);
+  width: 44px; height: 44px; flex: none; border-radius: 50%; display: block;
+  box-shadow: 0 0 18px rgba(56, 189, 248, .45);
 }
 .brand-text { min-width: 0; }
 .brand-text h1 { font-size: 1.1rem; font-weight: 700; white-space: nowrap; }
@@ -202,6 +201,8 @@ a { color: var(--violet-2); }
 
 /* ---------- chat ---------- */
 .kb-bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; font-size: .8rem; }
+.kb-bar #kbInfo { white-space: nowrap; }
+.kb-bar .row-tight { flex-wrap: nowrap; }
 .chat-log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 4px 0 12px; min-height: 200px; }
 .msg { display: flex; }
 .msg.user { justify-content: flex-end; }
@@ -288,3 +289,39 @@ body.on-chat .voice-fab { visibility: hidden; }  /* chat tab has its own mic but
 @media (min-width: 900px) {
   .app { padding-top: 20px; padding-bottom: 20px; }
 }
+
+/* ---------- Abhify.AI v2: brand, setup, memory, system ---------- */
+.brand-ai { background: linear-gradient(90deg, #22c55e, #38bdf8); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.row-tight { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.sheet-tall { max-height: 88vh; max-height: 88dvh; overflow-y: auto; }
+.sheet h3 { font-size: .95rem; margin: 16px 0 6px; }
+.sheet-head { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+.sheet-head img { border-radius: 50%; flex: none; }
+.sheet-head h2 { margin: 0; }
+.input { min-height: 40px; padding: 0 12px; border-radius: 10px; background: rgba(15,23,42,.7); border: 1px solid rgba(139,92,246,.3); outline: none; min-width: 0; }
+.input:focus { border-color: var(--violet); }
+.grow { flex: 1 1 180px; }
+.break { overflow-wrap: anywhere; }
+.list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 14px; }
+.list-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: rgba(30,41,59,.6); border: 1px solid rgba(139,92,246,.18); }
+.list-item .text { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: .9rem; line-height: 1.45; }
+.list-item .meta { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+.list-item .actions { display: flex; gap: 4px; flex: none; }
+.mini-btn { min-width: 36px; min-height: 36px; border-radius: 9px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.05); }
+.mini-btn.on { border-color: var(--amber); }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 6px 0 4px; }
+.stat { padding: 10px 12px; border-radius: 12px; background: rgba(30,41,59,.6); border: 1px solid rgba(139,92,246,.16); min-width: 0; }
+.stat .k { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.stat .v { font-size: .92rem; font-weight: 600; margin-top: 2px; overflow-wrap: anywhere; }
+.stat.ok .v { color: #86efac; } .stat.warn .v { color: #fcd34d; } .stat.bad .v { color: #fca5a5; }
+.profiles { display: flex; flex-direction: column; gap: 10px; margin: 10px 0; }
+.profile { text-align: left; padding: 12px 14px; border-radius: 14px; background: rgba(30,41,59,.6); border: 1px solid rgba(139,92,246,.22); line-height: 1.45; }
+.profile.active { border-color: var(--green); background: rgba(34,197,94,.1); }
+.profile b { font-size: 1rem; }
+.profile .badge { font-size: .7rem; padding: 2px 8px; border-radius: 99px; margin-left: 6px; background: rgba(56,189,248,.16); color: #bae6fd; }
+.profile .badge.rec { background: rgba(34,197,94,.18); color: #bbf7d0; }
+.progress-line { height: 8px; border-radius: 8px; background: rgba(255,255,255,.08); overflow: hidden; margin: 6px 0; }
+.progress-line > span { display: block; height: 100%; background: linear-gradient(90deg, #22c55e, #38bdf8); width: 0; transition: width .4s; }
+.link-as-btn { display: inline-flex; align-items: center; text-decoration: none; color: inherit; cursor: pointer; }
+.step { margin: 12px 0; padding: 12px; border-radius: 12px; background: rgba(15,23,42,.45); border: 1px solid rgba(139,92,246,.14); }
+.step h3 { margin-top: 0; }

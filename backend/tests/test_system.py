@@ -68,3 +68,11 @@ def test_profile_and_env_override(data_root, monkeypatch):
     assert system.active_models()["llm"] == "llama3.2"
     with pytest.raises(ValueError):
         system.apply_profile("ultra")
+
+
+def test_news_same_story_detection():
+    import generators as g
+    seen = [g._title_words("Meta unveils Muse Wonder and Muse Wonder Full, its new AI models")]
+    assert g._is_same_story("Meta claims AI frontier with Muse Wonder and paywalls model", seen)
+    assert g._is_same_story("Meta says new Muse model hits AI frontier after aggressive push", seen)
+    assert not g._is_same_story("PyTorch 2.14 released with faster compile times", seen)

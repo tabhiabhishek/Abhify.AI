@@ -103,6 +103,26 @@ MIGRATIONS: list[tuple[str, str]] = [
         );
         CREATE INDEX idx_documents_hash ON documents(sha256);
     """),
+    # v3: stemming for memory search ("topics" finds "topic", "goals" finds "goal").
+    ("v3 porter stemming for memory search", """
+        DROP TRIGGER IF EXISTS memories_ai;
+        DROP TRIGGER IF EXISTS memories_ad;
+        DROP TRIGGER IF EXISTS memories_au;
+        DROP TABLE IF EXISTS memories_fts;
+        CREATE VIRTUAL TABLE memories_fts USING fts5(content, category, content='memories', content_rowid='id',
+                                                     tokenize='porter unicode61');
+        INSERT INTO memories_fts(memories_fts) VALUES ('rebuild');
+        CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
+            INSERT INTO memories_fts(rowid, content, category) VALUES (new.id, new.content, new.category);
+        END;
+        CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
+            INSERT INTO memories_fts(memories_fts, rowid, content, category) VALUES ('delete', old.id, old.content, old.category);
+        END;
+        CREATE TRIGGER memories_au AFTER UPDATE ON memories BEGIN
+            INSERT INTO memories_fts(memories_fts, rowid, content, category) VALUES ('delete', old.id, old.content, old.category);
+            INSERT INTO memories_fts(rowid, content, category) VALUES (new.id, new.content, new.category);
+        END;
+    """),
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

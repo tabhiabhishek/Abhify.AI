@@ -1,8 +1,8 @@
 # =====================================================================
-# AI Tech Pulse: FastAPI backend + PWA frontend in one image.
+# Abhify.AI: FastAPI backend + PWA frontend in one image.
 #
-#   docker build -t ai-tech-pulse .
-#   docker run -p 8000:8000 -e OLLAMA_BASE_URL=http://host.docker.internal:11434 ai-tech-pulse
+#   docker build -t abhify-ai .
+#   docker run -p 8000:8000 -e OLLAMA_BASE_URL=http://host.docker.internal:11434 abhify-ai
 #
 # The app is then available at http://localhost:8000 (PWA + API).
 # Use docker-compose.yml to also run Ollama in a container.

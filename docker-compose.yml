@@ -1,5 +1,5 @@
 # =====================================================================
-# AI Tech Pulse: full local stack
+# Abhify.AI: full local stack
 #
 #   docker compose up -d --build
 #   open http://localhost:8000
@@ -15,7 +15,7 @@
 services:
   ollama:
     image: ollama/ollama:latest
-    container_name: aitp-ollama
+    container_name: abhify-ollama
     restart: unless-stopped
     volumes:
       - ollama_models:/root/.ollama
@@ -42,7 +42,7 @@ services:
 
   backend:
     build: .
-    container_name: aitp-backend
+    container_name: abhify-backend
     restart: unless-stopped
     depends_on:
       ollama:
@@ -50,12 +50,15 @@ services:
       ollama-init:
         condition: service_completed_successfully
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"         # host-only; remove "127.0.0.1:" to expose on your LAN (and set a reverse proxy with auth)
     environment:
       OLLAMA_BASE_URL: http://ollama:11434
       LLM_MODEL: ${LLM_MODEL:-qwen2.5}
       EMBED_MODEL: ${EMBED_MODEL:-nomic-embed-text}
       DATA_DIR: /data
+      # Requests reach the container via Docker's bridge, not 127.0.0.1. Admin actions are safe to allow
+      # here because the port above is published on the host's localhost only.
+      ALLOW_REMOTE_ADMIN: "true"
       WHISPER_MODEL: ${WHISPER_MODEL:-base}
       WHISPER_DEVICE: ${WHISPER_DEVICE:-auto}
       # Allowed frontend origins when the PWA is hosted elsewhere (Netlify, Vercel, ...)

@@ -1,5 +1,5 @@
 /* =====================================================================
-   sw.js: AI Tech Pulse service worker
+   sw.js: Abhify.AI service worker
 
    Strategy
    * App shell (HTML, CSS, JS, icons): precached on install and served
@@ -10,7 +10,7 @@
 
    Bump CACHE_VERSION whenever shell files change, so users get the update.
    ===================================================================== */
-const CACHE_VERSION = 'aitp-v1.0.1';
+const CACHE_VERSION = 'abhify-v2.0.0-dev.1';
 const SHELL = [
   './',
   './index.html',
@@ -18,14 +18,17 @@ const SHELL = [
   './app.js',
   './mock-data.js',
   './manifest.json',
-  './icons/icon.svg',
+  './favicon.ico',
+  './brand/logo-mark-96.png',
+  './brand/logo-320.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/maskable-512.png',
   './icons/apple-touch-icon.png',
 ];
-const API_PATHS = ['/health', '/chat', '/news', '/generate-question', '/generate-mcq',
-                   '/transcribe', '/voice', '/knowledge', '/progress', '/docs', '/openapi.json'];
+const API_PATHS = ['/health', '/chat', '/news', '/generate-question', '/generate-mcq', '/transcribe', '/voice',
+                   '/knowledge', '/progress', '/memory', '/preferences', '/conversations', '/system', '/setup',
+                   '/backup', '/docs', '/openapi.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

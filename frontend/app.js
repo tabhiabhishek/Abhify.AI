@@ -1,5 +1,5 @@
 /* =====================================================================
-   AI Tech Pulse: frontend logic (vanilla JS, no build step)
+   Abhify.AI: frontend logic (vanilla JS, no build step)
 
    Sections
      1. Config & state           6. MCQ quiz
@@ -7,6 +7,10 @@
      3. API client + offline     8. Voice (Web Speech API / Whisper fallback)
      4. News                     9. Progress, settings, PWA install
      5. Interview questions     10. Boot
+    11. Setup wizard, memory manager, system & data (v2)
+
+   Browser storage holds only preferences, caches and the offline queue.
+   Progress, conversations and memories live in the backend's SQLite database.
    ===================================================================== */
 'use strict';
 
@@ -21,10 +25,23 @@ function newId() { return (crypto.randomUUID ? crypto.randomUUID() : String(Date
 
 /* ---------- 1. CONFIG & STATE ---------- */
 const LS = {                                   // localStorage keys
-  api: 'aitp_api', name: 'aitp_name', user: 'aitp_user', whisper: 'aitp_whisper',
-  news: 'aitp_cache_news', questions: 'aitp_cache_questions', mcqs: 'aitp_cache_mcqs',
-  progress: 'aitp_progress', queue: 'aitp_queue', thread: 'aitp_thread',
+  api: 'abhify_api', name: 'abhify_name', user: 'abhify_user', whisper: 'abhify_whisper',
+  news: 'abhify_cache_news', questions: 'abhify_cache_questions', mcqs: 'abhify_cache_mcqs',
+  progress: 'abhify_progress', queue: 'abhify_queue', thread: 'abhify_thread',
+  migrated: 'abhify_migrated_v1',
 };
+
+/** One-time, idempotent copy of v1 ("aitp_*") browser data to the new keys.
+ *  Never overwrites a value that already exists under the new key. */
+(function migrateBrowserStorage() {
+  if (store.get(LS.migrated)) return;
+  for (const [k, newKey] of Object.entries(LS)) {
+    if (k === 'migrated') continue;
+    const oldVal = store.get(newKey.replace(/^abhify_/, 'aitp_'));
+    if (oldVal !== null && store.get(newKey) === null) store.set(newKey, oldVal);
+  }
+  store.set(LS.migrated, new Date().toISOString());
+})();
 
 const CATEGORIES = [
   ['all', 'All'], ['python', 'Python'], ['ml', 'ML'], ['dl', 'Deep Learning'], ['nlp', 'NLP'],
@@ -44,6 +61,7 @@ const state = {
   quiz: { items: [], index: 0, answers: {} },   // answers[i] = chosen option index
   progress: store.json(LS.progress, { mcq_total: 0, mcq_correct: 0, interview_viewed: 0, streak_days: 0 }),
   busy: { news: false, questions: false, mcq: false, chat: false },
+  ready: Promise.resolve(),   // resolves after the first backend connection check
 };
 store.set(LS.user, state.userId);
 
@@ -149,11 +167,13 @@ async function checkConnection() {
 function setOnline(on, health) {
   const was = state.online;
   state.online = on;
+  state.health = health || null;
   $('#statusDot').className = 'dot ' + (on ? 'on' : 'off');
-  $('#statusText').textContent = on ? 'Online · AI ready'
-    : health ? 'Backend up · Ollama offline' : 'Offline';
+  // Honest status: local AI and internet are separate things.
+  $('#statusText').textContent = on ? (health.internet ? 'Online · AI ready' : 'Local AI ready · no internet')
+    : health ? (health.ollama ? 'Backend up · model not installed' : 'Backend up · Ollama offline') : 'Offline';
   $('#offlineBanner').classList.toggle('hidden', on);
-  if (health) $('#kbInfo').textContent = `Knowledge base: ${health.knowledge_chunks} chunks`;
+  if (health && health.knowledge_chunks != null) $('#kbInfo').textContent = `📚 ${health.knowledge_chunks} chunks`;
   if (on && !was) { flushQueue(); refreshProgress(); }
 }
 
@@ -357,11 +377,7 @@ async function sendChat(text, { speakAnswer = false } = {}) {
   try {
     const data = await api('/chat', { method: 'POST', timeout: 240000, body: { message: text, thread_id: state.threadId } });
     state.threadId = data.thread_id; store.set(LS.thread, data.thread_id);
-    const tags = data.tools_used.map((t) => t === 'web_search'
-      ? '<span class="tag">🌐 Web search</span>' : '<span class="tag kb">📚 Your notes</span>').join('');
-    const src = data.sources.length ? `<div class="sources">Sources: ${data.sources.map((s) =>
-      /^https?:/.test(s) ? `<a href="${esc(s)}" target="_blank" rel="noopener">${esc(new URL(s).hostname)}</a>` : esc(s)).join(' · ')}</div>` : '';
-    typing.querySelector('.bubble').innerHTML = md(data.answer) + (tags ? `<div class="meta-tags">${tags}</div>` : '') + src;
+    typing.querySelector('.bubble').innerHTML = botHtml(data.answer, data.tools_used, data.sources);
     if (speakAnswer) speak(data.answer);
   } catch (e) {
     typing.querySelector('.bubble').innerHTML = `⚠️ ${esc(e.message === 'offline' ? 'Lost connection to the backend.' : e.message)}`;
@@ -379,7 +395,7 @@ async function uploadKnowledge(file) {
   try {
     const r = await api('/knowledge/upload', { method: 'POST', form, timeout: 300000 });
     toast(`✅ Added ${r.filename} (${r.chunks} chunks)`);
-    $('#kbInfo').textContent = `Knowledge base: ${r.total_chunks} chunks`;
+    $('#kbInfo').textContent = `📚 ${r.total_chunks} chunks`;
     addMsg('bot', `📚 I've learned <b>${esc(r.filename)}</b>. Ask me anything about it!`);
   } catch (e) { toast(`Upload failed: ${e.message}`); }
 }
@@ -532,6 +548,7 @@ function closeSettings() { $('#settingsSheet').classList.add('hidden'); }
 async function saveSettings() {
   state.userName = $('#setName').value.trim() || 'there';
   store.set(LS.name, state.userName);
+  if (state.apiBase !== null) api('/preferences', { method: 'PUT', body: { user_name: state.userName } }).catch(() => {});
   store.set(LS.api, $('#setApi').value.trim());
   state.usePrivateWhisper = $('#setWhisper').checked;
   store.set(LS.whisper, state.usePrivateWhisper ? '1' : '0');
@@ -562,7 +579,7 @@ async function installApp() {
 
 /* ---------- 10. NAVIGATION + BOOT ---------- */
 let current = 'news';
-const loaded = { news: false, interview: false, mcq: false };
+const loaded = { news: false, interview: false, mcq: false, chat: false };
 
 function switchTab(name) {
   current = name;
@@ -575,7 +592,10 @@ function switchTab(name) {
     if (!state.questions.length && state.online) generateQuestions();
   }
   if (name === 'mcq' && !loaded.mcq) { loaded.mcq = true; startQuiz(); }
-  if (name === 'chat') setTimeout(() => $('#chatText').focus({ preventScroll: true }), 50);
+  if (name === 'chat') {
+    if (!loaded.chat) { loaded.chat = true; loadChatHistory(); }
+    setTimeout(() => $('#chatText').focus({ preventScroll: true }), 50);
+  }
 }
 
 function bindEvents() {
@@ -628,6 +648,7 @@ function bindEvents() {
     store.setJson(LS.progress, state.progress); updateProgressPill(); toast('Local progress reset');
   });
   $('#installBtn').addEventListener('click', installApp);
+  bindV2Events();
 
   // Connectivity changes
   window.addEventListener('online', checkConnection);
@@ -648,13 +669,329 @@ async function boot() {
     navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW registration failed', e));
   }
 
-  await checkConnection();
+  state.ready = checkConnection();
+  await state.ready;
   setInterval(checkConnection, 30000);
   loadNews();
+  loadPreferences();
+  if (state.health && state.health.setup_completed === false) openSetup();   // first run on this computer
 
   // Deep links from manifest shortcuts, e.g. ./?tab=mcq
   const tab = new URLSearchParams(location.search).get('tab');
   if (['news', 'interview', 'mcq', 'chat'].includes(tab)) switchTab(tab);
+}
+
+/* ---------- 11. ABHIFY.AI v2: CHAT HISTORY, SETUP, MEMORY, SYSTEM ---------- */
+const TOOL_TAGS = {
+  web_search: '<span class="tag">🌐 Web search</span>',
+  knowledge_base_search: '<span class="tag kb">📚 Your documents</span>',
+  search_memory: '<span class="tag kb">🧠 Your memory</span>',
+  save_memory: '<span class="tag kb">🧠 Memory saved</span>',
+};
+
+/** Format an assistant answer with tool badges and sources (used live and for history). */
+function botHtml(answer, tools = [], sources = []) {
+  const tags = tools.map((t) => TOOL_TAGS[t] || '').join('');
+  const src = sources.length ? `<div class="sources">Sources: ${sources.map((s) => {
+    if (!/^https?:/.test(s)) return esc(s);
+    try { return `<a href="${esc(s)}" target="_blank" rel="noopener">${esc(new URL(s).hostname)}</a>`; } catch { return esc(s); }
+  }).join(' · ')}</div>` : '';
+  return md(answer) + (tags ? `<div class="meta-tags">${tags}</div>` : '') + src;
+}
+
+async function loadChatHistory() {
+  await state.ready;                       // the tab can open before the first connection check finishes
+  if (!state.threadId || state.apiBase === null) return;
+  try {
+    const { messages } = await api(`/conversations/${encodeURIComponent(state.threadId)}?limit=50`);
+    for (const m of messages) {
+      addMsg(m.role === 'user' ? 'user' : 'bot', m.role === 'user' ? esc(m.content) : botHtml(m.content, m.tools, m.sources));
+    }
+  } catch { /* offline: keep the welcome message only */ }
+}
+
+function newChat() {
+  state.threadId = null; store.set(LS.thread, '');
+  $('#chatLog').querySelectorAll('.msg').forEach((m, i) => { if (i > 0) m.remove(); });   // keep the welcome bubble
+  toast('New conversation started');
+}
+
+async function loadPreferences() {
+  if (state.apiBase === null) return;
+  try {
+    const p = await api('/preferences');
+    if (p.user_name && !store.get(LS.name)) { state.userName = p.user_name; $('#userName').textContent = p.user_name; }
+  } catch { /* keep local name */ }
+}
+
+/* -- sheet helpers -- */
+const openSheet = (id) => $(`#${id}`).classList.remove('hidden');
+const closeSheet = (id) => $(`#${id}`).classList.add('hidden');
+function adminError(e) {
+  return /only allowed from the computer/i.test(e.message)
+    ? 'This action only works on the computer running Abhify.AI.' : e.message;
+}
+const gb = (n) => (n == null ? '?' : `${n} GB`);
+const stat = (k, v, cls = '') => `<div class="stat ${cls}"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`;
+
+/* -- first-run setup wizard -- */
+const setup = { diag: null, profiles: null, polling: null, pullStatus: {}, testMsg: '' };
+
+async function openSetup() {
+  if (sessionStorage.getItem('abhify_setup_skipped')) return;
+  openSheet('setupSheet');
+  $('#setupBody').innerHTML = skeleton(2) + '<p class="empty">Checking this computer…</p>';
+  await refreshSetup();
+}
+
+async function refreshSetup() {
+  try {
+    [setup.diag, setup.profiles] = await Promise.all([api('/system/diagnostics'), api('/setup/profiles')]);
+  } catch (e) {
+    $('#setupBody').innerHTML = `<p class="empty">⚠️ Can't reach the Abhify.AI backend (${esc(e.message)}).<br>Start it with start.bat, then reopen this window.</p>`;
+    return;
+  }
+  renderSetup();
+}
+
+function renderSetup() {
+  const d = setup.diag, P = setup.profiles, rec = d.recommended_profile.profile;
+  const gpu = d.gpus.length ? d.gpus.map((g) => `${g.name} (${g.vram_gb} GB)`).join(', ') : 'No NVIDIA GPU, CPU mode';
+  const ol = d.ollama;
+  const active = P.profiles[P.active] || P.profiles.balanced;
+  const pulling = Object.values(setup.pullStatus).find((p) => p.status === 'downloading');
+
+  let dl = '';
+  if (!ol.reachable) {
+    dl = `<p>⚠️ <b>Ollama isn't running.</b> ${ol.installed ? 'Start the Ollama app' : 'Install it from <a href="https://ollama.com/download" target="_blank" rel="noopener">ollama.com/download</a>, then start it'} and press Re-check.</p>
+          <button class="btn btn-ghost" data-setup="recheck">↻ Re-check</button>`;
+  } else if (active.missing.length) {
+    dl = active.disk.map((c) => (c.ok
+      ? `<div class="row"><span class="grow">${esc(c.model)}: about <b>${c.estimated_download_gb} GB</b> download (${c.free_gb} GB free)</span>
+         <button class="btn btn-primary btn-sm" data-setup="pull" data-model="${esc(c.model)}" ${pulling ? 'disabled' : ''}>Download</button></div>`
+      : `<p class="stat bad">❌ ${esc(c.model)} needs about ${c.required_free_gb} GB free in ${esc(c.models_dir)}, but only ${c.free_gb} GB is available. Free up space or choose a smaller profile.</p>`)).join('');
+    if (pulling) {
+      const pct = pulling.total ? Math.round((100 * pulling.completed) / pulling.total) : 0;
+      dl += `<p class="small">Downloading ${esc(pulling.model)}: ${esc(pulling.message)} ${pct ? pct + '%' : ''}</p>
+             <div class="progress-line"><span style="width:${pct}%"></span></div>`;
+    }
+  } else {
+    dl = `<p>✅ All models for <b>${esc(active.label)}</b> are installed.</p>`;
+  }
+
+  $('#setupBody').innerHTML = `
+    <div class="step"><h3>1 · This computer</h3><div class="stats">
+      ${stat('System', `${d.os.system} ${d.os.release} (${d.os.arch})`)}
+      ${stat('CPU', `${d.cpu.logical_cores} threads`)}
+      ${stat('RAM', d.ram.total_gb ? `${d.ram.total_gb} GB (${d.ram.available_gb} free)` : 'unknown')}
+      ${stat('GPU', gpu, d.gpus.length ? 'ok' : 'warn')}
+      ${stat('Free disk (models)', gb(d.disk.models_free_gb), d.disk.models_free_gb < 6 ? 'warn' : 'ok')}
+      ${stat('Ollama', ol.reachable ? `running ${ol.version || ''}` : 'not running', ol.reachable ? 'ok' : 'bad')}
+    </div></div>
+    <div class="step"><h3>2 · Choose AI models</h3>
+      <p class="muted small">Recommended: <b>${esc(P.profiles[rec].label)}</b> (${esc(d.recommended_profile.reason)}). You can change this later.</p>
+      <div class="profiles">${Object.entries(P.profiles).map(([k, p]) => `
+        <button class="profile ${k === P.active ? 'active' : ''}" data-setup="profile" data-profile="${k}">
+          <b>${esc(p.label)}</b>${k === rec ? '<span class="badge rec">Recommended</span>' : ''}${p.installed ? '<span class="badge">Installed</span>' : ''}
+          <div class="small muted">${esc(p.llm)} + ${esc(p.embed)} · ~${p.download_gb.toFixed(1)} GB</div>
+          <div class="small">${esc(p.note)}</div>
+        </button>`).join('')}</div></div>
+    <div class="step"><h3>3 · Download</h3>${dl}
+      <p class="muted small">Models download once and then work offline. Nothing downloads unless you click.</p></div>
+    <div class="step"><h3>4 · Test</h3>
+      <button class="btn btn-ghost" data-setup="test" ${!ol.reachable || active.missing.length ? 'disabled' : ''}>▶ Run a quick test</button>
+      <span class="small" id="setupTest">${setup.testMsg}</span></div>`;
+  $('#setupFinish').disabled = !(ol.reachable && !active.missing.length);
+}
+
+async function setupAction(el) {
+  const a = el.dataset.setup;
+  try {
+    if (a === 'recheck') await refreshSetup();
+    else if (a === 'profile') {
+      await api('/setup/profile', { method: 'POST', body: { profile: el.dataset.profile } });
+      setup.testMsg = ''; await refreshSetup();
+    } else if (a === 'pull') {
+      const m = el.dataset.model;
+      const c = setup.profiles.profiles[setup.profiles.active].disk.find((x) => x.model === m);
+      if (!confirm(`Download ${m}?\n\nAbout ${c.estimated_download_gb} GB will be downloaded once and stored by Ollama in:\n${c.models_dir}`)) return;
+      await api('/setup/models/pull', { method: 'POST', body: { model: m, confirm: true } });
+      pollPull();
+    } else if (a === 'test') {
+      $('#setupTest').textContent = ' Testing… (the first run loads the model and can take a minute)';
+      const r = await api('/setup/test', { method: 'POST', timeout: 200000 });
+      setup.testMsg = r.ok ? ` ✅ Working: answered in ${r.seconds}s` : ` ❌ ${esc(r.error)}`;
+      $('#setupTest').innerHTML = setup.testMsg;
+    }
+  } catch (e) { toast(adminError(e)); }
+}
+
+function pollPull() {
+  clearInterval(setup.polling);
+  setup.polling = setInterval(async () => {
+    try {
+      setup.pullStatus = (await api('/setup/models/pull')).pulls;
+      const list = Object.values(setup.pullStatus);
+      if (!list.some((p) => p.status === 'downloading')) {
+        clearInterval(setup.polling);
+        const failed = list.find((p) => p.status === 'failed');
+        if (failed) toast(`Download failed: ${failed.message}`);
+        await refreshSetup();
+      } else renderSetup();
+    } catch { clearInterval(setup.polling); }
+  }, 1500);
+}
+
+async function finishSetup() {
+  try { await api('/setup/complete', { method: 'POST' }); } catch (e) { toast(adminError(e)); return; }
+  closeSheet('setupSheet'); toast('🎉 Abhify.AI is ready!');
+  state.apiBase = null; await checkConnection();
+}
+
+/* -- memory & history manager -- */
+async function openMemory() {
+  closeSheet('settingsSheet'); openSheet('memorySheet');
+  $('#memoryList').innerHTML = skeleton(1);
+  try {
+    const [prefs, m] = await Promise.all([api('/preferences'), api('/memory')]);
+    $('#prefMemory').checked = prefs.memory_enabled;
+    $('#prefHistory').checked = prefs.save_history;
+    $('#prefRetention').value = String(prefs.history_retention_days);
+    renderMemories(m.memories);
+  } catch (e) { $('#memoryList').innerHTML = `<p class="empty">Memory needs the backend (${esc(e.message)}).</p>`; }
+}
+
+function renderMemories(list) {
+  $('#memoryList').innerHTML = list.length ? list.map((m) => `
+    <div class="list-item" data-id="${m.id}">
+      <div class="text"><span class="mem-text">${esc(m.content)}</span><div class="meta">${esc(m.category.replace('_', ' '))} · ${m.source === 'assistant' ? 'saved from chat' : 'added by you'} · ${esc(m.updated_at)}</div></div>
+      <div class="actions">
+        <button class="mini-btn ${m.pinned ? 'on' : ''}" data-mem="pin" title="${m.pinned ? 'Unpin' : 'Pin: always use'}">📌</button>
+        <button class="mini-btn" data-mem="edit" title="Edit">✏️</button>
+        <button class="mini-btn" data-mem="delete" title="Delete">🗑️</button>
+      </div>
+    </div>`).join('') : '<p class="empty">No memories yet. Add one above, or say "remember that…" in chat.</p>';
+}
+
+async function memoryAction(el) {
+  const item = el.closest('[data-id]'), id = item.dataset.id;
+  try {
+    if (el.dataset.mem === 'delete') {
+      if (!confirm('Delete this memory?')) return;
+      await api(`/memory/${id}`, { method: 'DELETE' });
+    } else if (el.dataset.mem === 'pin') {
+      await api(`/memory/${id}`, { method: 'PATCH', body: { pinned: !el.classList.contains('on') } });
+    } else if (el.dataset.mem === 'edit') {
+      const cur = item.querySelector('.mem-text').textContent;
+      const next = prompt('Edit memory', cur);
+      if (!next || next === cur) return;
+      await api(`/memory/${id}`, { method: 'PATCH', body: { content: next } });
+    }
+    renderMemories((await api('/memory')).memories);
+  } catch (e) { toast(e.message); }
+}
+
+async function savePref(body) {
+  try { await api('/preferences', { method: 'PUT', body }); toast('Saved'); } catch (e) { toast(e.message); }
+}
+
+/* -- system & data -- */
+async function openSystem() {
+  closeSheet('settingsSheet'); openSheet('systemSheet');
+  $('#systemInfo').innerHTML = skeleton(1);
+  try {
+    const [d, b] = await Promise.all([api('/system/diagnostics'), api('/backup')]);
+    const gpu = d.gpus.length ? d.gpus.map((g) => `${g.name} · ${g.vram_gb} GB`).join(', ') : 'none (CPU mode)';
+    $('#systemInfo').innerHTML = [
+      stat('Abhify.AI', `v${d.app.version} · schema v${d.app.schema_version}`),
+      stat('Models', `${d.settings.models.llm} + ${d.settings.models.embed}`),
+      stat('Profile', d.settings.model_profile),
+      stat('Ollama', d.ollama.reachable ? 'running' : 'not running', d.ollama.reachable ? 'ok' : 'bad'),
+      stat('Internet', d.internet ? 'connected' : 'offline', d.internet ? 'ok' : 'warn'),
+      stat('GPU', gpu, d.gpus.length ? 'ok' : 'warn'),
+      stat('RAM', d.ram.total_gb ? `${d.ram.total_gb} GB` : '?'),
+      stat('Data size', `${d.disk.data_used_mb} MB · ${d.disk.data_free_gb} GB free`),
+    ].join('');
+    $('#dataRoot').textContent = `📁 ${b.data_root}`;
+    $('#exportBackup').href = `${state.apiBase}/backup/export`;
+    renderBackups(b.backups);
+  } catch (e) { $('#systemInfo').innerHTML = `<p class="empty">Needs the backend (${esc(e.message)}).</p>`; }
+}
+
+function renderBackups(list) {
+  $('#backupList').innerHTML = list.slice(0, 5).map((b) =>
+    `<div class="list-item"><div class="text">${esc(b.name)}<div class="meta">${(b.size / 1048576).toFixed(1)} MB · ${esc(b.created)}</div></div></div>`).join('')
+    || '<p class="muted small">No backups yet.</p>';
+}
+
+async function systemAction(id) {
+  try {
+    if (id === 'backupNow') {
+      const r = await api('/backup', { method: 'POST', timeout: 300000 });
+      toast(`💾 Backup saved: ${r.file}`); renderBackups((await api('/backup')).backups);
+    } else if (id === 'moveData') {
+      const path = prompt('Move your Abhify.AI data to which folder? (absolute path, e.g. E:\\AbhifyData)\nYour current data is copied, not deleted.');
+      if (!path) return;
+      const r = await api('/system/data-location', { method: 'POST', body: { path }, timeout: 600000 });
+      alert(`Data copied to:\n${r.new_root}\n\nRestart Abhify.AI to start using it. The old folder is kept; delete it yourself once everything works.`);
+    }
+  } catch (e) { toast(adminError(e)); }
+}
+
+async function restoreBackup(file) {
+  if (!file) return;
+  if (!confirm(`Restore "${file.name}"?\n\nOn the next restart your current data is moved to a "pre-restore" backup folder (not deleted) and replaced by this backup.`)) return;
+  const form = new FormData(); form.append('file', file);
+  try {
+    await api('/backup/restore', { method: 'POST', form, timeout: 600000 });
+    alert('Backup staged. Restart Abhify.AI to apply it.');
+  } catch (e) { toast(adminError(e)); }
+}
+
+function bindV2Events() {
+  $('#newChat').addEventListener('click', newChat);
+  $('#openMemory').addEventListener('click', openMemory);
+  $('#openSystem').addEventListener('click', openSystem);
+  $$('[data-close]').forEach((b) => b.addEventListener('click', () => closeSheet(b.dataset.close)));
+  ['memorySheet', 'systemSheet'].forEach((id) =>
+    $(`#${id}`).addEventListener('click', (e) => { if (e.target.id === id) closeSheet(id); }));
+
+  // setup wizard
+  $('#setupBody').addEventListener('click', (e) => { const el = e.target.closest('[data-setup]'); if (el) setupAction(el); });
+  $('#setupSkip').addEventListener('click', () => {
+    sessionStorage.setItem('abhify_setup_skipped', '1'); closeSheet('setupSheet');
+    toast('Limited mode: news, quizzes and saved content still work. Finish setup any time in Settings → System.');
+  });
+  $('#setupFinish').addEventListener('click', finishSetup);
+
+  // memory
+  $('#memoryList').addEventListener('click', (e) => { const el = e.target.closest('[data-mem]'); if (el) memoryAction(el); });
+  $('#memoryForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const content = $('#memoryText').value.trim(); if (!content) return;
+    try {
+      await api('/memory', { method: 'POST', body: { content, category: $('#memoryCat').value } });
+      $('#memoryText').value = ''; renderMemories((await api('/memory')).memories);
+    } catch (err) { toast(err.message); }
+  });
+  $('#prefMemory').addEventListener('change', (e) => savePref({ memory_enabled: e.target.checked }));
+  $('#prefHistory').addEventListener('change', (e) => savePref({ save_history: e.target.checked }));
+  $('#prefRetention').addEventListener('change', (e) => savePref({ history_retention_days: +e.target.value }));
+  $('#clearHistory').addEventListener('click', async () => {
+    if (!confirm('Delete ALL saved chat conversations on this computer?')) return;
+    try { const r = await api('/conversations?confirm=true', { method: 'DELETE' }); newChat(); toast(`Deleted ${r.deleted} conversations`); }
+    catch (e) { toast(e.message); }
+  });
+  $('#clearMemories').addEventListener('click', async () => {
+    if (!confirm('Delete ALL personal memories? This cannot be undone unless you have a backup.')) return;
+    try { await api('/memory?confirm=true', { method: 'DELETE' }); renderMemories([]); } catch (e) { toast(e.message); }
+  });
+
+  // system & data
+  $('#backupNow').addEventListener('click', () => systemAction('backupNow'));
+  $('#moveData').addEventListener('click', () => systemAction('moveData'));
+  $('#restoreFile').addEventListener('change', (e) => { restoreBackup(e.target.files[0]); e.target.value = ''; });
+  $('#rerunSetup').addEventListener('click', () => { closeSheet('systemSheet'); sessionStorage.removeItem('abhify_setup_skipped'); openSetup(); });
 }
 
 document.addEventListener('DOMContentLoaded', boot);

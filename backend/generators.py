@@ -137,18 +137,36 @@ def _relative_time(date_str: str | None) -> str:
 _news_cache: dict = {"at": 0.0, "items": []}
 
 
+_TITLE_STOP = {"the", "a", "an", "and", "of", "to", "in", "on", "for", "with", "its", "it", "is", "as", "by",
+               "new", "says", "after", "at", "from", "that", "this", "how", "why", "what"}
+
+
+def _title_words(title: str) -> set[str]:
+    """Distinctive headline words, crudely singularised ("models" -> "model")."""
+    words = (w for w in re.findall(r"[a-z0-9]+", title.lower()) if w not in _TITLE_STOP and len(w) > 2)
+    return {w[:-1] if len(w) > 4 and w.endswith("s") else w for w in words}
+
+
+def _is_same_story(title: str, seen: list[set[str]], min_shared: int = 3) -> bool:
+    """Different outlets, same story: headlines share several distinctive words."""
+    words = _title_words(title)
+    return bool(words) and any(len(words & s) >= min(min_shared, len(words)) for s in seen if s)
+
+
 def _fetch_headlines(limit: int) -> list[dict]:
     """Blocking DuckDuckGo News call (run in a thread)."""
     from ddgs import DDGS
-    seen, out = set(), []
+    seen, out, seen_words = set(), [], []
     queries = ("new AI model release", "large language model research", "machine learning breakthrough",
                "OpenAI OR Anthropic OR Google DeepMind OR Meta AI", "open source AI model")
     for q in queries:
         for r in DDGS().news(q, max_results=limit, timelimit="w"):
             key = r.get("title", "").lower()[:60]
-            if key and key not in seen:
-                seen.add(key)
-                out.append(r)
+            if not key or key in seen or _is_same_story(r.get("title", ""), seen_words):
+                continue
+            seen.add(key)
+            seen_words.append(_title_words(r.get("title", "")))
+            out.append(r)
     oldest = datetime.min.replace(tzinfo=timezone.utc)
     out.sort(key=lambda r: _parse_date(r.get("date")) or oldest, reverse=True)
     return out[: limit * 3]          # extra candidates; the LLM filters for relevance

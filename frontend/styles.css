@@ -325,3 +325,9 @@ body.on-chat .voice-fab { visibility: hidden; }  /* chat tab has its own mic but
 .link-as-btn { display: inline-flex; align-items: center; text-decoration: none; color: inherit; cursor: pointer; }
 .step { margin: 12px 0; padding: 12px; border-radius: 12px; background: rgba(15,23,42,.45); border: 1px solid rgba(139,92,246,.14); }
 .step h3 { margin-top: 0; }
+
+/* ---------- M2: knowledge folder & companion ---------- */
+.kb-link { padding: 0; min-height: 36px; color: var(--muted); font-weight: 500; white-space: nowrap; }
+.kb-link:hover { color: var(--violet-2); }
+.sheet code { background: rgba(0,0,0,.35); padding: 1px 6px; border-radius: 5px; font-size: .82em; }
+#kFiles .list-item .text { font-size: .85rem; }

@@ -25,7 +25,7 @@ function newId() { return (crypto.randomUUID ? crypto.randomUUID() : String(Date
 
 /* ---------- 1. CONFIG & STATE ---------- */
 const LS = {                                   // localStorage keys
-  api: 'abhify_api', name: 'abhify_name', user: 'abhify_user', whisper: 'abhify_whisper',
+  api: 'abhify_api', name: 'abhify_name', user: 'abhify_user', whisper: 'abhify_whisper', token: 'abhify_token',
   news: 'abhify_cache_news', questions: 'abhify_cache_questions', mcqs: 'abhify_cache_mcqs',
   progress: 'abhify_progress', queue: 'abhify_queue', thread: 'abhify_thread',
   migrated: 'abhify_migrated_v1',
@@ -124,6 +124,12 @@ function apiCandidates() {
   return [...new Set(list)];
 }
 
+/** Adds the companion access token when this device talks to another computer (Mode B). */
+function authHeaders(h = {}) {
+  const t = store.get(LS.token);
+  return t ? { ...h, Authorization: `Bearer ${t}` } : h;
+}
+
 async function api(path, { method = 'GET', body, form, timeout = 120000 } = {}) {
   if (state.apiBase === null) throw new Error('offline');
   const ctrl = new AbortController();
@@ -132,7 +138,7 @@ async function api(path, { method = 'GET', body, form, timeout = 120000 } = {}) 
     const res = await fetch(state.apiBase + path, {
       method,
       signal: ctrl.signal,
-      headers: body ? { 'Content-Type': 'application/json' } : undefined,
+      headers: authHeaders(body ? { 'Content-Type': 'application/json' } : {}),
       body: form || (body ? JSON.stringify(body) : undefined),
     });
     const data = await res.json().catch(() => ({}));
@@ -170,7 +176,8 @@ function setOnline(on, health) {
   state.health = health || null;
   $('#statusDot').className = 'dot ' + (on ? 'on' : 'off');
   // Honest status: local AI and internet are separate things.
-  $('#statusText').textContent = on ? (health.internet ? 'Online · AI ready' : 'Local AI ready · no internet')
+  $('#statusText').textContent = on ? (state.remote ? 'AI ready · via your computer'
+    : health.internet ? 'Online · AI ready' : 'Local AI ready · no internet')
     : health ? (health.ollama ? 'Backend up · model not installed' : 'Backend up · Ollama offline') : 'Offline';
   $('#offlineBanner').classList.toggle('hidden', on);
   if (health && health.knowledge_chunks != null) $('#kbInfo').textContent = `📚 ${health.knowledge_chunks} chunks`;
@@ -538,10 +545,13 @@ function applyServerProgress(p) {
 function openSettings() {
   $('#setName').value = state.userName;
   $('#setApi').value = store.get(LS.api) || '';
+  $('#setToken').value = store.get(LS.token) || '';
   $('#setWhisper').checked = state.usePrivateWhisper;
   $('#testResult').textContent = '';
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !navigator.standalone;
-  $('#installHint').textContent = ios ? '📱 To install on iPhone/iPad: tap Share, then "Add to Home Screen".' : '';
+  const android = /android/i.test(navigator.userAgent);
+  $('#installHint').textContent = ios ? '📱 To install on iPhone/iPad: open this page in Safari, tap Share, then "Add to Home Screen".'
+    : android ? '📱 To install on Android: in Chrome tap ⋮ then "Install app" (needs HTTPS, see the mobile guide).' : '';
   $('#settingsSheet').classList.remove('hidden');
 }
 function closeSettings() { $('#settingsSheet').classList.add('hidden'); }
@@ -550,6 +560,7 @@ async function saveSettings() {
   store.set(LS.name, state.userName);
   if (state.apiBase !== null) api('/preferences', { method: 'PUT', body: { user_name: state.userName } }).catch(() => {});
   store.set(LS.api, $('#setApi').value.trim());
+  store.set(LS.token, $('#setToken').value.trim());
   state.usePrivateWhisper = $('#setWhisper').checked;
   store.set(LS.whisper, state.usePrivateWhisper ? '1' : '0');
   $('#userName').textContent = state.userName;
@@ -669,12 +680,16 @@ async function boot() {
     navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW registration failed', e));
   }
 
+  readPairingLink();
   state.ready = checkConnection();
   await state.ready;
   setInterval(checkConnection, 30000);
   loadNews();
   loadPreferences();
-  if (state.health && state.health.setup_completed === false) openSetup();   // first run on this computer
+  // Mode A vs Mode B: is the AI running on THIS device or on a paired computer?
+  try { state.remote = !(await api('/companion')).this_device_is_host; } catch { state.remote = false; }
+  if (state.online) setOnline(true, state.health);
+  if (!state.remote && state.health && state.health.setup_completed === false) openSetup();   // first run on this computer
 
   // Deep links from manifest shortcuts, e.g. ./?tab=mcq
   const tab = new URLSearchParams(location.search).get('tab');
@@ -992,6 +1007,170 @@ function bindV2Events() {
   $('#moveData').addEventListener('click', () => systemAction('moveData'));
   $('#restoreFile').addEventListener('change', (e) => { restoreBackup(e.target.files[0]); e.target.value = ''; });
   $('#rerunSetup').addEventListener('click', () => { closeSheet('systemSheet'); sessionStorage.removeItem('abhify_setup_skipped'); openSetup(); });
+  bindM2Events();
+}
+
+/* ---------- 12. M2: KNOWLEDGE FOLDER, COMPANION ACCESS, UPDATES ---------- */
+const knowledgeUI = { timer: null, filter: '' };
+const STATUS_ICON = { indexed: '✅', pending: '⏳', failed: '❌', skipped: '⏭️', removed: '🗑️' };
+const ago = (ts) => (ts ? timeAgo(ts * 1000) : 'never');
+
+async function openKnowledge() {
+  closeSheet('settingsSheet'); openSheet('knowledgeSheet');
+  await refreshKnowledge();
+  clearInterval(knowledgeUI.timer);
+  knowledgeUI.timer = setInterval(() => {
+    if ($('#knowledgeSheet').classList.contains('hidden')) { clearInterval(knowledgeUI.timer); return; }
+    refreshKnowledge(true);
+  }, 2000);
+}
+
+async function refreshKnowledge(quiet = false) {
+  let st;
+  try { st = await api('/knowledge/status'); } catch (e) {
+    if (!quiet) $('#kStats').innerHTML = `<p class="empty">Needs the Abhify.AI backend on this computer (${esc(e.message)}).</p>`;
+    return;
+  }
+  const c = st.counts;
+  $('#kFolder').textContent = `📁 ${st.folder}`;
+  $('#kStats').innerHTML = [
+    stat('Status', st.running ? (st.paused ? 'Paused' : st.scanning ? 'Scanning…' : 'Watching') : 'Stopped', st.running && !st.paused ? 'ok' : 'warn'),
+    stat('Discovered', c.discovered), stat('Indexed', c.indexed, 'ok'),
+    stat('Skipped', c.skipped), stat('Failed', c.failed, c.failed ? 'bad' : ''), stat('Pending', c.pending, c.pending ? 'warn' : ''),
+    stat('Last indexed', ago(st.last_success_at)), stat('Search index', `${st.chunks} chunks · ${st.index_embed_model || st.configured_embed_model}`),
+  ].join('');
+  const pct = st.batch_total ? Math.round((100 * st.batch_done) / st.batch_total) : 0;
+  $('#kBar').style.width = `${st.current_file || st.queued ? pct : 0}%`;
+  $('#kNow').textContent = st.current_file ? `Indexing ${st.current_file}… (${st.batch_done}/${st.batch_total})`
+    : st.queued ? `${st.queued} file(s) waiting (files still being copied are indexed once they stop changing)` : (st.last_error ? `Last problem: ${st.last_error}` : '');
+  $('#kStartStop').textContent = st.running ? 'Stop watching' : 'Start watching';
+  $('#kStartStop').className = `btn btn-sm ${st.running ? 'btn-ghost' : 'btn-primary'}`;
+  $('#kPause').textContent = st.paused ? 'Resume' : 'Pause';
+  $('#kPause').disabled = $('#kRescan').disabled = !st.running;
+
+  // embedding-model change workflow
+  const rb = st.rebuild || {};
+  $('#kRebuild').innerHTML = rb.status === 'running'
+    ? `<div class="step"><b>Rebuilding the index with ${esc(rb.model)}…</b> ${rb.done}/${rb.total} documents. The old index keeps working until the new one is ready.</div>`
+    : st.rebuild_required
+      ? `<div class="step"><b>⚠️ Rebuild required.</b> Your documents were indexed with <b>${esc(st.index_embed_model)}</b>, but the configured embedding model is <b>${esc(st.configured_embed_model)}</b>. Their vectors are incompatible, so document search is paused until you rebuild. The current index is kept until the new one is validated.
+         <div class="row"><button class="btn btn-primary btn-sm" data-k="rebuild">Rebuild index</button></div></div>`
+      : rb.status === 'failed' ? `<div class="step">❌ Last rebuild failed (${esc(rb.error || '')}). The previous index is still active.</div>`
+      : st.previous_collections && st.previous_collections.length
+        ? `<div class="step small">An older index (${st.previous_collections.length}) is kept as a fallback. <button class="link-btn" data-k="cleanup">Delete old index to free space</button></div>` : '';
+
+  if (!quiet || knowledgeUI.lastCount !== c.discovered + c.failed + c.indexed) {
+    knowledgeUI.lastCount = c.discovered + c.failed + c.indexed;
+    const { files } = await api(`/knowledge/files${knowledgeUI.filter ? `?status=${knowledgeUI.filter}` : ''}`);
+    $('#kListInfo').textContent = `${files.length} file(s)`;
+    $('#kFiles').innerHTML = files.map((f) => `
+      <div class="list-item" data-doc="${f.id}">
+        <div class="text">${STATUS_ICON[f.status] || ''} ${esc(f.path)}
+          <div class="meta">${esc(f.status)}${f.chunks ? ` · ${f.chunks} chunks` : ''}${f.error ? ` · ${esc(f.error)}` : ''}</div></div>
+        ${f.status === 'failed' ? '<div class="actions"><button class="mini-btn" data-k="retry-one" title="Retry">↻</button></div>' : ''}
+      </div>`).join('') || `<p class="muted small">${st.running ? 'No files yet. Drop PDFs or notes into the folder.' : 'Start watching to index this folder.'}</p>`;
+  }
+}
+
+async function knowledgeAction(action, el) {
+  try {
+    if (action === 'startstop') {
+      const running = $('#kStartStop').textContent.startsWith('Stop');
+      await api(`/knowledge/watcher/${running ? 'stop' : 'start'}`, { method: 'POST' });
+    } else if (action === 'pause') {
+      await api(`/knowledge/watcher/${$('#kPause').textContent === 'Resume' ? 'resume' : 'pause'}`, { method: 'POST' });
+    } else if (action === 'rescan') await api('/knowledge/rescan', { method: 'POST' });
+    else if (action === 'retry') { const r = await api('/knowledge/retry', { method: 'POST' }); toast(`Retrying ${r.reset} file(s)`); }
+    else if (action === 'retry-one') await api(`/knowledge/retry?doc_id=${el.closest('[data-doc]').dataset.doc}`, { method: 'POST' });
+    else if (action === 'change') {
+      const cur = $('#kFolder').textContent.replace('📁 ', '');
+      const path = prompt('Folder to watch (absolute path). Whole drives, your entire user folder and system folders are not allowed.', cur);
+      if (!path || path === cur) return;
+      const r = await api('/knowledge/folder', { method: 'PUT', body: { path } });
+      toast(`Now using ${r.folder}${r.removed_from_old_folder ? ` · removed ${r.removed_from_old_folder} file(s) from the old folder` : ''}`);
+    } else if (action === 'rebuild') {
+      if (!confirm('Rebuild the document index with the new embedding model?\n\nEvery document is embedded again (this can take a while). The current index stays active until the new one is complete and validated.')) return;
+      await api('/knowledge/rebuild', { method: 'POST', body: { confirm: true } });
+    } else if (action === 'cleanup') {
+      if (!confirm('Delete the old index kept from before the last rebuild?')) return;
+      await api('/knowledge/rebuild/cleanup', { method: 'POST' });
+    } else if (action === 'help') {
+      alert('How the knowledge folder works\n\n• New, changed, renamed and deleted files are picked up automatically.\n• Files still being copied are indexed once they stop changing.\n• A changed file replaces its old version only after the new version is indexed.\n• Deleted files are removed from search.\n• Skipped: unsupported types, empty files, and anything that looks like a password, key or token.\n• Nothing outside this folder is ever read.');
+      return;
+    }
+    await refreshKnowledge();
+  } catch (e) { toast(adminError(e)); }
+}
+
+/* -- companion access (Mode B) -- */
+async function renderCompanion() {
+  const box = $('#companionBox');
+  try {
+    const st = await api('/companion');
+    if (!st.this_device_is_host) {
+      box.innerHTML = `<p class="small">This device is connected to Abhify.AI on another computer${st.authorized ? ' ✅' : ' (token missing or wrong)'}. Companion settings can only be changed on that computer.</p>`;
+      return;
+    }
+    box.innerHTML = st.enabled
+      ? `<p class="small">✅ On${st.listening_on_lan ? ', listening on your network' : '. Restart Abhify.AI so it listens on your network'}.
+           ${st.lan_addresses.length ? `Addresses: ${st.lan_addresses.map((ip) => `<code>http://${esc(ip)}:8000</code>`).join(', ')}` : ''}</p>
+         <div class="row"><button class="btn btn-ghost btn-sm" data-c="new">New token</button><button class="btn btn-ghost btn-sm danger" data-c="off">Turn off</button></div>`
+      : `<div class="row"><button class="btn btn-ghost btn-sm" data-c="on">Turn on companion access</button></div>`;
+  } catch (e) { box.innerHTML = `<p class="muted small">${esc(e.message)}</p>`; }
+}
+
+async function companionAction(a) {
+  try {
+    if (a === 'off') { await api('/companion/disable', { method: 'POST' }); return renderCompanion(); }
+    if (a === 'on' && !confirm('Turn on companion access?\n\nYour phone will be able to use Abhify.AI through this computer with an access token. Admin actions (backups, moving data, model downloads) stay limited to this computer. Never forward this port to the internet; use your home network or a private tunnel such as Tailscale.')) return;
+    const r = await api('/companion/enable', { method: 'POST' });
+    const link = `${r.lan_urls[0] || 'http://<this-computer>:8000'}/#pair=${r.token}`;
+    $('#companionBox').innerHTML = `
+      <div class="step small">
+        <b>Your access token (shown once):</b><br><code class="break">${esc(r.token)}</code><br><br>
+        On your phone, open <code class="break">${esc(link)}</code> (this pairs it automatically),
+        or enter the address and token in Settings.<br><br>${esc(r.next_steps)}
+      </div>
+      <div class="row"><button class="btn btn-ghost btn-sm" data-c="done">I've saved it</button></div>`;
+  } catch (e) { toast(adminError(e)); }
+}
+
+/** Phone pairing: https://pc-address/#pair=<token> stores the token and removes it from the URL. */
+function readPairingLink() {
+  const m = location.hash.match(/pair=([A-Za-z0-9_\-]{16,})/);
+  if (!m) return;
+  store.set(LS.token, m[1]);
+  history.replaceState(null, '', location.pathname + location.search);
+  setTimeout(() => toast('✅ Paired with your computer'), 500);
+}
+
+async function checkUpdates() {
+  $('#updateResult').textContent = 'Checking…';
+  try {
+    const r = await api('/system/update-check');
+    $('#updateResult').innerHTML = r.error ? esc(r.error)
+      : !r.configured ? `v${esc(r.current)} · no update source configured`
+      : r.update_available ? `🎉 v${esc(r.latest)} available. <a href="${esc(r.download_url)}" target="_blank" rel="noopener">Download</a> · SHA-256 <code class="break">${esc(r.sha256)}</code>`
+      : `✅ Up to date (v${esc(r.current)})`;
+  } catch (e) { $('#updateResult').textContent = e.message; }
+}
+
+function bindM2Events() {
+  $('#openKnowledge').addEventListener('click', openKnowledge);
+  $('#kbInfo').addEventListener('click', openKnowledge);
+  $('#knowledgeSheet').addEventListener('click', (e) => {
+    if (e.target.id === 'knowledgeSheet') closeSheet('knowledgeSheet');
+    const el = e.target.closest('[data-k]'); if (el) knowledgeAction(el.dataset.k, el);
+  });
+  const map = { kStartStop: 'startstop', kPause: 'pause', kRescan: 'rescan', kRetry: 'retry', kChange: 'change', kOpenHelp: 'help' };
+  Object.entries(map).forEach(([id, a]) => $(`#${id}`).addEventListener('click', () => knowledgeAction(a)));
+  $('#kFilter').addEventListener('change', (e) => { knowledgeUI.filter = e.target.value; refreshKnowledge(); });
+  $('#companionBox').addEventListener('click', (e) => {
+    const el = e.target.closest('[data-c]'); if (!el) return;
+    if (el.dataset.c === 'done') renderCompanion(); else companionAction(el.dataset.c === 'new' ? 'on' : el.dataset.c);
+  });
+  $('#openSystem').addEventListener('click', renderCompanion);
+  $('#checkUpdates').addEventListener('click', checkUpdates);
 }
 
 document.addEventListener('DOMContentLoaded', boot);

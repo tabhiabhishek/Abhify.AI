@@ -90,7 +90,7 @@
       <!-- CHAT -->
       <section id="tab-chat" class="panel panel-chat" role="tabpanel">
         <div class="kb-bar">
-          <span class="muted" id="kbInfo" title="Chunks in your local knowledge base">📚 –</span>
+          <button class="link-btn kb-link" id="kbInfo" title="Open your knowledge folder settings">📚 –</button>
           <span class="row-tight">
             <button class="chip" id="newChat" title="Start a new conversation">＋ New</button>
             <label class="chip" for="kbFile" title="Add a PDF, .txt or .md file to your knowledge base">📎 Add file</label>
@@ -141,12 +141,17 @@
       <div class="row">
         <button class="btn btn-ghost" id="openMemory">🧠 Memory &amp; history</button>
         <button class="btn btn-ghost" id="openSystem">🖥️ System &amp; data</button>
+        <button class="btn btn-ghost" id="openKnowledge">📚 Knowledge folder</button>
       </div>
       <label class="field">Your name
         <input id="setName" maxlength="24" autocomplete="nickname">
       </label>
       <label class="field">Backend URL
         <input id="setApi" placeholder="http://localhost:8000" inputmode="url" autocomplete="off">
+        <small class="muted">On a phone: the address of your computer running Abhify.AI (see Companion access).</small>
+      </label>
+      <label class="field">Access token <span class="muted small">(phone / other device only)</span>
+        <input id="setToken" type="password" placeholder="Paste the token shown on your computer" autocomplete="off">
         <small class="muted">Leave empty to use the server this app was loaded from.</small>
       </label>
       <label class="field check">
@@ -219,6 +224,10 @@
     <div class="sheet glass sheet-tall" role="dialog" aria-label="System and data">
       <h2>🖥️ System &amp; data</h2>
       <div id="systemInfo" class="stats"></div>
+      <div class="row"><button class="btn btn-ghost" id="checkUpdates">⟳ Check for updates</button><span class="small muted" id="updateResult"></span></div>
+      <h3>📱 Companion access</h3>
+      <p class="muted small">Use Abhify.AI from your phone through this computer. Off by default. Your data stays on this computer; the phone only sends questions and receives answers.</p>
+      <div id="companionBox"></div>
       <h3>Your data</h3>
       <p class="muted small break" id="dataRoot">–</p>
       <div class="row">
@@ -233,6 +242,39 @@
         <button class="btn btn-ghost" id="rerunSetup">🔧 Models &amp; setup</button>
       </div>
       <div class="row end"><button class="btn btn-primary" data-close="systemSheet">Done</button></div>
+    </div>
+  </div>
+
+
+  <!-- Knowledge folder (M2) -->
+  <div class="sheet-backdrop hidden" id="knowledgeSheet">
+    <div class="sheet glass sheet-tall" role="dialog" aria-label="Knowledge folder">
+      <h2>📚 Knowledge folder</h2>
+      <p class="muted small">Put PDFs, notes (.txt / .md) and Python files in this folder; Abhify.AI indexes them on this computer so the chat can answer from them. Passwords, keys, .env files, databases and hidden folders are always skipped.</p>
+      <div class="row">
+        <span class="grow small break" id="kFolder">–</span>
+        <button class="btn btn-ghost btn-sm" id="kChange">Change…</button>
+        <button class="btn btn-ghost btn-sm" id="kOpenHelp" title="How it works">?</button>
+      </div>
+      <div id="kRebuild"></div>
+      <div class="stats" id="kStats"></div>
+      <p class="small" id="kNow"></p>
+      <div class="progress-line"><span id="kBar"></span></div>
+      <div class="row">
+        <button class="btn btn-primary btn-sm" id="kStartStop">Start watching</button>
+        <button class="btn btn-ghost btn-sm" id="kPause">Pause</button>
+        <button class="btn btn-ghost btn-sm" id="kRescan">Rescan</button>
+        <button class="btn btn-ghost btn-sm" id="kRetry">Retry failed</button>
+      </div>
+      <div class="row">
+        <select id="kFilter" class="select" aria-label="Filter files">
+          <option value="">All files</option><option value="indexed">Indexed</option><option value="pending">Pending</option>
+          <option value="failed">Failed</option><option value="skipped">Skipped</option>
+        </select>
+        <span class="muted small" id="kListInfo"></span>
+      </div>
+      <div id="kFiles" class="list small"></div>
+      <div class="row end"><button class="btn btn-primary" data-close="knowledgeSheet">Done</button></div>
     </div>
   </div>
 

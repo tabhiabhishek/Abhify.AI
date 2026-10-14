@@ -10,7 +10,7 @@
 
    Bump CACHE_VERSION whenever shell files change, so users get the update.
    ===================================================================== */
-const CACHE_VERSION = 'abhify-v2.0.0-dev.1';
+const CACHE_VERSION = 'abhify-v2.0.0-dev.2';
 const SHELL = [
   './',
   './index.html',
@@ -28,7 +28,7 @@ const SHELL = [
 ];
 const API_PATHS = ['/health', '/chat', '/news', '/generate-question', '/generate-mcq', '/transcribe', '/voice',
                    '/knowledge', '/progress', '/memory', '/preferences', '/conversations', '/system', '/setup',
-                   '/backup', '/docs', '/openapi.json'];
+                   '/backup', '/companion', '/docs', '/redoc', '/openapi.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

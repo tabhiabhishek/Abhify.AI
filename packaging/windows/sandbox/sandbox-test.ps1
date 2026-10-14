@@ -36,6 +36,9 @@ Step "uninstall_entry" ($null -ne $reg) ("DisplayVersion=" + $reg.DisplayVersion
 # 2. bundled runtime works on a machine without Python
 $imp = & $py -I -c "import fastapi, chromadb, langgraph, faster_whisper, watchdog, pystray; print('imports ok')" 2>&1
 Step "runtime_imports" ($LASTEXITCODE -eq 0) ($imp | Out-String).Trim()
+# native code paths that need the Visual C++ runtime: ChromaDB's Rust core and CTranslate2 (Whisper)
+$nat = & $py -I -c "import chromadb, tempfile, ctranslate2; c = chromadb.PersistentClient(path=tempfile.mkdtemp()); col = c.create_collection('abhify_test'); col.add(ids=['1'], embeddings=[[0.1, 0.2, 0.3]], documents=['x']); print('chroma rows', col.count(), '| ctranslate2', ctranslate2.__version__, '| cpu devices ok')" 2>&1
+Step "native_libs_work" ($LASTEXITCODE -eq 0) ($nat | Out-String).Trim()
 
 # 3. start the app the way the shortcut does (no browser in the sandbox test)
 $env:ABHIFY_NO_BROWSER = "1"
@@ -86,7 +89,7 @@ Start-Process "$inst\runtime\pythonw.exe" -ArgumentList "`"$launcher`""
 $h2 = WaitHealth 120
 try {
     $m = Invoke-RestMethod "http://127.0.0.1:8000/memory" -TimeoutSec 10
-    Step "reinstall_preserves_memory" (($m.memories | Where-Object { $_.content -like "sandbox memory*" }).Count -eq 1) "memories=$($m.memories.Count)"
+    Step "reinstall_preserves_memory" (@($m.memories | Where-Object { $_.content -like "sandbox memory*" }).Count -eq 1) "memories=$($m.memories.Count)"
 } catch { Step "reinstall_preserves_memory" $false $_.Exception.Message }
 & $py $launcher --stop | Out-Null
 

@@ -5,7 +5,9 @@
 
 Abhify.AI combines live AI news, AI-generated interview questions and quizzes, a chat agent that knows your documents and remembers what you ask it to, and voice control. The AI runs **locally through Ollama**, so there are no paid APIs and no cloud account, and your documents and memories stay on your machine.
 
-> **Status:** `2.0.0-dev.1`, milestone 1 of the v2 upgrade (see [docs/ROADMAP.md](docs/ROADMAP.md)). The v1.0.0 baseline is Git tag `v1.0.0`.
+> **Status:** `2.0.0-dev.2`, milestones 1–2 of the v2 upgrade (see [docs/ROADMAP.md](docs/ROADMAP.md)). The v1.0.0 baseline is Git tag `v1.0.0`.
+>
+> **Install on Windows:** [docs/WINDOWS_INSTALLATION.md](docs/WINDOWS_INSTALLATION.md) · **Phones:** [docs/MOBILE_INSTALLATION.md](docs/MOBILE_INSTALLATION.md) · **Knowledge folder:** [docs/M2_KNOWLEDGE_FOLDER.md](docs/M2_KNOWLEDGE_FOLDER.md) · **Releases:** [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md)
 
 | Feature | What it does | Needs internet? |
 |---|---|---|
@@ -13,6 +15,7 @@ Abhify.AI combines live AI news, AI-generated interview questions and quizzes, a
 | 🎓 Interview | Fresh interview questions with model answers and key points | No* |
 | 📝 MCQ | 5-question quizzes, explanations, score and streak | No* |
 | 💬 Chat | Agent that uses **your documents**, **your memories**, or **web search** when needed | Only for web search |
+| 📚 Knowledge folder | Drop PDFs, notes and `.py` files into a folder; they're indexed automatically and safely | No |
 | 🧠 Memory | Personal facts *you* choose to save; editable, deletable, can be switched off | No |
 | 🎙️ Voice | Voice commands and spoken questions (Web Speech API or local Faster-Whisper) | No with Whisper |
 

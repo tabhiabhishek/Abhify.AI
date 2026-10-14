@@ -54,8 +54,8 @@ What you need:$\r$\n\
   - Ollama (free) for the AI models: the app helps you install it$\r$\n$\r$\n\
 GPU or CPU: an NVIDIA GPU makes answers faster but is NOT required. On first start, Abhify.AI checks this computer and recommends models that fit (about 1.3 to 9 GB). Nothing is downloaded without your permission.$\r$\n$\r$\n\
 No administrator rights are needed."
-!define MUI_FINISHPAGE_RUN "$INSTDIR\runtime\pythonw.exe"
-!define MUI_FINISHPAGE_RUN_PARAMETERS '"$INSTDIR\app\desktop\launcher.pyw"'
+!define MUI_FINISHPAGE_RUN
+!define MUI_FINISHPAGE_RUN_FUNCTION LaunchApp
 !define MUI_FINISHPAGE_RUN_TEXT "Start ${APPNAME} now"
 !define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\INSTALL.md"
 !define MUI_FINISHPAGE_SHOWREADME_TEXT "Open the installation guide"
@@ -69,6 +69,11 @@ No administrator rights are needed."
 !insertmacro MUI_UNPAGE_CONFIRM
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
+
+; Started from the finish page (a function, because the launcher path needs quoting)
+Function LaunchApp
+  Exec '"$INSTDIR\runtime\pythonw.exe" "$INSTDIR\app\desktop\launcher.pyw"'
+FunctionEnd
 
 ; ---------------------------------------------------------------------- checks
 Function .onInit

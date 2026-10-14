@@ -3,7 +3,36 @@
 All notable changes to Abhify.AI. Format: [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 The database schema version is listed separately, because not every release changes it.
 
-## [2.0.0-dev.1]: Milestone 1, unreleased (branch `feature/abhify-v2`)
+## [2.0.0-dev.2]: Milestone 2, unreleased (branch `feature/m2-knowledge-packaging`)
+
+Database schema: **v4** (adds per-file index tracking; v1–v3 databases upgrade automatically, with a backup taken first).
+
+### Added
+- **Watched knowledge folder** (`%USERPROFILE%\Abhify_Knowledge` by default, changeable).
+  - Indexes PDF, TXT, Markdown and Python files.
+  - Picks up new, modified, renamed and deleted files, and waits until copying has finished.
+  - Detects changes by SHA-256; renames reuse vectors without re-embedding.
+  - Replace-then-delete updates, so the previous version stays searchable if embedding fails.
+  - Retries with backoff (locked files, Ollama down), plus a manual retry.
+  - Pause/resume, rescan, per-file status and errors, live progress.
+  - Exclusions: secrets by name and by content, VCS/venv/caches, temp files, databases, model weights, symlinks/junctions, anything outside the folder.
+- **Safe embedding-model changes:** a mismatch pauses document search ("rebuild required"). The rebuild builds a new collection, validates it, switches atomically and keeps the old one.
+- **Knowledge panel** in Settings (and from the 📚 chunk count in Chat).
+- **Companion access (Mode B):** opt-in phone access to this PC.
+  - Hashed access token and a `#pair=` pairing link.
+  - Admin actions stay local-only, and requests through a tunnel or proxy count as remote.
+  - The status bar says "via your computer" on a phone.
+- **Update check:** opt-in HTTPS manifest. It validates the version, URL and SHA-256 and never installs anything.
+- **Windows installer:**
+  - per-user NSIS installer, no admin needed, with a bundled Python 3.11 runtime
+  - desktop launcher with tray icon, single instance, port fallback, and a pre-upgrade backup
+  - uninstall keeps user data unless you choose otherwise
+  - build script with checksums and a package secret/user-data check
+  - Windows Sandbox clean-machine test
+- Docs: M2 knowledge folder, Windows installation, mobile installation (Modes A/B/C), release process, M2 test report.
+
+### Fixed
+- Watcher shutdown could wait on its own lock, and periodic retries could re-queue a file before it was processed (both found by the new tests).
 
 Database schema: **v3** (v1.0.0 databases are upgraded automatically, with a backup taken first).
 

@@ -102,26 +102,45 @@ def ollama_models_dir() -> Path:
     return Path(env) if env else Path.home() / ".ollama" / "models"
 
 
-def internet_available(_cache: dict = {"at": 0.0, "ok": False}) -> bool:
-    """Cheap connectivity probe (DNS server TCP connect), cached for 60 s."""
-    if time.time() - _cache["at"] < 60:
-        return _cache["ok"]
-    ok = False
+_NET: dict[str, Any] = {"at": 0.0, "ok": False, "known": False, "refreshing": False}
+
+
+def _probe_internet() -> bool:
     for host in ("1.1.1.1", "8.8.8.8"):
         try:
             with socket.create_connection((host, 53), timeout=1.5):
-                ok = True
-                break
+                return True
         except OSError:
             continue
-    _cache.update(at=time.time(), ok=ok)
-    return ok
+    return False
+
+
+def internet_available() -> bool:
+    """Connectivity (DNS-server TCP connect), cached for 60 s.
+
+    Only the very first call waits for the probe. Afterwards a stale value is refreshed in the
+    background and the last known answer is returned immediately: offline, connect attempts
+    can take seconds to time out and must never slow /health or chat down."""
+    import threading
+
+    def refresh():
+        try:
+            _NET.update(ok=_probe_internet(), at=time.time(), known=True)
+        finally:
+            _NET["refreshing"] = False
+
+    if not _NET["known"]:
+        refresh()
+    elif time.time() - _NET["at"] >= 60 and not _NET["refreshing"]:
+        _NET["refreshing"] = True
+        threading.Thread(target=refresh, daemon=True).start()
+    return _NET["ok"]
 
 
 async def ollama_status() -> dict[str, Any]:
     url = get_settings().ollama_base_url
     try:
-        async with httpx.AsyncClient(timeout=3) as client:
+        async with httpx.AsyncClient(timeout=2) as client:
             tags = (await client.get(f"{url}/api/tags")).json().get("models", [])
             try:
                 version = (await client.get(f"{url}/api/version")).json().get("version")

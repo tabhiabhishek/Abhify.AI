@@ -26,7 +26,7 @@ const SHELL = [
   './icons/maskable-512.png',
   './icons/apple-touch-icon.png',
 ];
-const API_PATHS = ['/health', '/chat', '/news', '/generate-question', '/generate-mcq', '/transcribe', '/voice',
+const API_PATHS = ['/health', '/ping', '/chat', '/news', '/generate-question', '/generate-mcq', '/transcribe', '/voice',
                    '/knowledge', '/progress', '/memory', '/preferences', '/conversations', '/system', '/setup',
                    '/backup', '/companion', '/docs', '/redoc', '/openapi.json'];
 

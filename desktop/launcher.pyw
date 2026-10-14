@@ -36,6 +36,9 @@ sys.path.insert(0, str(BACKEND))
 import local_file_service as lfs  # noqa: E402  (needs the path above)
 
 APP_URL = "http://127.0.0.1:{port}/"
+# Loopback calls must never go through a system proxy: Windows proxy settings can capture
+# 127.0.0.1 and make a running instance look dead (seen in Windows Sandbox).
+_LOCAL = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 # --------------------------------------------------------------------------- helpers
@@ -66,7 +69,7 @@ def pid_alive(pid: int) -> bool:
 
 def health(port: int, timeout: float = 2.0) -> dict | None:
     try:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=timeout) as r:
+        with _LOCAL.open(f"http://127.0.0.1:{port}/ping", timeout=timeout) as r:
             data = json.loads(r.read())
             return data if data.get("app") == "Abhify.AI" else None
     except Exception:
@@ -96,15 +99,24 @@ def bind_host() -> str:
         return "127.0.0.1"
 
 
-def running_instance() -> dict | None:
+def running_instance(wait: float = 15) -> dict | None:
+    """The live instance from the run file, if any. If its process is alive but not answering yet
+    (still starting, or busy), keep asking for up to `wait` seconds before treating it as dead."""
     info = read_run()
-    if info and pid_alive(int(info.get("pid", 0))) and health(int(info["port"])):
-        return info
-    return None
+    if not info or not pid_alive(int(info.get("pid", 0))):
+        return None
+    end = time.time() + wait
+    while True:
+        if health(int(info["port"])):
+            return info
+        if time.time() >= end or not pid_alive(int(info.get("pid", 0))):
+            return None
+        time.sleep(1)
 
 
 def open_ui(port: int) -> None:
-    webbrowser.open(APP_URL.format(port=port))
+    if not os.environ.get("ABHIFY_NO_BROWSER"):
+        webbrowser.open(APP_URL.format(port=port))
 
 
 # --------------------------------------------------------------------------- commands
@@ -116,7 +128,7 @@ def cmd_stop(wait: float = 15) -> int:
     port, pid = int(info["port"]), int(info.get("pid", 0))
     try:
         req = urllib.request.Request(f"http://127.0.0.1:{port}/system/shutdown", method="POST", data=b"")
-        urllib.request.urlopen(req, timeout=5).read()
+        _LOCAL.open(req, timeout=5).read()
     except Exception:
         pass
     end = time.time() + wait

@@ -38,14 +38,17 @@ STAGE = ROOT / "build" / "windows" / "staging"
 DIST = ROOT / "dist" / "windows"
 
 PY_VERSION = "3.11.9"
-# "SET_ON_FIRST_BUILD": the hash is recorded in packaging/.cache/<file>.sha256 on the first
-# download (trust on first use) and enforced on every later build. Replace with the
-# published value once confirmed (see docs/RELEASE_PROCESS.md).
+# Pinned SHA-256 of the exact files used for the 2.0.0-dev.2 build (recorded on first download,
+# 2026-10-14). Before a public release, compare them once with the values published by
+# python.org and the NSIS project (see docs/RELEASE_PROCESS.md). "SET_ON_FIRST_BUILD" would
+# record a new hash on first download (trust on first use).
 DOWNLOADS = {
     "python": {"url": f"https://www.python.org/ftp/python/{PY_VERSION}/python-{PY_VERSION}-embed-amd64.zip",
-               "file": f"python-{PY_VERSION}-embed-amd64.zip", "sha256": "SET_ON_FIRST_BUILD"},
+               "file": f"python-{PY_VERSION}-embed-amd64.zip",
+               "sha256": "009d6bf7e3b2ddca3d784fa09f90fe54336d5b60f0e0f305c37f400bf83cfd3b"},
     "nsis": {"url": "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.10/nsis-3.10.zip",
-             "file": "nsis-3.10.zip", "sha256": "SET_ON_FIRST_BUILD"},
+             "file": "nsis-3.10.zip",
+             "sha256": "fcdce3229717a2a148e7cda0ab5bdb667f39d8fb33ede1da8dabc336bd5ad110"},
 }
 APP_ALLOW = {"backend": ["*.py", "requirements.txt"], "desktop": ["launcher.pyw"], "frontend": ["**/*"]}
 DEV_ONLY = {"pip", "setuptools", "wheel", "pytest", "_pytest", "pluggy", "iniconfig", "py.py",
@@ -116,7 +119,36 @@ def stage_runtime(py_zip: Path, site_from: Path | None) -> None:
                         "--no-warn-script-location", "--target", str(target),
                         "-r", str(ROOT / "backend" / "requirements.txt"),
                         "-r", str(ROOT / "packaging" / "windows" / "requirements-desktop.txt")], check=True)
+    bundle_vc_runtime(rt)
+    check_dlls(rt)
     verify_runtime(rt)
+
+
+def bundle_vc_runtime(rt: Path) -> None:
+    """App-local Visual C++ runtime. ctranslate2, onnxruntime and ChromaDB need msvcp140*.dll, which
+    a clean Windows does not have (found by the Windows Sandbox test). Copied from the build
+    machine's System32; Microsoft permits app-local deployment of these redistributable DLLs."""
+    import os
+    sys.path.insert(0, str(Path(__file__).parent))
+    from dll_check import VC_RUNTIME
+    sys32 = Path(os.environ.get("SystemRoot", "C:/Windows")) / "System32"
+    for name in VC_RUNTIME:
+        src = sys32 / name
+        if not src.exists():
+            raise SystemExit(f"{name} not found in {sys32}: install the Microsoft Visual C++ 2015-2022 x64 "
+                             "Redistributable on the build machine")
+        shutil.copy2(src, rt / name)
+    log("bundled Visual C++ runtime: " + ", ".join(VC_RUNTIME))
+
+
+def check_dlls(rt: Path) -> None:
+    """Fail the build if any bundled binary needs a DLL that a clean Windows 10/11 lacks."""
+    from dll_check import unmet_dependencies
+    missing = unmet_dependencies(rt)
+    if missing:
+        lines = [f"  {d} <- {sorted(u)[:3]}" for d, u in missing.items()]
+        raise SystemExit("Bundled binaries need DLLs a clean Windows lacks:\n" + "\n".join(lines))
+    log("DLL check: every bundled binary's dependencies are bundled or part of Windows")
 
 
 def verify_runtime(rt: Path) -> None:

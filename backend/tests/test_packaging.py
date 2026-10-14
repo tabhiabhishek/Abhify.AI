@@ -117,3 +117,40 @@ def test_installer_never_downloads_models(nsi):
 
 def test_installer_checks_windows_version_and_64bit(nsi):
     assert "${AtLeastWin10}" in nsi and "${RunningX64}" in nsi
+
+
+# --------------------------------------------------------------------------- clean-machine safeguards (from the Sandbox test)
+def test_launcher_bypasses_system_proxy_for_loopback(launcher, monkeypatch):
+    import urllib.request
+    # No handler may carry system proxies (urllib drops an empty ProxyHandler AND the default one).
+    assert not any(isinstance(h, urllib.request.ProxyHandler) and h.proxies for h in launcher._LOCAL.handlers)
+    monkeypatch.setenv("HTTP_PROXY", "http://10.255.255.1:3128")    # a system proxy that would hang
+    import time
+    t = time.time()
+    assert launcher.health(1, timeout=1) is None and time.time() - t < 2   # direct, fast refusal
+
+
+def test_open_ui_respects_no_browser(launcher, monkeypatch):
+    opened = []
+    monkeypatch.setattr(launcher.webbrowser, "open", lambda url: opened.append(url))
+    monkeypatch.setenv("ABHIFY_NO_BROWSER", "1")
+    launcher.open_ui(8000)
+    assert opened == []
+
+
+def test_dll_check_flags_vc_runtime_dependency():
+    sys.path.insert(0, str(PKG))
+    import dll_check
+    assert "msvcp140.dll" in dll_check.VC_RUNTIME and "msvcp140.dll" not in dll_check.WINDOWS
+    py = Path(sys.base_prefix) / "python311.dll"
+    if py.exists():
+        assert "kernel32.dll" in dll_check.pe_imports(py)       # PE import parser works on a real DLL
+
+
+def test_staged_runtime_has_no_unmet_dlls():
+    rt = ROOT / "build" / "windows" / "staging" / "runtime"
+    if not rt.exists():
+        pytest.skip("installer not built in this checkout")
+    sys.path.insert(0, str(PKG))
+    from dll_check import unmet_dependencies
+    assert unmet_dependencies(rt) == {}

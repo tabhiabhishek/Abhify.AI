@@ -5,9 +5,9 @@ Each milestone ends with tests, a summary and **your approval** before the next 
 | Milestone | Phases | Status |
 |---|---|---|
 | **M1: Foundation** | 0 audit · 1 rebrand · 2 hardware-adaptive setup · 3 local data dir · 4 memory engine · 8 SQLite state (most of it) | ✅ **done** (branch `feature/abhify-v2`) |
-| M2: Knowledge folder | 5 watchdog folder watcher · 6 offline agent polish | next |
+| **M2: Knowledge folder + installer** | 5 folder watcher · Windows installer · mobile PWA modes · release framework | ✅ **done** (branch `feature/m2-knowledge-packaging`) |
 | M3: Local voice out | 7 pyttsx3 / SAPI5 `POST /tts` | planned |
-| M4: Desktop app | 9 Tauri shell + bundled Python backend + installer | planned |
+| M4: Desktop app | Signed installer, auto-start options (a Tauri shell is optional; NSIS + launcher ships in M2) | planned |
 | M5: Releases & updates | 10 versioning, update manifest, checksums/signing, CI, lockfiles, release checklist | planned |
 
 ## M2: Knowledge folder watcher (Phases 5–6)

@@ -38,7 +38,7 @@ import local_file_service as lfs
 LOOPBACK = {"127.0.0.1", "::1", "localhost", "testclient"}
 FORWARD_HEADERS = ("x-forwarded-for", "forwarded", "x-real-ip", "cf-connecting-ip", "true-client-ip",
                    "x-forwarded-host", "tailscale-user-login", "tailscale-user-name")
-OPEN_API = {"/health", "/companion"}
+OPEN_API = {"/health", "/ping", "/companion"}
 API_PREFIXES: set[str] = set()          # filled by main.py from the real route table
 
 

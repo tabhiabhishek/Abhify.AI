@@ -220,6 +220,12 @@ class ConfirmIn(BaseModel):
 
 
 # --------------------------------------------------------------------------- health
+@app.get("/ping")
+def ping():
+    """Instant liveness + identity check (no Ollama or network probes). Used by the desktop launcher."""
+    return {"app": APP_NAME, "version": __version__}
+
+
 @app.get("/health")
 async def health():
     st = await system.ollama_status()

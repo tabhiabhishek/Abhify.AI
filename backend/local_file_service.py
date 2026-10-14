@@ -111,6 +111,7 @@ def backups_dir() -> Path: return data_dir() / "backups"
 def logs_dir() -> Path: return root() / "logs"
 def cache_dir() -> Path: return root() / "cache"
 def settings_path() -> Path: return config_dir() / "settings.json"
+def default_knowledge_dir() -> Path: return Path.home() / "Abhify_Knowledge"
 
 
 def ensure_layout() -> Path:
@@ -150,6 +151,16 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "model_profile": "balanced",
     "models": {"llm": "qwen2.5", "embed": "nomic-embed-text"},
     "features": {"web_search": True, "voice_whisper": True, "local_tts": False, "folder_watcher": False},
+    "knowledge": {
+        "folder": None,                 # None = default %USERPROFILE%\Abhify_Knowledge (created on first start)
+        "watcher_enabled": False,       # the user turns the watcher on explicitly
+        "collection": "knowledge_base", # active Chroma collection (changes only after a validated rebuild)
+        "index_embed_model": None,      # embedding model that built the active collection
+        "previous_collections": [],     # kept after a rebuild until the user cleans them up
+        "max_file_mb": 20,
+    },
+    "companion": {"enabled": False, "token_sha256": None, "created_at": None},
+    "updates": {"manifest_url": None, "check_on_start": False},
 }
 
 
@@ -391,3 +402,40 @@ def relocate_data_dir(new_root: Path) -> dict[str, Any]:
     tmp.write_text(json.dumps({"data_root": str(new_root), "moved_at": time.time(), "previous": str(cur)}), encoding="utf-8")
     os.replace(tmp, _pointer_file())
     return {"new_root": str(new_root), "previous_root": str(cur), "bytes_copied": copied, "restart_required": True}
+
+
+# --------------------------------------------------------------------------- knowledge folder policy
+def knowledge_folder() -> Path:
+    configured = load_settings()["knowledge"].get("folder")
+    return Path(configured) if configured else default_knowledge_dir()
+
+
+def validate_knowledge_folder(path: Path) -> Path:
+    """A folder the user may choose to watch. Refuses broad or sensitive locations so the
+    watcher can never be pointed at a whole drive, the system, or Abhify.AI's own data."""
+    path = Path(path).expanduser()
+    if not path.is_absolute():
+        raise ValueError("Please choose an absolute folder path")
+    path = path.resolve()
+    home = Path.home().resolve()
+    if path == Path(path.anchor):
+        raise ValueError("A whole drive can't be watched. Choose a specific folder.")
+    if path == home:
+        raise ValueError("Your entire user folder can't be watched. Choose a subfolder such as Documents/Notes.")
+    forbidden = [root(), Path(os.environ.get("SystemRoot", r"C:\Windows")),
+                 Path(os.environ.get("ProgramFiles", r"C:\Program Files")),
+                 Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")),
+                 Path(os.environ.get("ProgramData", r"C:\ProgramData")),
+                 home / "AppData", home / ".ollama", BACKEND_DIR.parent]
+    for f in forbidden:
+        try:
+            f = f.resolve()
+        except OSError:
+            continue
+        if path == f or f in path.parents:
+            raise ValueError(f"This location can't be watched ({f}).")
+    if root().resolve().is_relative_to(path):
+        raise ValueError("The knowledge folder can't contain Abhify.AI's data folder.")
+    if path.exists() and not path.is_dir():
+        raise ValueError("That path is a file, not a folder")
+    return path

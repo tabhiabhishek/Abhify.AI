@@ -123,6 +123,36 @@ MIGRATIONS: list[tuple[str, str]] = [
             INSERT INTO memories_fts(rowid, content, category) VALUES (new.id, new.content, new.category);
         END;
     """),
+    # v4: per-file index tracking for the watched knowledge folder (M2).
+    # SQLite can't alter a CHECK constraint, so the documents table is rebuilt and rows copied.
+    ("v4 knowledge folder index tracking", """
+        CREATE TABLE documents_v4 (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            path          TEXT NOT NULL,                 -- display name: file name (upload) or path relative to the folder
+            source        TEXT NOT NULL DEFAULT 'upload' CHECK (source IN ('upload', 'watcher')),
+            path_key      TEXT NOT NULL,                 -- identity: upload name, or normalised absolute path
+            sha256        TEXT NOT NULL DEFAULT '',
+            size          INTEGER NOT NULL DEFAULT 0,
+            mtime         REAL,
+            chunks        INTEGER NOT NULL DEFAULT 0,
+            status        TEXT NOT NULL DEFAULT 'pending'
+                          CHECK (status IN ('pending', 'indexed', 'failed', 'skipped', 'removed')),
+            error         TEXT,
+            attempts      INTEGER NOT NULL DEFAULT 0,
+            next_retry_at REAL,
+            embed_model   TEXT,
+            modified_at   TEXT,
+            indexed_at    TEXT,
+            updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (source, path_key)
+        );
+        INSERT INTO documents_v4 (id, path, source, path_key, sha256, size, chunks, status, error, modified_at, indexed_at)
+            SELECT id, path, source, path, sha256, size, chunks, status, error, modified_at, indexed_at FROM documents;
+        DROP TABLE documents;
+        ALTER TABLE documents_v4 RENAME TO documents;
+        CREATE INDEX idx_documents_hash ON documents(sha256);
+        CREATE INDEX idx_documents_status ON documents(source, status);
+    """),
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)
@@ -290,24 +320,73 @@ def seen_items(user_id: str, kind: str, limit: int = 30) -> list[str]:
 
 
 # --------------------------------------------------------------------------- documents (index metadata)
-def find_document_by_hash(sha256: str) -> dict[str, Any] | None:
+DOC_FIELDS = ("path", "sha256", "size", "mtime", "chunks", "status", "error", "attempts", "next_retry_at",
+              "embed_model", "modified_at", "indexed_at")
+
+
+def find_document_by_hash(sha256: str, source: str | None = None) -> dict[str, Any] | None:
+    q = "SELECT * FROM documents WHERE sha256 = ? AND status = 'indexed'" + (" AND source = ?" if source else "")
     with connect() as c:
-        r = c.execute("SELECT * FROM documents WHERE sha256 = ? AND status = 'indexed' LIMIT 1", (sha256,)).fetchone()
+        r = c.execute(q + " LIMIT 1", (sha256, source) if source else (sha256,)).fetchone()
     return dict(r) if r else None
+
+
+def get_document(source: str, path_key: str) -> dict[str, Any] | None:
+    with connect() as c:
+        r = c.execute("SELECT * FROM documents WHERE source = ? AND path_key = ?", (source, path_key)).fetchone()
+    return dict(r) if r else None
+
+
+def save_document(source: str, path_key: str, **fields: Any) -> None:
+    """Insert or update one document row (only the given fields change on update)."""
+    bad = set(fields) - set(DOC_FIELDS)
+    if bad:
+        raise ValueError(f"Unknown document field(s): {bad}")
+    fields.setdefault("path", path_key)
+    cols = ", ".join(fields)
+    marks = ", ".join("?" for _ in fields)
+    updates = ", ".join(f"{k} = excluded.{k}" for k in fields)
+    with connect() as c:
+        c.execute(f"INSERT INTO documents (source, path_key, {cols}) VALUES (?, ?, {marks}) "
+                  f"ON CONFLICT(source, path_key) DO UPDATE SET {updates}, updated_at = datetime('now')",
+                  (source, path_key, *fields.values()))
 
 
 def upsert_document(path: str, source: str, sha256: str, size: int, chunks: int,
                     status: str = "indexed", error: str | None = None, modified_at: str | None = None) -> None:
-    with connect() as c:
-        c.execute("""INSERT INTO documents (path, source, sha256, size, chunks, status, error, modified_at, indexed_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-                     ON CONFLICT(source, path) DO UPDATE SET sha256 = excluded.sha256, size = excluded.size,
-                         chunks = excluded.chunks, status = excluded.status, error = excluded.error,
-                         modified_at = excluded.modified_at, indexed_at = excluded.indexed_at""",
-                  (path, source, sha256, size, chunks, status, error, modified_at))
+    """Backwards-compatible helper used by uploads (path doubles as path_key)."""
+    save_document(source, path, path=path, sha256=sha256, size=size, chunks=chunks, status=status, error=error,
+                  modified_at=modified_at, indexed_at=datetime.now().isoformat(timespec="seconds"))
 
 
-def list_documents() -> list[dict[str, Any]]:
+def list_documents(source: str | None = None, status: str | None = None, limit: int = 500) -> list[dict[str, Any]]:
+    where, args = ["status != 'removed'"], []
+    if source:
+        where.append("source = ?"); args.append(source)
+    if status:
+        where.append("status = ?"); args.append(status)
     with connect() as c:
-        return [dict(r) for r in c.execute("SELECT id, path, source, size, chunks, status, error, indexed_at "
-                                           "FROM documents WHERE status != 'removed' ORDER BY indexed_at DESC")]
+        return [dict(r) for r in c.execute(
+            "SELECT id, path, source, path_key, sha256, size, chunks, status, error, attempts, embed_model, indexed_at, "
+            f"updated_at FROM documents WHERE {' AND '.join(where)} ORDER BY updated_at DESC LIMIT ?", (*args, limit))]
+
+
+def document_counts(source: str | None = None) -> dict[str, int]:
+    q = "SELECT status, COUNT(*) FROM documents" + (" WHERE source = ?" if source else "") + " GROUP BY status"
+    with connect() as c:
+        counts = {r[0]: r[1] for r in c.execute(q, (source,) if source else ())}
+    counts["discovered"] = sum(v for k, v in counts.items() if k != "removed")
+    return counts
+
+
+def due_retries(now: float, max_attempts: int) -> list[dict[str, Any]]:
+    with connect() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT * FROM documents WHERE source = 'watcher' AND status IN ('failed', 'pending') "
+            "AND attempts < ? AND (next_retry_at IS NULL OR next_retry_at <= ?)", (max_attempts, now))]
+
+
+def reset_failed(doc_id: int | None = None) -> int:
+    q = "UPDATE documents SET attempts = 0, next_retry_at = NULL, status = 'pending' WHERE status = 'failed'"
+    with connect() as c:
+        return c.execute(q + (" AND id = ?" if doc_id else ""), (doc_id,) if doc_id else ()).rowcount

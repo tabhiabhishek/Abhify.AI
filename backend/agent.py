@@ -62,6 +62,10 @@ Answer style:
 @tool
 def knowledge_base_search(query: str) -> str:
     """Search the user's uploaded documents and notes (local knowledge base)."""
+    if knowledge.rebuild_required():
+        return (f"The document index was built with '{knowledge.index_embed_model()}' but the configured embedding "
+                f"model is '{knowledge.configured_embed_model()}'. Tell the user to rebuild it in "
+                "Settings > Knowledge before documents can be searched.")
     docs = knowledge.search(query, k=4)
     if not docs:
         return "The knowledge base is empty or has nothing relevant to this query."

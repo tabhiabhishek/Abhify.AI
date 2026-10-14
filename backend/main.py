@@ -50,7 +50,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+import companion
 import database as db
+import document_indexer
 import generators
 import knowledge
 import local_file_service as lfs
@@ -59,6 +61,7 @@ import system_service as system
 from agent import run_agent
 from config import get_settings
 from generators import GenerationError
+from folder_watcher import watcher
 from version import APP_NAME, __version__
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -89,12 +92,26 @@ def _add_file_log() -> None:
     root_logger.addHandler(h)
 
 
+SHUTDOWN_HOOK: dict = {}       # the desktop launcher registers a callable here
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     STARTUP.update(prepare_storage())
     log.info("%s %s ready: data=%s schema=v%s models=%s", APP_NAME, __version__, STARTUP["data_root"],
              STARTUP["schema"]["to"], system.active_models())
+    if lfs.load_settings()["knowledge"].get("watcher_enabled"):
+        try:
+            await asyncio.to_thread(_start_watcher)
+        except Exception as e:                    # a bad folder setting must never stop the app
+            log.warning("Knowledge watcher not started: %s", e)
     yield
+    watcher.stop()                 # clean shutdown of the observer + worker threads
+
+
+def _start_watcher() -> dict:
+    folder = lfs.validate_knowledge_folder(lfs.knowledge_folder())
+    return watcher.start(folder)
 
 
 app = FastAPI(title=f"{APP_NAME} API", version=__version__, lifespan=lifespan)
@@ -109,11 +126,22 @@ app.add_middleware(
 
 
 def local_only(request: Request) -> None:
-    """Admin endpoints change data on disk or download GBs: only the local machine may call them."""
-    host = request.client.host if request.client else ""
-    if settings.allow_remote_admin or host in ("127.0.0.1", "::1", "localhost", "testclient"):
+    """Admin endpoints change data on disk or download GBs: only the local machine may call them.
+    Requests relayed by a tunnel/proxy (they arrive on 127.0.0.1 with forwarding headers) count as remote."""
+    if settings.allow_remote_admin or companion.is_local_request(request):
         return
     raise HTTPException(403, "This action is only allowed from the computer running Abhify.AI")
+
+
+@app.middleware("http")
+async def companion_guard(request: Request, call_next):
+    """Mode B (phone -> this PC): remote API calls need companion access enabled AND a valid token.
+    Static PWA files are always served so the app shell can load and explain what's missing."""
+    denied = companion.check(request)
+    if denied:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": denied[1]}, status_code=denied[0])
+    return await call_next(request)
 
 
 def _unavailable(e: Exception) -> HTTPException:
@@ -181,6 +209,14 @@ class PullIn(BaseModel):
 
 class LocationIn(BaseModel):
     path: str = Field(..., min_length=3, max_length=400)
+
+
+class FolderIn(BaseModel):
+    path: str = Field(..., min_length=3, max_length=400)
+
+
+class ConfirmIn(BaseModel):
+    confirm: bool = False
 
 
 # --------------------------------------------------------------------------- health
@@ -302,6 +338,117 @@ async def upload_knowledge(file: UploadFile = File(...)):
 async def list_knowledge():
     return {"documents": await asyncio.to_thread(db.list_documents),
             "chunks": await asyncio.to_thread(knowledge.count)}
+
+
+# ---- watched knowledge folder (M2)
+def _index_info() -> dict:
+    k = lfs.load_settings()["knowledge"]
+    return {"collection": knowledge.active_collection(), "index_embed_model": knowledge.index_embed_model(),
+            "configured_embed_model": knowledge.configured_embed_model(),
+            "rebuild_required": knowledge.rebuild_required(), "rebuild": dict(knowledge.REBUILD),
+            "previous_collections": k.get("previous_collections", []), "watcher_enabled": k.get("watcher_enabled"),
+            "default_folder": str(lfs.default_knowledge_dir())}
+
+
+@app.get("/knowledge/status")
+async def knowledge_status():
+    st = await asyncio.to_thread(watcher.status)
+    st["folder"] = st["folder"] or str(lfs.knowledge_folder())
+    return {**st, **await asyncio.to_thread(_index_info), "chunks": await asyncio.to_thread(knowledge.count)}
+
+
+@app.get("/knowledge/files")
+async def knowledge_files(status: str | None = None, source: str | None = "watcher"):
+    return {"files": await asyncio.to_thread(db.list_documents, source, status)}
+
+
+@app.put("/knowledge/folder", dependencies=[Depends(local_only)])
+async def set_knowledge_folder(f: FolderIn):
+    try:
+        folder = lfs.validate_knowledge_folder(Path(f.path))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    old = lfs.knowledge_folder()
+    was_running = watcher.running
+    await asyncio.to_thread(watcher.stop)
+    lfs.update_settings(knowledge={"folder": str(folder)})
+    # Files from the previous folder are no longer inside the knowledge folder: remove their chunks.
+    removed = 0
+    if folder != old.resolve():
+        for d in await asyncio.to_thread(db.list_documents, "watcher"):
+            await asyncio.to_thread(document_indexer.remove_file, d["path_key"])
+            removed += 1
+    if was_running:
+        await asyncio.to_thread(_start_watcher)
+    return {"folder": str(folder), "removed_from_old_folder": removed, "watching": watcher.running}
+
+
+@app.post("/knowledge/watcher/start", dependencies=[Depends(local_only)])
+async def start_watcher():
+    try:
+        st = await asyncio.to_thread(_start_watcher)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    lfs.update_settings(knowledge={"watcher_enabled": True})
+    return st
+
+
+@app.post("/knowledge/watcher/stop", dependencies=[Depends(local_only)])
+async def stop_watcher():
+    await asyncio.to_thread(watcher.stop)
+    lfs.update_settings(knowledge={"watcher_enabled": False})
+    return watcher.status()
+
+
+@app.post("/knowledge/watcher/pause", dependencies=[Depends(local_only)])
+def pause_watcher():
+    watcher.pause()
+    return watcher.status()
+
+
+@app.post("/knowledge/watcher/resume", dependencies=[Depends(local_only)])
+def resume_watcher():
+    watcher.resume()
+    return watcher.status()
+
+
+@app.post("/knowledge/rescan", dependencies=[Depends(local_only)])
+def rescan_knowledge():
+    if not watcher.running:
+        raise HTTPException(409, "Start the watcher first")
+    watcher.request_rescan()
+    return watcher.status()
+
+
+@app.post("/knowledge/retry", dependencies=[Depends(local_only)])
+def retry_knowledge(doc_id: int | None = None):
+    n = watcher.retry_failed(doc_id)
+    return {"reset": n, **watcher.status()}
+
+
+@app.post("/knowledge/rebuild", dependencies=[Depends(local_only)])
+async def rebuild_knowledge(c: ConfirmIn):
+    if not c.confirm:
+        raise HTTPException(400, "Rebuilding re-embeds every document; send confirm=true")
+    if knowledge.REBUILD.get("status") == "running":
+        raise HTTPException(409, "A rebuild is already running")
+    was_running = watcher.running
+    watcher.pause()
+
+    def job():
+        try:
+            knowledge.rebuild_index()
+        finally:
+            if was_running:
+                watcher.resume()
+                watcher.request_rescan()
+    asyncio.get_running_loop().run_in_executor(None, job)
+    return {"started": True, "model": knowledge.configured_embed_model()}
+
+
+@app.post("/knowledge/rebuild/cleanup", dependencies=[Depends(local_only)])
+def cleanup_old_indexes():
+    return {"removed": knowledge.delete_previous_collections()}
 
 
 # --------------------------------------------------------------------------- progress
@@ -481,7 +628,40 @@ async def move_data(loc: LocationIn):
         raise HTTPException(400, str(e))
 
 
+# --------------------------------------------------------------------------- companion access (Mode B)
+@app.get("/companion")
+def companion_status(request: Request):
+    return companion.status(request)
+
+
+@app.post("/companion/enable", dependencies=[Depends(local_only)])
+def companion_enable():
+    return companion.enable()
+
+
+@app.post("/companion/disable", dependencies=[Depends(local_only)])
+def companion_disable():
+    return companion.disable()
+
+
+# --------------------------------------------------------------------------- updates & lifecycle
+@app.get("/system/update-check")
+async def update_check():
+    return await system.check_for_update()
+
+
+@app.post("/system/shutdown", dependencies=[Depends(local_only)])
+def shutdown():
+    hook = SHUTDOWN_HOOK.get("fn")
+    if not hook:
+        raise HTTPException(501, "Not started by the Abhify.AI launcher; stop the server from its window")
+    hook()
+    return {"stopping": True}
+
+
 # --------------------------------------------------------------------------- static PWA
+companion.register_api_routes(r.path for r in app.routes if hasattr(r, "methods"))
+
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 if FRONTEND_DIR.is_dir():
     app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

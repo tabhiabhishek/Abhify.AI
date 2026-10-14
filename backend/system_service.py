@@ -294,3 +294,49 @@ async def test_inference(model: str | None = None) -> dict[str, Any]:
         return {"ok": True, "model": model, "reply": text[:40], "seconds": round(time.time() - t, 1)}
     except Exception as e:
         return {"ok": False, "model": model, "error": f"{type(e).__name__}: {e}"[:300]}
+
+
+# --------------------------------------------------------------------------- update check (no auto-install)
+_HEX64 = set("0123456789abcdef")
+
+
+async def check_for_update() -> dict[str, Any]:
+    """Compare the installed version with a release manifest (if one is configured).
+
+    Manifest format (JSON, served over HTTPS):
+      {"version": "2.1.0", "released": "2026-11-01", "notes": "...", "min_supported": "2.0.0",
+       "windows": {"url": "https://.../Abhify.AI-Setup-2.1.0.exe", "sha256": "<64 hex>"}}
+    Nothing is downloaded or installed: the user downloads the installer and can
+    verify the SHA-256 shown here before running it.
+    """
+    from packaging.version import InvalidVersion, Version
+    cfg = lfs.load_settings().get("updates", {})
+    url = cfg.get("manifest_url")
+    base = {"current": __version__, "configured": bool(url)}
+    if not url:
+        return {**base, "update_available": False, "message": "No update source configured."}
+    if not str(url).startswith("https://"):
+        return {**base, "update_available": False, "error": "The update manifest URL must use HTTPS."}
+    if not internet_available():
+        return {**base, "update_available": False, "error": "Offline: can't check for updates."}
+    try:
+        async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
+            r = await client.get(url)
+            r.raise_for_status()
+            if len(r.content) > 64 * 1024:
+                raise ValueError("manifest too large")
+            m = r.json()
+        latest = Version(str(m["version"]))
+        win = m.get("windows") or {}
+        dl, sha = str(win.get("url", "")), str(win.get("sha256", "")).lower()
+        if not dl.startswith("https://") or len(sha) != 64 or not set(sha) <= _HEX64:
+            raise ValueError("manifest has an invalid download URL or checksum")
+        current = Version(__version__)
+        return {**base, "update_available": latest > current, "latest": str(m["version"]),
+                "released": m.get("released"), "notes": str(m.get("notes", ""))[:5000],
+                "download_url": dl, "sha256": sha,
+                "upgrade_supported": Version(str(m.get("min_supported", "0"))) <= current}
+    except (InvalidVersion, KeyError, ValueError, TypeError) as e:
+        return {**base, "update_available": False, "error": f"Invalid update manifest: {e}"}
+    except Exception as e:
+        return {**base, "update_available": False, "error": f"Update check failed ({type(e).__name__})"}

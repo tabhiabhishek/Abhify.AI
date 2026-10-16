@@ -39,6 +39,25 @@ def test_launcher_picks_next_free_port(launcher):
         assert launcher.choose_port(taken) != taken
 
 
+def test_launcher_survives_reserved_port_ranges(launcher, monkeypatch):
+    """D4 (dev.4): Hyper-V/WSL/Docker can reserve all of 8000-8010 (seen: 7914-8213)."""
+    reserved = set(range(7914, 8214))
+    monkeypatch.setattr(launcher, "port_free", lambda p, host="127.0.0.1": p not in reserved)
+    port = launcher.choose_port(8000)
+    assert port == 18000
+    monkeypatch.setattr(launcher, "port_free", lambda p, host="127.0.0.1": False)   # every fixed port busy
+    port = launcher.choose_port(8000)
+    assert 0 < port < 65536                                             # an OS-assigned free port
+
+
+def test_launcher_reuses_last_working_port(launcher, monkeypatch):
+    import local_file_service as lfs
+    launcher.remember_port(18003)
+    assert lfs.load_settings()["desktop"]["last_port"] == 18003
+    monkeypatch.setattr(launcher, "port_free", lambda p, host="127.0.0.1": True)
+    assert launcher.choose_port(8000) == 18003                           # same origin as last time
+
+
 def test_launcher_single_instance_detection(launcher, monkeypatch):
     import os
     assert launcher.running_instance() is None                          # no run file

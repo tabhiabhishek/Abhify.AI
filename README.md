@@ -5,7 +5,7 @@
 
 Abhify.AI combines live AI news, AI-generated interview questions and quizzes, a chat agent that knows your documents and remembers what you ask it to, and voice control. The AI runs **locally through Ollama**, so there are no paid APIs and no cloud account, and your documents and memories stay on your machine.
 
-> **Status:** `2.0.0-dev.3`, a development build of the v2 line (milestones 1–2 plus the release-blocker fixes; see [CHANGELOG.md](CHANGELOG.md) and [docs/ROADMAP.md](docs/ROADMAP.md)). Not released yet: the Windows installer is **unsigned**, and real-device phone tests and a second-PC test are still outstanding. The v1.0.0 baseline is Git tag `v1.0.0`.
+> **Status:** `2.0.0-dev.4`, a development build of the v2 line (milestones 1–2 plus the release-blocker and model-setup fixes; see [CHANGELOG.md](CHANGELOG.md) and [docs/ROADMAP.md](docs/ROADMAP.md)). Not released yet: the Windows installer is **unsigned**, and real-device phone tests and a second-PC test are still outstanding. The v1.0.0 baseline is Git tag `v1.0.0`.
 >
 > **Install on Windows:** [docs/WINDOWS_INSTALLATION.md](docs/WINDOWS_INSTALLATION.md) · **Phones:** [docs/MOBILE_INSTALLATION.md](docs/MOBILE_INSTALLATION.md) · **Knowledge folder:** [docs/M2_KNOWLEDGE_FOLDER.md](docs/M2_KNOWLEDGE_FOLDER.md) · **Your data:** [docs/DATA_AND_MIGRATION.md](docs/DATA_AND_MIGRATION.md) · **Releases:** [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md)
 
@@ -68,7 +68,7 @@ macOS / Linux: `./start.sh`. Docker: `docker compose up -d --build` (unverified,
 
 ### Phone (Android / iPhone)
 1. On the PC: Settings → **System & data** → **Companion access** → **Turn on**. The access token is shown **once**. Restart Abhify.AI.
-2. Recommended: give the PC a private HTTPS address with **[Tailscale](https://tailscale.com/download)** (`tailscale serve --bg 8000`). Browsers only allow installing the app and using the microphone over HTTPS.
+2. Recommended: give the PC a private HTTPS address with **[Tailscale](https://tailscale.com/download)** (`tailscale serve --bg 8000`, using the port shown in the tray tooltip if it isn't 8000). Browsers only allow installing the app and using the microphone over HTTPS.
 3. On the phone, open `https://<your-pc>.<tailnet>.ts.net/#pair=<token>`. The app saves the token, removes it from the address bar, and says "Paired" only once the PC accepts it.
 4. Install it: **Android (Chrome):** ⋮ → **Install app**. **iPhone (Safari, iOS 16.4+):** Share → **Add to Home Screen**.
 
@@ -119,7 +119,7 @@ On macOS the data folder is `~/Library/Application Support/AbhifyAI/`, and on Li
                                         local_file_service.py data dir, settings, backup/restore ──────┘
                                         transcribe.py      Faster-Whisper (GPU → CPU fallback)
 
- desktop/launcher.pyw   tray icon, single instance, port 8000–8010, --stop, --backup (used by upgrades)
+ desktop/launcher.pyw   tray icon, single instance, port 8000 (+ fallbacks), --stop, --backup (used by upgrades)
  packaging/windows/     build.py (bundled Python 3.11 + app) → installer.nsi (NSIS, per-user) → Sandbox test
 ```
 
@@ -166,7 +166,7 @@ cd backend
 .venv\Scripts\python.exe -m pytest tests -q -p no:cacheprovider
 ```
 
-**Automated suite:** 196 tests. Ollama, the network and downloads are mocked, and every test uses a throw-away data folder, never your real data. They cover:
+**Automated suite:** 219 tests. Ollama, the network and downloads are mocked, and every test uses a throw-away data folder, never your real data. They cover:
 - migrations, backup/restore safety (including zip-slip and newer-version backups), data relocation, disk checks
 - memory and history; missing Ollama; local-only admin endpoints
 - the knowledge folder: indexing, edits, renames, deletes, partial writes, retries, rebuilds, exclusions

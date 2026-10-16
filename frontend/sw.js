@@ -10,7 +10,7 @@
 
    Bump CACHE_VERSION whenever shell files change, so users get the update.
    ===================================================================== */
-const CACHE_VERSION = 'abhify-v2.0.0-dev.3';
+const CACHE_VERSION = 'abhify-v2.0.0-dev.4';
 const SHELL = [
   './',
   './index.html',

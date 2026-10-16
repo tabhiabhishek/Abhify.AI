@@ -203,6 +203,26 @@ def verify_runtime(rt: Path) -> None:
     log(out.stdout.strip())
 
 
+APP_MODULES = ("main, agent, knowledge, document_indexer, folder_watcher, generators, system_service, "
+               "companion, log_redaction, transcribe, memory_service, local_file_service, database")
+
+
+def verify_app() -> None:
+    """Import the app's OWN modules with the bundled runtime (D2, dev.4): a fixed library list can
+    miss a package the app imports but requirements.txt forgot. Uses a throw-away data folder."""
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        code = ("import os, sys; os.environ['ABHIFY_DATA_DIR'] = sys.argv[2]; sys.path.insert(0, sys.argv[1]); "
+                f"import {APP_MODULES}; print('app imports ok:', len(main.app.routes), 'routes')")
+        out = subprocess.run([str(STAGE / "runtime" / "python.exe"), "-I", "-B", "-c", code,
+                              str(STAGE / "app" / "backend"), str(Path(tmp) / "AbhifyAI")],
+                             capture_output=True, text=True)
+    if out.returncode != 0:
+        raise SystemExit("The app can't start with the bundled runtime (a dependency is probably missing "
+                         "from backend/requirements.txt):\n" + out.stderr[-2000:])
+    log(out.stdout.strip().splitlines()[-1])
+
+
 def stage_app() -> None:
     app = STAGE / "app"
     for folder, patterns in APP_ALLOW.items():
@@ -244,6 +264,7 @@ def main() -> None:
     STAGE.mkdir(parents=True)
     stage_runtime(py_zip, args.site_packages_from)
     stage_app()
+    verify_app()
     make_icon()
     sys.path.insert(0, str(Path(__file__).parent))
     from md2html import convert

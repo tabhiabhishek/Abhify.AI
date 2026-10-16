@@ -41,7 +41,7 @@ You can skip it and use limited mode.
 | Start | Start Menu → **Abhify.AI** (or the desktop shortcut). If it's already running, this just opens the window |
 | Stop | Tray icon → **Quit Abhify.AI**, or Start Menu → **Stop Abhify.AI** |
 | Open data / knowledge folder | Tray icon menu |
-| Port | 8000, or the next free port up to 8010 if 8000 is busy |
+| Port | 8000 normally. If it is busy or reserved by Windows (Hyper-V, WSL or Docker can reserve whole port ranges), the next free port in 8001–8010, then 18000, 28000 or 38000, then any free port. The port that works is remembered, so the app keeps the same address |
 
 The app listens on **127.0.0.1 only**. Other devices can reach it only if you turn on **Companion access** (see MOBILE_INSTALLATION.md).
 
@@ -82,7 +82,7 @@ Settings → Apps → **Abhify.AI** → Uninstall, or Start Menu → **Uninstall
 | Nothing opens after starting | Wait 10–20 s on the first start. Check the tray icon, or open `http://127.0.0.1:8000` yourself. The log is in `%LOCALAPPDATA%\AbhifyAI\logs\launcher.log` |
 | "Backend up · Ollama offline" | Start Ollama (Start Menu → Ollama) |
 | Antivirus quarantines `pythonw.exe` | Restore it and allow `%LOCALAPPDATA%\Programs\Abhify.AI`. This happens because the installer isn't signed yet |
-| Port conflict | Abhify.AI picks 8001–8010 automatically. The tray tooltip shows the port |
+| Port conflict | Abhify.AI picks another port automatically and keeps using it. The tray tooltip shows the port. Check reserved ranges with `netsh interface ipv4 show excludedportrange protocol=tcp` |
 
 ## Clean-machine test procedure (for releases)
 

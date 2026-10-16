@@ -55,7 +55,7 @@ What changes, and what doesn't:
 
 **Option 2: recommended, private HTTPS with Tailscale (free).**
 1. Install [Tailscale](https://tailscale.com/download) on the PC and on the phone, and sign in to the same account on both.
-2. On the PC, run `tailscale serve --bg 8000`. Tailscale shows an address like `https://your-pc.tailnet-name.ts.net`.
+2. On the PC, run `tailscale serve --bg 8000` (use the port from the tray tooltip if Abhify.AI had to choose another one). Tailscale shows an address like `https://your-pc.tailnet-name.ts.net`.
 3. On the phone, open `https://your-pc.tailnet-name.ts.net/#pair=<token>`.
 
 What this gets you:

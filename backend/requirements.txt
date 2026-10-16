@@ -13,6 +13,9 @@ langchain-ollama==1.1.0
 
 # Knowledge base: ChromaDB vector store + PDF parsing
 langchain-chroma==1.1.0
+# Imported directly by knowledge.py (chunking). Was only present transitively via the removed
+# langchain-community, so builds from this file produced an app that failed to start (D2, dev.4).
+langchain-text-splitters==1.1.3
 chromadb==1.5.9
 pypdf==6.20.1
 

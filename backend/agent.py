@@ -11,6 +11,10 @@ chooses between tools:
 
 Conversation history is persisted in SQLite (memory_service), so context
 survives restarts. Relevant memories are added to the system prompt per request.
+When the user explicitly asks about their own documents ("my notes", "my
+documents", "the uploaded PDF", "knowledge base"), matching excerpts are added
+too (document_context): small models such as qwen2.5:1.5b often don't call
+knowledge_base_search on their own (found in the dev.3 clean-PC test).
 
     user ─► agent (LLM) ─► tool calls? ──yes──► tools ─┐
                  ▲                                     │
@@ -21,7 +25,9 @@ survives restarts. Relevant memories are added to the system prompt per request.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
 from functools import lru_cache
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -59,23 +65,49 @@ Answer style:
 
 
 # --------------------------------------------------------------------------- tools
-@tool
-def knowledge_base_search(query: str) -> str:
-    """Search the user's uploaded documents and notes (local knowledge base)."""
+def _search_documents(query: str) -> tuple[str, list[str]]:
+    """(text for the model, source labels). Shared by the tool and by document_context."""
     if knowledge.rebuild_required():
         return (f"The document index was built with '{knowledge.index_embed_model()}' but the configured embedding "
                 f"model is '{knowledge.configured_embed_model()}'. Tell the user to rebuild it in "
-                "Settings > Knowledge before documents can be searched.")
+                "Settings > Knowledge before documents can be searched.", [])
     docs = knowledge.search(query, k=4)
     if not docs:
-        return "The knowledge base is empty or has nothing relevant to this query."
-    parts = []
+        return "The knowledge base is empty or has nothing relevant to this query.", []
+    parts, sources = [], []
     for d in docs:
         src = d.metadata.get("source", "unknown")
         page = d.metadata.get("page")
         where = f"{src}, page {page + 1}" if isinstance(page, int) else src
         parts.append(f"[{where}]\n{d.page_content.strip()}")
-    return "\n\n---\n\n".join(parts)
+        sources.append(where)
+    return "\n\n---\n\n".join(parts), sources
+
+
+@tool
+def knowledge_base_search(query: str) -> str:
+    """Search the user's uploaded documents and notes (local knowledge base)."""
+    return _search_documents(query)[0]
+
+
+# The user explicitly refers to their own material: "my notes", "search my documents",
+# "the uploaded PDF", "in my files", "knowledge base / folder".
+DOC_INTENT = re.compile(
+    r"\b(?:my|our|these|those|the\s+uploaded|uploaded|attached)\s+(?:\w+\s+)?"
+    r"(?:documents?|docs|notes?|files?|pdfs?|papers?|uploads?)\b"
+    r"|\bknowledge\s+(?:base|folder)\b|\bsearch\s+(?:my|the)\s+(?:documents?|notes?|files?)\b", re.I)
+
+
+def document_context(message: str) -> tuple[str, list[str]]:
+    """Excerpts added to the system prompt when the user asks about their own documents, so the answer
+    doesn't depend on a small model deciding to call the tool. ('', []) otherwise."""
+    if not DOC_INTENT.search(message) or knowledge.count() == 0:
+        return "", []
+    text, sources = _search_documents(message)
+    if not sources:
+        return "", []
+    return ("\n\nExcerpts from the user's own documents that match this question. Answer from them and cite the "
+            "[document name]. If they don't contain the answer, say so:\n\n" + text), sources
 
 
 @tool
@@ -141,7 +173,8 @@ async def run_agent(message: str, conversation_id: str | None) -> dict:
     for m in mem.recent_messages(cid, limit=12):
         history.append(HumanMessage(m["content"]) if m["role"] == "user" else AIMessage(m["content"]))
 
-    system = SYSTEM_PROMPT + mem.memory_context(message)
+    docs_text, doc_sources = await asyncio.to_thread(document_context, message)
+    system = SYSTEM_PROMPT + mem.memory_context(message) + docs_text
     if prefs.get("user_name"):
         system += f"\n\nThe user's name is {prefs['user_name']}."
     inputs = {"messages": [SystemMessage(system), *history, HumanMessage(message)]}
@@ -149,7 +182,7 @@ async def run_agent(message: str, conversation_id: str | None) -> dict:
     result = await get_agent().ainvoke(inputs, config={"recursion_limit": 12})
     new_msgs = result["messages"][len(inputs["messages"]):]
 
-    tools_used, sources = [], []
+    tools_used, sources = (["knowledge_base_search"], list(doc_sources)) if doc_sources else ([], [])
     for m in new_msgs:
         if isinstance(m, AIMessage):
             tools_used += [tc["name"] for tc in (m.tool_calls or [])]

@@ -12,7 +12,9 @@ launcher.pyw: Abhify.AI desktop launcher (what the Start Menu shortcut runs).
   a second start only opens the browser.
 * Listens on 127.0.0.1. Only when the user has turned on Companion access does it
   listen on the network (0.0.0.0) so a paired phone can connect.
-* Port: ABHIFY_PORT or 8000; if that port is taken by another program, 8001-8010.
+* Port: the last port that worked, then ABHIFY_PORT or 8000, then 8001-8010 and three fallback
+  ranges (18000, 28000, 38000), then any free port, because Hyper-V/WSL/Docker can reserve all of
+  8000-8010. The working port is remembered in settings.json (desktop.last_port).
 * Works from the source tree (desktop/ next to backend/) and from the installed
   layout (app/desktop/ next to app/backend/).
 """
@@ -85,11 +87,32 @@ def port_free(port: int, host: str = "127.0.0.1") -> bool:
             return False
 
 
+# Fallback ranges, far apart: Hyper-V / WSL2 / Docker / Windows Sandbox (WinNAT) reserve dynamic
+# blocks of 100 ports that can cover all of 8000-8010 (seen on the dev PC: 7914-8213), and the
+# launcher then could not start at all (D4, dev.4).
+FALLBACK_PORTS = [*range(8001, 8011), *range(18000, 18011), *range(28000, 28011), *range(38000, 38011)]
+
+
 def choose_port(preferred: int, host: str = "127.0.0.1") -> int:
-    for port in [preferred, *range(8001, 8011)]:
+    """The last port that worked first (same origin, so the browser keeps its saved settings and the
+    installed PWA), then the preferred port, then the fallback ranges, then any free port from Windows."""
+    try:
+        last = int(lfs.load_settings().get("desktop", {}).get("last_port") or 0)
+    except (TypeError, ValueError):
+        last = 0
+    for port in dict.fromkeys(p for p in (last, preferred, *FALLBACK_PORTS) if p):
         if port_free(port, host):
             return port
-    raise RuntimeError("No free port between 8000 and 8010")
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:   # never refuse to start
+        s.bind((host, 0))
+        return s.getsockname()[1]
+
+
+def remember_port(port: int) -> None:
+    try:
+        lfs.update_settings(desktop={"last_port": port})
+    except OSError:
+        pass
 
 
 def bind_host() -> str:
@@ -192,6 +215,7 @@ def cmd_start() -> int:
     def open_when_ready():
         for _ in range(120):
             if health(port, 1):
+                remember_port(port)                          # it works: reuse it next time (same origin)
                 if not os.environ.get("ABHIFY_NO_BROWSER"):
                     open_ui(port)
                 return

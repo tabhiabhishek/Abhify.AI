@@ -114,7 +114,7 @@ def test_each_version_builds_into_its_own_folder():
 
 def test_version_is_consistent():
     v = app_version()
-    assert v == "2.0.0-dev.3"
+    assert re.fullmatch(r"\d+\.\d+\.\d+(-(dev|rc)\.\d+)?", v)        # SemVer with -dev.N / -rc.N
     sw = (ROOT / "frontend" / "sw.js").read_text(encoding="utf-8")
     assert f"const CACHE_VERSION = 'abhify-v{v}';" in sw              # phones pick up the new shell
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")

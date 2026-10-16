@@ -281,28 +281,66 @@ async def start_pull(model: str, confirm: bool) -> dict[str, Any]:
     return PULLS[model]
 
 
+class PullError(RuntimeError):
+    """A model download that did not finish; the message is shown to the user as-is."""
+
+
+def _pull_problem(e: Exception) -> str:
+    """Plain-language reason for a failed download (the wizard shows it, then offers Download again;
+    Ollama resumes partial downloads)."""
+    if isinstance(e, PullError):
+        return str(e)
+    if isinstance(e, httpx.ConnectError):
+        return "Ollama isn't reachable. Start Ollama, then press Download again."
+    if isinstance(e, (httpx.RemoteProtocolError, httpx.ReadError, httpx.ReadTimeout)):
+        return ("The connection to Ollama was interrupted during the download. Press Download again to resume "
+                f"({type(e).__name__}).")
+    return f"{type(e).__name__}: {e}"[:300]
+
+
 async def _pull_worker(model: str) -> None:
+    """Stream Ollama's /api/pull. "done" requires Ollama's final {"status": "success"} AND the model
+    showing up in /api/tags: a stream that just ends (network drop, Ollama restarted) is a failure,
+    never a silent success."""
     st = PULLS[model]
+    base = get_settings().ollama_base_url
     try:
-        async with httpx.AsyncClient(timeout=None) as client:
-            async with client.stream("POST", f"{get_settings().ollama_base_url}/api/pull",
-                                     json={"model": model, "stream": True}) as r:
+        succeeded = False
+        async with httpx.AsyncClient(timeout=httpx.Timeout(30, read=600)) as client:
+            async with client.stream("POST", f"{base}/api/pull", json={"model": model, "stream": True}) as r:
+                if r.status_code >= 400:
+                    body = (await r.aread()).decode("utf-8", "replace")
+                    try:
+                        body = json.loads(body).get("error", body)
+                    except ValueError:
+                        pass
+                    raise PullError(f"Ollama refused the download (HTTP {r.status_code}): {body}"[:300])
                 async for line in r.aiter_lines():
                     if not line:
                         continue
                     ev = json.loads(line)
                     if "error" in ev:
-                        raise RuntimeError(ev["error"])
+                        raise PullError(f"Ollama: {ev['error']}"[:300])
                     st["message"] = ev.get("status", "")
                     if ev.get("total"):
                         st["total"], st["completed"] = ev["total"], ev.get("completed", 0)
-        st["status"] = "done"
+                    if ev.get("status") == "success":
+                        succeeded = True
+            if not succeeded:
+                raise PullError("The download stopped before it finished. Press Download again to resume.")
+            tags = (await client.get(f"{base}/api/tags")).json()
+            names = [m.get("name", "") for m in tags.get("models", [])]
+            if not model_installed(model, names):
+                raise PullError("Ollama reported success, but the model isn't listed as installed. "
+                                "Restart Ollama and press Download again.")
+        st.update(status="done", message="installed")
     except Exception as e:
-        st.update(status="failed", message=str(e))
-        log.warning("Model pull failed for %s: %s", model, e)
+        st.update(status="failed", message=_pull_problem(e))
+        log.warning("Model pull failed for %s: %s", model, type(e).__name__)
 
 
 async def test_inference(model: str | None = None) -> dict[str, Any]:
+    """Real end-to-end check: the model must load and produce a non-empty answer."""
     model = model or active_models()["llm"]
     t = time.time()
     try:
@@ -310,9 +348,18 @@ async def test_inference(model: str | None = None) -> dict[str, Any]:
             r = await client.post(f"{get_settings().ollama_base_url}/api/generate",
                                   json={"model": model, "prompt": "Reply with exactly: OK", "stream": False,
                                         "options": {"num_predict": 8}})
-            r.raise_for_status()
+            if r.status_code >= 400:                    # e.g. model missing, or not enough memory to load it
+                try:
+                    detail = r.json().get("error", r.text)
+                except ValueError:
+                    detail = r.text
+                return {"ok": False, "model": model, "error": f"Ollama couldn't run {model}: {detail}"[:300]}
             text = r.json().get("response", "").strip()
+        if not text:
+            return {"ok": False, "model": model, "error": f"{model} loaded but returned an empty answer"}
         return {"ok": True, "model": model, "reply": text[:40], "seconds": round(time.time() - t, 1)}
+    except httpx.ConnectError:
+        return {"ok": False, "model": model, "error": "Ollama isn't reachable. Start Ollama and try again."}
     except Exception as e:
         return {"ok": False, "model": model, "error": f"{type(e).__name__}: {e}"[:300]}
 

@@ -3,6 +3,33 @@
 All notable changes to Abhify.AI. Format: [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 The database schema version is listed separately, because not every release changes it.
 
+## [2.0.0-dev.4]: model-setup and reproducible-build fixes, unreleased (branch `feature/m2-knowledge-packaging`)
+
+Database schema: **v4** (unchanged). Found during the dev.3 final acceptance run; details in `docs/FINAL_ACCEPTANCE_DEV3.md`.
+
+### Fixed
+- **D1, false "model installed".** A model download whose connection was cut, or whose stream ended early (Ollama restarted, network dropped), was reported as **done**.
+  - A download now counts as done only after Ollama's final `success` event **and** after the model shows up in Ollama's model list.
+  - Failures get plain-language messages ("Ollama isn't reachable", "the connection was interrupted, press Download again to resume", Ollama's own error text).
+  - The setup test passes only for a real, non-empty answer, and shows Ollama's reason when a model can't load (for example, not enough memory).
+- **D2, builds from `requirements.txt` produced an app that crashed on start.** `langchain-text-splitters` (used by `knowledge.py`) was not declared; it was only present in the dev environment.
+  - It's now pinned in `backend/requirements.txt`.
+  - `build.py` imports the app's own modules with the bundled runtime and fails the build if that doesn't work.
+  - A test checks that every third-party import is declared, directly or through a declared package.
+
+- **D3, document questions on the Minimal profile.** On a clean CPU-only PC, `qwen2.5:1.5b` answered "I don't have access to your documents" without searching them, although the PDF was indexed.
+  - When a question explicitly refers to the user's own material ("my notes", "my documents", "the uploaded PDF", "knowledge base"), matching excerpts are now added to the prompt (like memories already are), and the answer cites them.
+  - General questions are unchanged.
+- **D4, the app couldn't start when Windows reserved ports 8000–8010.** Hyper-V, WSL2, Docker and Windows Sandbox reserve dynamic blocks of 100 ports; on the dev PC, 7914–8213 was reserved, so the launcher stopped with "No free port between 8000 and 8010".
+  - The launcher now tries the last port that worked, then 8000–8010, then 18000 / 28000 / 38000, and finally any free port.
+  - The working port is remembered, so the browser keeps the same address (saved settings, pairing and the installed PWA stay).
+
+### Added
+- `packaging\windows\sandbox\run-sandbox-modeltest.ps1`: a clean-PC model-setup test in Windows Sandbox **with networking**. It installs the app and Ollama, then checks consent, a network error, an interrupted download and resume, a model that can't start, real inference, document Q&A from the knowledge folder, and a restart.
+
+### Known limitations
+- Unchanged from dev.3: unsigned; no second-physical-PC or real-phone acceptance yet.
+
 ## [2.0.0-dev.3]: release-blocker fixes, unreleased (branch `feature/m2-knowledge-packaging`)
 
 Database schema: **v4** (unchanged). Fixes the blockers from `docs/INSTALLER_READINESS_AUDIT.md`. Details, root causes and test results: `docs/RELEASE_BLOCKER_FIXES_DEV3.md`.

@@ -54,6 +54,17 @@ def test_build_paths_in_bytecode_fail_the_build(tmp_path):
     (rt / "Lib" / "bad.pyc").write_bytes(b"\x00" + str(build.ROOT / "backend" / ".venv" / "x.py").encode())
     with pytest.raises(SystemExit, match="build-machine paths"):
         build.check_no_build_paths(rt)
+    (rt / "Lib" / "bad.pyc").unlink()
+    (rt / "Lib" / "bin").mkdir()                                       # F7: pip console-script launcher
+    (rt / "Lib" / "bin" / "uvicorn.exe").write_bytes(b"MZ..#!" + str(Path.home() / "python.exe").encode())
+    with pytest.raises(SystemExit, match="build-machine paths"):
+        build.check_no_build_paths(rt)
+
+
+def test_online_build_removes_pip_launchers():
+    src = (PKG / "build.py").read_text(encoding="utf-8")
+    pip_call = src.index('"--no-compile", "--target"')
+    assert src.index('shutil.rmtree(target / "bin"', pip_call) > pip_call
 
 
 def test_build_never_writes_bytecode_with_staging_paths():

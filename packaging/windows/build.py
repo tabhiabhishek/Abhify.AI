@@ -123,6 +123,10 @@ def stage_runtime(py_zip: Path, site_from: Path | None) -> None:
                         "--no-warn-script-location", "--no-compile", "--target", str(target),
                         "-r", str(ROOT / "backend" / "requirements.txt"),
                         "-r", str(ROOT / "packaging" / "windows" / "requirements-desktop.txt")], check=True)
+        # F7 (dev.4): pip --target writes console-script launchers (bin\*.exe) that embed the BUILD
+        # machine's python.exe path (and so its user name). The app never uses them: it always runs
+        # through runtime\python.exe. Remove them.
+        shutil.rmtree(target / "bin", ignore_errors=True)
     bundle_vc_runtime(rt)
     check_dlls(rt)
     compile_bytecode(rt)
@@ -181,16 +185,19 @@ def build_path_markers() -> list[bytes]:
 
 
 def check_no_build_paths(rt: Path) -> None:
-    """Fail the build if any .pyc in the runtime embeds a build-machine path (F1)."""
+    """Fail the build if ANY file in the runtime embeds a build-machine path: bytecode (F1), and also
+    launchers, .pth files, metadata and so on (F7, dev.4: pip's bin\\*.exe carried the builder's home path)."""
     marks = build_path_markers()
     bad = []
-    for f in rt.rglob("*.pyc"):
+    for f in rt.rglob("*"):
+        if not f.is_file() or f.stat().st_size > 64 * 1024 * 1024:
+            continue
         data = f.read_bytes()
         if any(m in data for m in marks):
             bad.append(str(f.relative_to(rt)))
     if bad:
-        raise SystemExit(f"{len(bad)} .pyc file(s) contain build-machine paths, e.g. {bad[:3]}")
-    log("bytecode check: no build-machine paths in any .pyc")
+        raise SystemExit(f"{len(bad)} runtime file(s) contain build-machine paths, e.g. {bad[:3]}")
+    log("path check: no build-machine paths in any runtime file")
 
 
 def verify_runtime(rt: Path) -> None:

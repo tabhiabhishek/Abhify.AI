@@ -57,7 +57,8 @@ No administrator rights are needed."
 !define MUI_FINISHPAGE_RUN
 !define MUI_FINISHPAGE_RUN_FUNCTION LaunchApp
 !define MUI_FINISHPAGE_RUN_TEXT "Start ${APPNAME} now"
-!define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\INSTALL.md"
+; F6 (dev.3): an .html guide, because many PCs have no app associated with .md files
+!define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\INSTALL.html"
 !define MUI_FINISHPAGE_SHOWREADME_TEXT "Open the installation guide"
 !define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
 
@@ -106,6 +107,7 @@ Section "${APPNAME} (required)" SecMain
   ${EndIf}
 
   File /r "${STAGING}\*.*"
+  Delete "$INSTDIR\INSTALL.md"            ; guide shipped by 2.0.0-dev.2 and earlier
 
   ; Start Menu
   CreateDirectory "$SMPROGRAMS\${APPNAME}"
@@ -149,6 +151,7 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\runtime"
   RMDir /r "$INSTDIR\app"
   Delete "$INSTDIR\Abhify.AI.ico"
+  Delete "$INSTDIR\INSTALL.html"
   Delete "$INSTDIR\INSTALL.md"
   Delete "$INSTDIR\RELEASE_NOTES.md"
   Delete "$INSTDIR\Uninstall.exe"

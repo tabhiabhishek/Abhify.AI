@@ -12,7 +12,21 @@
 | Your data lives on | This PC | Your PC (the phone sends questions and receives answers) | The phone's browser storage (caches only) |
 | Setup | Windows installer | Companion access + HTTPS (below) | Install the PWA from any HTTPS deployment |
 
-The app never claims the AI runs on your phone. In Mode B the status bar says **"AI ready · via your computer"**. Without a connection it says **"Offline"** and shows the Offline Mode banner.
+The app never claims the AI runs on your phone. In Mode B the status bar shows exactly one of these (2.0.0-dev.3):
+
+| Status bar | Meaning | What to do |
+|---|---|---|
+| **AI ready · runs on your computer** | Paired, your PC is reachable, Ollama and the model are ready | Nothing |
+| **Not paired** | This phone has no access token | Open the pairing link from your PC, or enter the token in Settings |
+| **Not paired · access token rejected** | The token is wrong, or was replaced or turned off on the PC | Pair again from the PC |
+| **Companion access is off on your computer** | Your PC answers, but companion access is turned off | Turn it on on the PC |
+| **Computer connected · Ollama not running** | Paired and reachable, but Ollama isn't running on the PC | Start Ollama on the PC |
+| **Computer connected · AI model not installed** | Paired and reachable, but setup isn't finished on the PC | Finish the setup wizard on the PC |
+| **Paired · your computer isn't reachable** | A token is saved, but the PC can't be reached | Check the PC is on, Abhify.AI is running, same Wi-Fi or Tailscale |
+| **Connection to your computer lost · retrying** | It was connected, and the connection dropped | Wait; it re-checks every 30 s and when the app comes back to the foreground |
+| **Offline mode** | The phone itself has no network | Saved content only |
+
+Whenever the AI isn't usable, a banner under the header explains why.
 
 ## Mode B: use Abhify.AI from your phone
 
@@ -24,13 +38,18 @@ The app never claims the AI runs on your phone. In Mode B the status bar says **
 
 What changes, and what doesn't:
 - Every API call from another device must carry the token. Wrong or missing tokens get `401`.
-- **Admin actions stay limited to the PC:** backups, restore, moving data, model downloads, knowledge-folder changes.
+- **A token only opens your own content:** chat, news, interview questions, quizzes, voice, your documents, memories, preferences, chat history and progress.
+- **Everything else stays limited to the PC (`403`), even with a valid token:** system diagnostics, model setup, backups and restore, moving data, the knowledge-folder and watcher controls, update checks, the API docs, and any route added in the future.
+- Responses to a phone never contain the token hash, your Windows user name or folder paths. The knowledge folder is shown by name only.
 - **Ollama is never exposed.** It keeps listening on its own `127.0.0.1:11434`.
 - **Turn it off** at any time with **Turn off**, which revokes the token.
 
 ### Step 2: connect the phone
 
 **Option 1: home Wi-Fi, quick test (HTTP).** Open `http://<PC-address>:8000/#pair=<token>` in the phone's browser. The address is shown in Companion access. The `#pair=` part saves the token on the phone and is never sent to the server.
+- The link also works when Abhify.AI is **already open** in that tab, and other open windows of the app on the phone pick up the new token automatically.
+- "✅ Paired" is only shown after your PC accepts the token. A rejected token says so.
+- Prefer typing the token in Settings → Access token if you don't want the link in your browser history.
 - Chat, news and quizzes work.
 - Browsers only allow **installing** the app and **using the microphone** over **HTTPS**, so over plain HTTP the phone can't install it or use voice.
 

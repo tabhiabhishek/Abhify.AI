@@ -18,18 +18,28 @@ Personal memory & history
   GET/PUT  /preferences           user name, memory on/off, history retention
   GET  /conversations             list   GET/DELETE /conversations/{id}
 
-Setup & system (admin endpoints marked *: local machine only)
+Setup & system (all local machine only; companion.REMOTE_ROUTES lists what a paired phone may use)
   GET  /system/diagnostics        hardware, Ollama, storage, versions, recommended profile
   GET  /setup/profiles            model profiles + disk check per profile
-  POST /setup/profile *           choose a profile (changes settings.json)
-  POST /setup/models/pull *       download a model (needs confirm=true and enough disk)
+  POST /setup/profile             choose a profile (changes settings.json)
+  POST /setup/models/pull         download a model (needs confirm=true and enough disk)
   GET  /setup/models/pull         download progress
   POST /setup/test                quick local inference test
-  POST /setup/complete *          mark first-run setup as done
-  GET  /backup                    list backups;  POST /backup * create one
-  GET  /backup/export *           download a fresh backup zip
-  POST /backup/restore *          upload a backup zip; applied on next start
-  POST /system/data-location *    move user data to another folder (restart required)
+  POST /setup/complete            mark first-run setup as done
+  GET  /backup                    list backups;  POST /backup  create one
+  GET  /backup/export             download a fresh backup zip
+  POST /backup/restore            upload a backup zip; applied on next start
+  POST /system/data-location      move user data to another folder (restart required)
+  GET  /system/update-check       opt-in HTTPS update manifest check (never installs)
+  POST /system/shutdown           stop the app (desktop launcher only)
+
+Knowledge folder (M2)
+  GET  /knowledge/status          watcher + index status     GET /knowledge/files  per-file status
+  local only: PUT /knowledge/folder, POST /knowledge/watcher/{start,stop,pause,resume},
+              POST /knowledge/rescan, /knowledge/retry, /knowledge/rebuild, /knowledge/rebuild/cleanup
+
+Companion access (Mode B)
+  GET  /companion                 pairing status (open)      POST /companion/enable|disable (local only)
 
 The PWA in ../frontend is served at "/".
 Run:  uvicorn main:app --host 127.0.0.1 --port 8000
@@ -56,6 +66,7 @@ import document_indexer
 import generators
 import knowledge
 import local_file_service as lfs
+import log_redaction
 import memory_service as mem
 import system_service as system
 from agent import run_agent
@@ -65,6 +76,7 @@ from folder_watcher import watcher
 from version import APP_NAME, __version__
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+log_redaction.install()                     # no tokens / secret query values in any log (F3)
 log = logging.getLogger("abhify")
 settings = get_settings()
 STARTUP: dict = {}
@@ -90,6 +102,7 @@ def _add_file_log() -> None:
     h = RotatingFileHandler(lfs.logs_dir() / "abhify.log", maxBytes=2_000_000, backupCount=3, encoding="utf-8")
     h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     root_logger.addHandler(h)
+    log_redaction.install(h)
 
 
 SHUTDOWN_HOOK: dict = {}       # the desktop launcher registers a callable here
@@ -97,6 +110,7 @@ SHUTDOWN_HOOK: dict = {}       # the desktop launcher registers a callable here
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    log_redaction.install()                 # again: uvicorn may have added handlers after import
     STARTUP.update(prepare_storage())
     log.info("%s %s ready: data=%s schema=v%s models=%s", APP_NAME, __version__, STARTUP["data_root"],
              STARTUP["schema"]["to"], system.active_models())
@@ -126,18 +140,19 @@ app.add_middleware(
 
 
 def local_only(request: Request) -> None:
-    """Admin endpoints change data on disk or download GBs: only the local machine may call them.
-    Requests relayed by a tunnel/proxy (they arrive on 127.0.0.1 with forwarding headers) count as remote."""
+    """Admin and system endpoints (they change data on disk, download GBs, or reveal paths, hardware and
+    settings) are for the local machine only. Requests relayed by a tunnel/proxy (they arrive on
+    127.0.0.1 with forwarding headers) count as remote."""
     if settings.allow_remote_admin or companion.is_local_request(request):
         return
-    raise HTTPException(403, "This action is only allowed from the computer running Abhify.AI")
+    raise HTTPException(403, companion.LOCAL_ONLY_MESSAGE)
 
 
 @app.middleware("http")
 async def companion_guard(request: Request, call_next):
     """Mode B (phone -> this PC): remote API calls need companion access enabled AND a valid token.
     Static PWA files are always served so the app shell can load and explain what's missing."""
-    denied = companion.check(request)
+    denied = companion.check(request, settings.allow_remote_admin)
     if denied:
         from fastapi.responses import JSONResponse
         return JSONResponse({"detail": denied[1]}, status_code=denied[0])
@@ -145,9 +160,18 @@ async def companion_guard(request: Request, call_next):
 
 
 def _unavailable(e: Exception) -> HTTPException:
-    """503 tells the PWA to fall back to cached / offline data."""
+    """503 tells the PWA to fall back to cached / offline data. Paths are redacted (they contain the
+    Windows user name) because these errors also reach paired phones."""
     log.warning("Upstream unavailable: %s", type(e).__name__)
-    return HTTPException(status_code=503, detail=str(e))
+    return HTTPException(status_code=503, detail=companion.redact_text(str(e)))
+
+
+def _public_docs(request: Request, docs: list[dict]) -> list[dict]:
+    """Document rows for a remote (paired phone) caller: no absolute paths, no path-bearing errors."""
+    if not companion.is_remote(request):
+        return docs
+    return [{**{k: v for k, v in d.items() if k != "path_key"}, "error": companion.redact_text(d.get("error"))}
+            for d in docs]
 
 
 # --------------------------------------------------------------------------- schemas
@@ -227,11 +251,11 @@ def ping():
 
 
 @app.get("/health")
-async def health():
+async def health(request: Request):
     st = await system.ollama_status()
     names = [m["name"] for m in st["models"]]
     models = system.active_models()
-    return {
+    return companion.health_view({
         "app": APP_NAME, "version": __version__, "schema_version": db.SCHEMA_VERSION,
         "status": "ok" if st["reachable"] else "degraded",
         "ollama": st["reachable"],
@@ -240,7 +264,7 @@ async def health():
         "internet": await asyncio.to_thread(system.internet_available),
         "setup_completed": lfs.load_settings().get("setup_completed", False),
         "knowledge_chunks": await asyncio.to_thread(knowledge.count) if st["reachable"] else None,
-    }
+    }, request)
 
 
 # --------------------------------------------------------------------------- chat
@@ -341,8 +365,8 @@ async def upload_knowledge(file: UploadFile = File(...)):
 
 
 @app.get("/knowledge")
-async def list_knowledge():
-    return {"documents": await asyncio.to_thread(db.list_documents),
+async def list_knowledge(request: Request):
+    return {"documents": _public_docs(request, await asyncio.to_thread(db.list_documents)),
             "chunks": await asyncio.to_thread(knowledge.count)}
 
 
@@ -357,15 +381,19 @@ def _index_info() -> dict:
 
 
 @app.get("/knowledge/status")
-async def knowledge_status():
+async def knowledge_status(request: Request):
     st = await asyncio.to_thread(watcher.status)
     st["folder"] = st["folder"] or str(lfs.knowledge_folder())
-    return {**st, **await asyncio.to_thread(_index_info), "chunks": await asyncio.to_thread(knowledge.count)}
+    out = {**st, **await asyncio.to_thread(_index_info), "chunks": await asyncio.to_thread(knowledge.count)}
+    if companion.is_remote(request):                 # folder name only; no user-profile paths
+        out.update(folder=companion.public_name(out["folder"]), default_folder=None,
+                   last_error=companion.redact_text(out.get("last_error")))
+    return out
 
 
 @app.get("/knowledge/files")
-async def knowledge_files(status: str | None = None, source: str | None = "watcher"):
-    return {"files": await asyncio.to_thread(db.list_documents, source, status)}
+async def knowledge_files(request: Request, status: str | None = None, source: str | None = "watcher"):
+    return {"files": _public_docs(request, await asyncio.to_thread(db.list_documents, source, status))}
 
 
 @app.put("/knowledge/folder", dependencies=[Depends(local_only)])
@@ -377,6 +405,10 @@ async def set_knowledge_folder(f: FolderIn):
     old = lfs.knowledge_folder()
     was_running = watcher.running
     await asyncio.to_thread(watcher.stop)
+    if not await asyncio.to_thread(watcher.drain):           # never remove docs while one is still being written
+        if was_running:
+            await asyncio.to_thread(_start_watcher)          # nothing changed: keep watching the old folder
+        raise HTTPException(409, "The watcher is still finishing a large file. Try again in a moment.")
     lfs.update_settings(knowledge={"folder": str(folder)})
     # Files from the previous folder are no longer inside the knowledge folder: remove their chunks.
     removed = 0
@@ -544,14 +576,14 @@ def delete_all_conversations(confirm: bool = False):
 
 
 # --------------------------------------------------------------------------- setup & system
-@app.get("/system/diagnostics")
+@app.get("/system/diagnostics", dependencies=[Depends(local_only)])
 async def diagnostics():
     d = await system.diagnostics()
     d["startup"] = STARTUP
     return d
 
 
-@app.get("/setup/profiles")
+@app.get("/setup/profiles", dependencies=[Depends(local_only)])
 async def profiles():
     st = await system.ollama_status()
     names = [m["name"] for m in st["models"]]
@@ -577,12 +609,12 @@ async def pull_model(p: PullIn):
         raise HTTPException(400, str(e))
 
 
-@app.get("/setup/models/pull")
+@app.get("/setup/models/pull", dependencies=[Depends(local_only)])
 def pull_status():
     return {"pulls": system.PULLS}
 
 
-@app.post("/setup/test")
+@app.post("/setup/test", dependencies=[Depends(local_only)])
 async def test_model():
     return await system.test_inference()
 
@@ -593,7 +625,7 @@ def complete_setup():
 
 
 # --------------------------------------------------------------------------- backup / data location
-@app.get("/backup")
+@app.get("/backup", dependencies=[Depends(local_only)])
 def backups():
     return {"backups": lfs.list_backups(), "data_root": str(lfs.root())}
 
@@ -651,7 +683,7 @@ def companion_disable():
 
 
 # --------------------------------------------------------------------------- updates & lifecycle
-@app.get("/system/update-check")
+@app.get("/system/update-check", dependencies=[Depends(local_only)])
 async def update_check():
     return await system.check_for_update()
 

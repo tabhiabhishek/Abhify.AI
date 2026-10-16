@@ -174,7 +174,9 @@ async def diagnostics() -> dict[str, Any]:
     gpus = detect_gpus()
     ram = _ram()
     settings = lfs.load_settings()
-    db_ok, schema = True, None
+    comp = settings.get("companion") or {}
+    settings = {**settings, "companion": {"enabled": bool(comp.get("enabled")), "created_at": comp.get("created_at")}}
+    db_ok, schema = True, None                      # ^ the token hash is never returned by any endpoint
     try:
         with db.connect() as c:
             schema = db.current_version(c)

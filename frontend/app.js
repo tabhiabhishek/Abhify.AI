@@ -62,6 +62,8 @@ const state = {
   progress: store.json(LS.progress, { mcq_total: 0, mcq_correct: 0, interview_viewed: 0, streak_days: 0 }),
   busy: { news: false, questions: false, mcq: false, chat: false },
   ready: Promise.resolve(),   // resolves after the first backend connection check
+  remote: !['localhost', '127.0.0.1', '[::1]', ''].includes(location.hostname),   // refined by /health
+  everConnected: false,       // used to tell "connection lost" from "never connected"
 };
 store.set(LS.user, state.userId);
 
@@ -142,6 +144,7 @@ async function api(path, { method = 'GET', body, form, timeout = 120000 } = {}) 
       body: form || (body ? JSON.stringify(body) : undefined),
     });
     const data = await res.json().catch(() => ({}));
+    if (res.status === 401) recheckSoon();                         // token missing / revoked: show "Not paired"
     if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
     return data;
   } catch (e) {
@@ -151,17 +154,20 @@ async function api(path, { method = 'GET', body, form, timeout = 120000 } = {}) 
   } finally { clearTimeout(timer); }
 }
 
-/** Probe /health on each candidate; first one with a reachable LLM wins. */
+/** Probe /health on each candidate. The AI counts as usable only when the model is ready AND, on a
+ *  phone, this device is paired (the backend reports `authorized` for the token we send). */
 async function checkConnection() {
   for (const base of apiCandidates()) {
     try {
       const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), 4000);
-      const res = await fetch(base + '/health', { signal: ctrl.signal, cache: 'no-store' });
+      const res = await fetch(base + '/health', { signal: ctrl.signal, cache: 'no-store', headers: authHeaders() });
       clearTimeout(t);
       if (!res.ok) continue;
       const h = await res.json();
       state.apiBase = base;
-      setOnline(Boolean(h.ollama && h.llm_ready), h);
+      if (typeof h.remote === 'boolean') state.remote = h.remote;
+      state.everConnected = true;
+      setOnline(Boolean(h.ollama && h.llm_ready && h.authorized !== false), h);
       return state.online;
     } catch { /* try next candidate */ }
   }
@@ -170,15 +176,51 @@ async function checkConnection() {
   return false;
 }
 
+let recheckTimer = null;
+function recheckSoon() { clearTimeout(recheckTimer); recheckTimer = setTimeout(checkConnection, 300); }
+
+/** One honest status line. Inference always runs on the computer, never on the phone. Returns
+ *  [status text, dot class, banner text (shown when the AI isn't usable)]. */
+function connectionStatus(on, h) {
+  const paired = Boolean(store.get(LS.token));
+  if (!h) {
+    if (!navigator.onLine) return ['Offline mode', 'off', '📴 <strong>Offline mode</strong>: this device has no network. Showing saved content.'];
+    if (state.remote) {
+      return paired
+        ? [state.everConnected ? 'Connection to your computer lost · retrying' : 'Paired · your computer isn\'t reachable', 'off',
+          '📴 <strong>Your computer isn\'t reachable.</strong> Check that it\'s on, Abhify.AI is running, and both devices are on the same network or Tailscale. Showing saved content.']
+        : ['Not paired', 'off', '🔗 <strong>Not paired.</strong> Open the pairing link from your computer, or enter its address and access token in Settings.'];
+    }
+    return [state.everConnected ? 'Connection lost · retrying' : 'Offline', 'off',
+      '📴 <strong>Offline mode</strong>: showing saved content. AI features return when the backend is reachable.'];
+  }
+  if (h.remote) {
+    if (h.authorized === false) {
+      if (h.companion_enabled === false) return ['Companion access is off on your computer', 'off',
+        '🔒 <strong>Companion access is turned off</strong> on your computer. Turn it on there (Settings → System & data).'];
+      return [paired ? 'Not paired · access token rejected' : 'Not paired', 'off',
+        paired ? '🔗 <strong>The access token was rejected</strong> (it may have been replaced or turned off). Pair again from your computer.'
+          : '🔗 <strong>Not paired.</strong> Open the pairing link from your computer, or enter the access token in Settings.'];
+    }
+    if (!h.ollama) return ['Computer connected · Ollama not running', 'warn',
+      '⚠️ <strong>Your computer is connected, but Ollama isn\'t running there.</strong> Start Ollama on the computer.'];
+    if (!h.llm_ready) return ['Computer connected · AI model not installed', 'warn',
+      '⚠️ <strong>Your computer is connected, but its AI model isn\'t installed.</strong> Finish setup on the computer.'];
+    return ['AI ready · runs on your computer', 'on', ''];
+  }
+  if (on) return [h.internet ? 'Online · AI ready' : 'Local AI ready · no internet', 'on', ''];
+  return [h.ollama ? 'Backend up · model not installed' : 'Backend up · Ollama offline', 'off',
+    '📴 <strong>Local AI unavailable</strong>: showing saved content. Open Settings → System & data → Models & setup.'];
+}
+
 function setOnline(on, health) {
   const was = state.online;
   state.online = on;
   state.health = health || null;
-  $('#statusDot').className = 'dot ' + (on ? 'on' : 'off');
-  // Honest status: local AI and internet are separate things.
-  $('#statusText').textContent = on ? (state.remote ? 'AI ready · via your computer'
-    : health.internet ? 'Online · AI ready' : 'Local AI ready · no internet')
-    : health ? (health.ollama ? 'Backend up · model not installed' : 'Backend up · Ollama offline') : 'Offline';
+  const [text, dot, banner] = connectionStatus(on, health || null);
+  $('#statusDot').className = 'dot ' + dot;
+  $('#statusText').textContent = text;
+  $('#offlineText').innerHTML = banner;
   $('#offlineBanner').classList.toggle('hidden', on);
   if (health && health.knowledge_chunks != null) $('#kbInfo').textContent = `📚 ${health.knowledge_chunks} chunks`;
   if (on && !was) { flushQueue(); refreshProgress(); }
@@ -572,8 +614,11 @@ async function testApi() {
   const url = $('#setApi').value.trim().replace(/\/+$/, '') || (location.protocol.startsWith('http') ? location.origin : 'http://localhost:8000');
   $('#testResult').textContent = 'Testing…';
   try {
-    const h = await (await fetch(url + '/health', { cache: 'no-store' })).json();
-    $('#testResult').textContent = h.ollama ? `✅ OK · ${h.llm_model}${h.llm_ready ? '' : ' (model not pulled)'}` : '⚠️ Backend up, Ollama not reachable';
+    const t = $('#setToken').value.trim();
+    const h = await (await fetch(url + '/health', { cache: 'no-store', headers: t ? { Authorization: `Bearer ${t}` } : {} })).json();
+    $('#testResult').textContent = h.remote && h.authorized === false
+      ? (h.companion_enabled === false ? '🔒 Reachable, but companion access is off on that computer' : '🔗 Reachable, but not paired: the token is missing or wrong')
+      : h.ollama ? `✅ OK · ${h.llm_model}${h.llm_ready ? '' : ' (model not pulled)'}${h.remote ? ' · AI runs on that computer' : ''}` : '⚠️ Backend up, Ollama not reachable';
   } catch { $('#testResult').textContent = '❌ Not reachable (check URL / CORS)'; }
 }
 
@@ -662,6 +707,8 @@ function bindEvents() {
   bindV2Events();
 
   // Connectivity changes
+  window.addEventListener('hashchange', () => { if (readPairingLink()) checkConnection(); });
+  window.addEventListener('storage', (e) => { if (e.key === LS.token || e.key === LS.api) checkConnection(); });   // paired in another window
   window.addEventListener('online', checkConnection);
   window.addEventListener('offline', () => setOnline(false));
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkConnection(); });
@@ -686,9 +733,12 @@ async function boot() {
   setInterval(checkConnection, 30000);
   loadNews();
   loadPreferences();
-  // Mode A vs Mode B: is the AI running on THIS device or on a paired computer?
-  try { state.remote = !(await api('/companion')).this_device_is_host; } catch { state.remote = false; }
-  if (state.online) setOnline(true, state.health);
+  // Mode A vs Mode B: is the AI running on THIS device or on a paired computer? (/health says so;
+  // /companion is the fallback for an older backend)
+  if (state.health && typeof state.health.remote !== 'boolean') {
+    try { state.remote = !(await api('/companion')).this_device_is_host; } catch { /* keep the guess */ }
+    setOnline(state.online, state.health);
+  }
   if (!state.remote && state.health && state.health.setup_completed === false) openSetup();   // first run on this computer
 
   // Deep links from manifest shortcuts, e.g. ./?tab=mcq
@@ -914,6 +964,11 @@ async function savePref(body) {
 async function openSystem() {
   closeSheet('settingsSheet'); openSheet('systemSheet');
   $('#systemInfo').innerHTML = skeleton(1);
+  if (state.remote) {
+    $('#systemInfo').innerHTML = '<p class="empty">System details, backups and model setup are only available on the computer running Abhify.AI. Your AI runs there; this device only shows the app.</p>';
+    $('#dataRoot').textContent = ''; $('#backupList').innerHTML = '';
+    return;
+  }
   try {
     const [d, b] = await Promise.all([api('/system/diagnostics'), api('/backup')]);
     const gpu = d.gpus.length ? d.gpus.map((g) => `${g.name} · ${g.vram_gb} GB`).join(', ') : 'none (CPU mode)';
@@ -1135,13 +1190,22 @@ async function companionAction(a) {
   } catch (e) { toast(adminError(e)); }
 }
 
-/** Phone pairing: https://pc-address/#pair=<token> stores the token and removes it from the URL. */
+/** Phone pairing: https://pc-address/#pair=<token> stores the token and removes it from the URL.
+ *  Runs at start-up AND on hashchange, so a link opened while the app is already open works too.
+ *  Other open windows of the app pick the token up through the `storage` event. The fragment is never
+ *  sent to the server, and the "Paired" message is only shown after the computer accepts the token. */
 function readPairingLink() {
   const m = location.hash.match(/pair=([A-Za-z0-9_\-]{16,})/);
-  if (!m) return;
+  if (!m) return false;
   store.set(LS.token, m[1]);
   history.replaceState(null, '', location.pathname + location.search);
-  setTimeout(() => toast('✅ Paired with your computer'), 500);
+  state.ready.then(() => setTimeout(() => {
+    const h = state.health;
+    toast(!h ? '🔗 Token saved. Your computer isn\'t reachable yet.'
+      : h.authorized === false ? '❌ Your computer rejected this pairing link. Create a new one there.'
+      : '✅ Paired with your computer');
+  }, 300));
+  return true;
 }
 
 async function checkUpdates() {

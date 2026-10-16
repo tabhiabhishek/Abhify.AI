@@ -3,6 +3,34 @@
 All notable changes to Abhify.AI. Format: [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 The database schema version is listed separately, because not every release changes it.
 
+## [2.0.0-dev.3]: release-blocker fixes, unreleased (branch `feature/m2-knowledge-packaging`)
+
+Database schema: **v4** (unchanged). Fixes the blockers from `docs/INSTALLER_READINESS_AUDIT.md`. Details, root causes and test results: `docs/RELEASE_BLOCKER_FIXES_DEV3.md`.
+
+### Fixed
+- **B1, knowledge-folder watcher deadlock (high).** Switching or restarting the watcher could block for 10 s and briefly run two indexing threads (`start()` joined the worker while holding a lock the worker needed). The watcher now has explicit sessions: no join ever happens under that lock, joins are bounded, a new worker waits for a still-busy old one (never two indexing at once), and events or queue items from a previous folder are ignored. New deterministic regression tests.
+- **B2, companion privacy (security).** A paired phone could read `/system/diagnostics` (including the token hash and the Windows user name in paths), `/backup`, `/setup/*` and the API docs.
+  - Companion access is now an **allow-list**: a token only opens chat, learning content, voice, documents, memory, preferences, history and progress. Everything else, including any future route, is local-only.
+  - Path fields are reduced to names, and error details are redacted for phones.
+  - `/health` tells an unpaired caller only whether the AI is reachable.
+  - `token_sha256` is never returned by any endpoint.
+- **B3, honest phone status.** An unpaired phone no longer shows "AI ready". The status distinguishes not paired, token rejected, companion off, Ollama or model missing on the PC, PC unreachable, connection lost and offline, with an explanation banner. It says "runs on your computer", never that the AI runs on the phone.
+- **F1:** the installer no longer ships 9,450 `.pyc` files containing build-machine paths. Bytecode is compiled with a neutral path, and the build fails if a build path is found.
+- **F2:** `#pair=` links now work while the app is already open (`hashchange`). Other open windows pick up the token, and "Paired" is only shown once the PC accepts it.
+- **F3:** logs never contain tokens. A central filter removes query-string values from access-log lines and masks bearer tokens, `Authorization` headers and `token=` / `pair=` / `key=` / `password=` values.
+- **F6:** the installer's finish page opens `INSTALL.html` (generated from the install guide), not a `.md` file.
+
+### Changed
+- Version `2.0.0-dev.3`; the service-worker cache is versioned with it, so installed PWAs update.
+- Builds go to `dist\windows\<version>\`, so the dev.2 installer, its `SHA256SUMS.txt` and its notes are never overwritten.
+- The Sandbox test takes `-UpgradeFrom <version>` for a real installer-to-installer upgrade, and also checks the companion privacy, log redaction, bytecode paths and the HTML guide on the installed build.
+- README rewritten to match the actual app: API, knowledge watcher, companion access, installer and phone setup.
+
+### Known limitations
+- The installer is still **unsigned** (SmartScreen warning expected).
+- **Not yet tested** on a second physical PC, with a real model download on a clean PC, or on real Android or iPhone devices. Phone behaviour was checked with automated logic tests and server-side tests only.
+- Changing the knowledge folder while a very large file is being indexed can answer "still finishing a large file, try again" (after up to 2 minutes). The old folder keeps being watched; nothing is lost.
+
 ## [2.0.0-dev.2]: Milestone 2, unreleased (branch `feature/m2-knowledge-packaging`)
 
 Database schema: **v4** (adds per-file index tracking; v1–v3 databases upgrade automatically, with a backup taken first).

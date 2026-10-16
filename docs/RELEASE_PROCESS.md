@@ -14,16 +14,17 @@ py -3.11 packaging\windows\build.py                                      # onlin
 py -3.11 packaging\windows\build.py --site-packages-from backend\.venv\Lib\site-packages
 ```
 
-**Outputs in `dist\windows\`:**
+**Outputs in `dist\windows\<version>\`** (2.0.0-dev.3 and later; each version gets its own folder, so a new build never overwrites an earlier version's files. The 2.0.0-dev.2 files stay in `dist\windows\`):
 - `Abhify.AI-Setup-<version>.exe`
 - `SHA256SUMS.txt`
 - `RELEASE_NOTES.md` (taken from CHANGELOG.md)
-- `INSTALL.md`
+- `INSTALL.html` (the guide the installer's finish page opens) and `INSTALL.md`
 - `latest.json.template`
 
 **What the build checks:**
 - SHA-256 of the downloaded Python runtime and NSIS. These are pinned on first download in `packaging/.cache/*.sha256` and enforced afterwards. Compare them once with the values published on python.org and SourceForge.
-- The bundled runtime imports every dependency in isolated mode.
+- The bundled runtime imports every dependency in isolated mode, without writing bytecode (`-I -B`).
+- Bytecode: third-party packages are copied **without** `__pycache__`, then compiled by the bundled runtime with a neutral path prefix. The build **fails** if any `.pyc` contains a build-machine path (source folder, staging folder, home folder or dev venv).
 - `check_package.py` refuses `.env`, keys, databases, user data, tests and secret-like strings in the app files.
 
 > The `--site-packages-from` build copies what is installed in that environment. Run `pip check` and the test suite in it first. For official releases, prefer the online build from `requirements.txt`, or add a lock file (`pip-compile --generate-hashes`) and `pip install --require-hashes`.
@@ -31,10 +32,7 @@ py -3.11 packaging\windows\build.py --site-packages-from backend\.venv\Lib\site-
 ## Test before publishing
 1. `pytest` (automated suite).
 2. **Clean-machine test in Windows Sandbox:** `packaging\windows\sandbox\run-sandbox-test.ps1`, then check `build\sandbox-results\result.json`.
-3. **Upgrade test:**
-   - install the previous release, add a memory, a chat and a quiz answer
-   - install the new release over it
-   - check that the data is still there and that `abhify-backup-pre-upgrade-*.zip` exists
+3. **Upgrade test:** `packaging\windows\sandbox\run-sandbox-test.ps1 -UpgradeFrom <previous version>` installs the previous installer, adds a memory, installs the new one over the **running** app, then checks the version, the `abhify-backup-pre-upgrade-*.zip` backup and the memory. Also do it by hand once with a chat and a quiz answer.
 4. Manual: CPU-only PC, NVIDIA PC, model download through the wizard, phone over Tailscale HTTPS.
 
 ## Signing (recommended before a public release)

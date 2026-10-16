@@ -53,6 +53,9 @@ DOWNLOADS = {
 APP_ALLOW = {"backend": ["*.py", "requirements.txt"], "desktop": ["launcher.pyw"], "frontend": ["**/*"]}
 DEV_ONLY = {"pip", "setuptools", "wheel", "pytest", "_pytest", "pluggy", "iniconfig", "py.py",
             "_distutils_hack", "distutils-precedence.pth"}
+# Bytecode in the package must not contain build-machine paths (F1). site-packages is copied
+# without __pycache__, then compiled by the bundled runtime with this neutral path prefix.
+PYC_PREFIX = "Abhify.AI\\runtime\\Lib\\site-packages"
 RUNTIME_IMPORTS = ("fastapi, uvicorn, langgraph, langchain_ollama, langchain_chroma, chromadb, pypdf, ddgs, "
                    "watchdog, psutil, faster_whisper, pystray, PIL, packaging, httpx, pydantic_settings")
 
@@ -105,23 +108,26 @@ def stage_runtime(py_zip: Path, site_from: Path | None) -> None:
     target.mkdir(parents=True, exist_ok=True)
     if site_from:
         log(f"copying dependencies from {site_from} (offline build)")
+        no_bytecode = shutil.ignore_patterns("__pycache__", "*.pyc", "*.pyo")
         for item in site_from.iterdir():
             base = item.name.split("-")[0].lower()
-            if item.name in DEV_ONLY or base in DEV_ONLY or item.name == "__pycache__":
+            if item.name in DEV_ONLY or base in DEV_ONLY or item.name == "__pycache__" or item.suffix in (".pyc", ".pyo"):
                 continue
             if item.is_dir():
-                shutil.copytree(item, target / item.name)
+                shutil.copytree(item, target / item.name, ignore=no_bytecode)
             else:
                 shutil.copy2(item, target / item.name)
     else:
         log("installing dependencies into the private runtime (this takes a few minutes)")
         subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check",
-                        "--no-warn-script-location", "--target", str(target),
+                        "--no-warn-script-location", "--no-compile", "--target", str(target),
                         "-r", str(ROOT / "backend" / "requirements.txt"),
                         "-r", str(ROOT / "packaging" / "windows" / "requirements-desktop.txt")], check=True)
     bundle_vc_runtime(rt)
     check_dlls(rt)
+    compile_bytecode(rt)
     verify_runtime(rt)
+    check_no_build_paths(rt)
 
 
 def bundle_vc_runtime(rt: Path) -> None:
@@ -151,9 +157,46 @@ def check_dlls(rt: Path) -> None:
     log("DLL check: every bundled binary's dependencies are bundled or part of Windows")
 
 
+def compile_bytecode(rt: Path) -> None:
+    """Precompile site-packages with the bundled runtime (same magic number), recording a neutral
+    path instead of the staging folder, so tracebacks and .pyc files reveal nothing about the build PC."""
+    site = rt / "Lib" / "site-packages"
+    out = subprocess.run([str(rt / "python.exe"), "-I", "-m", "compileall", "-q", "-j", "0",
+                          "-s", str(site), "-p", PYC_PREFIX, str(site)], capture_output=True, text=True)
+    # A few third-party files are intentionally not valid Python 3.11 (templates, py2 tests); compileall
+    # reports them and Python simply never imports them, so this is informational.
+    log(f"bytecode compiled (compileall exit {out.returncode})")
+
+
+def build_path_markers() -> list[bytes]:
+    """Byte strings that would reveal the build machine if found inside packaged bytecode."""
+    marks = {str(ROOT), str(STAGE), str(Path.home())}
+    venv = ROOT / "backend" / ".venv"
+    marks.add(str(venv))
+    out = []
+    for m in marks:
+        for v in {m, m.lower(), m.replace("\\", "/")}:
+            out.append(v.encode("utf-8"))
+    return [m for m in out if len(m) > 3]
+
+
+def check_no_build_paths(rt: Path) -> None:
+    """Fail the build if any .pyc in the runtime embeds a build-machine path (F1)."""
+    marks = build_path_markers()
+    bad = []
+    for f in rt.rglob("*.pyc"):
+        data = f.read_bytes()
+        if any(m in data for m in marks):
+            bad.append(str(f.relative_to(rt)))
+    if bad:
+        raise SystemExit(f"{len(bad)} .pyc file(s) contain build-machine paths, e.g. {bad[:3]}")
+    log("bytecode check: no build-machine paths in any .pyc")
+
+
 def verify_runtime(rt: Path) -> None:
-    """The bundled runtime must import everything the app needs using ONLY its own files (-I)."""
-    out = subprocess.run([str(rt / "python.exe"), "-I", "-c", f"import {RUNTIME_IMPORTS}; print('runtime ok')"],
+    """The bundled runtime must import everything the app needs using ONLY its own files (-I).
+    -B: importing must not write new .pyc files (they would record the staging path)."""
+    out = subprocess.run([str(rt / "python.exe"), "-I", "-B", "-c", f"import {RUNTIME_IMPORTS}; print('runtime ok')"],
                          capture_output=True, text=True)
     if out.returncode != 0:
         raise SystemExit("Bundled runtime is missing packages:\n" + out.stderr[-2000:])
@@ -202,10 +245,12 @@ def main() -> None:
     stage_runtime(py_zip, args.site_packages_from)
     stage_app()
     make_icon()
-    shutil.copy2(ROOT / "docs" / "WINDOWS_INSTALLATION.md", STAGE / "INSTALL.md")
+    sys.path.insert(0, str(Path(__file__).parent))
+    from md2html import convert
+    install_html = convert((ROOT / "docs" / "WINDOWS_INSTALLATION.md").read_text(encoding="utf-8"))
+    (STAGE / "INSTALL.html").write_text(install_html, encoding="utf-8")       # F6: any PC can open .html
     (STAGE / "RELEASE_NOTES.md").write_text(release_notes(version), encoding="utf-8")
 
-    sys.path.insert(0, str(Path(__file__).parent))
     from check_package import problems
     issues = problems(STAGE / "app")
     if issues:
@@ -216,18 +261,22 @@ def main() -> None:
     if not (nsis_dir / "makensis.exe").exists():
         with zipfile.ZipFile(nsis_zip) as z:
             z.extractall(CACHE)
-    DIST.mkdir(parents=True, exist_ok=True)
-    out = DIST / f"Abhify.AI-Setup-{version}.exe"
+    # Each version gets its own folder, so building a new version never overwrites an earlier
+    # version's installer, checksum file or notes (dist/windows/<version>/...).
+    dist = DIST / version
+    dist.mkdir(parents=True, exist_ok=True)
+    out = dist / f"Abhify.AI-Setup-{version}.exe"
     log("compiling installer (LZMA; takes a few minutes)")
     subprocess.run([str(nsis_dir / "makensis.exe"), "/V2", f"/DVERSION={version}", f"/DVIVERSION={vi}",
                     f"/DSTAGING={STAGE}", f"/DOUTFILE={out}", str(ROOT / "packaging" / "windows" / "installer.nsi")],
                    check=True)
 
     digest = sha256(out)
-    (DIST / "SHA256SUMS.txt").write_text(f"{digest}  {out.name}\n", encoding="utf-8")
-    shutil.copy2(STAGE / "RELEASE_NOTES.md", DIST / "RELEASE_NOTES.md")
-    shutil.copy2(ROOT / "docs" / "WINDOWS_INSTALLATION.md", DIST / "INSTALL.md")
-    (DIST / "latest.json.template").write_text(json.dumps({
+    (dist / "SHA256SUMS.txt").write_text(f"{digest}  {out.name}\n", encoding="utf-8")
+    shutil.copy2(STAGE / "RELEASE_NOTES.md", dist / "RELEASE_NOTES.md")
+    shutil.copy2(ROOT / "docs" / "WINDOWS_INSTALLATION.md", dist / "INSTALL.md")
+    shutil.copy2(STAGE / "INSTALL.html", dist / "INSTALL.html")
+    (dist / "latest.json.template").write_text(json.dumps({
         "version": version, "released": time.strftime("%Y-%m-%d"), "min_supported": "1.0.0",
         "notes": f"See RELEASE_NOTES.md for {version}",
         "windows": {"url": f"https://github.com/<owner>/<repo>/releases/download/v{version}/{out.name}",

@@ -1,4 +1,70 @@
-# Installer readiness audit: Abhify.AI 2.0.0-dev.2
+# Installer readiness audit: Abhify.AI 2.0.0-dev.3 (re-audit)
+
+Audit date: 2026-10-16. The dev.2 audit from 2026-10-14 is kept unchanged below as history.
+
+Scope: re-check every dev.2 finding against the dev.3 code and the **real dev.3 installer**. Installs ran only in Windows Sandbox; server tests used temporary data folders. Nothing was merged, tagged, signed or published. Details and evidence: `docs/RELEASE_BLOCKER_FIXES_DEV3.md`.
+
+## Decision
+
+# 🟡 Code blockers cleared · still NO-GO for merge to `main` or a public release
+## 🟢 GO for continued internal testing, and for running the physical-PC and phone acceptance tests with this build
+
+- **B1, B2, B3 are fixed and verified:** regression tests, 3 green full runs, Sandbox and a real-LAN test.
+- **No known critical security or data-loss issue remains.**
+- **B4 (process blocker) remains:** the mandatory acceptance tests on a **second physical PC** and on **real Android and iPhone devices** have still not been done. Until they are recorded as PASS, the merge-readiness stop rule applies.
+
+## Re-check of every dev.2 finding
+
+| ID | dev.2 | dev.3 status | Evidence |
+|---|---|---|---|
+| **B1** watcher deadlock / two workers | High, blocker | ✅ **FIXED** | 8 deterministic lifecycle tests; `test_single_instance_per_folder` 40/40 in a loop (dev.2: failed 1 in 4–8); full suite 3× green |
+| **B2** token holders read system data | Medium, security | ✅ **FIXED** | Allow-list plus local-only routes. Real LAN: 7 sensitive routes → 401/401/403 (none/wrong/valid token); no token hash, home path or data path in any paired response. Sandbox (installed build): the same routes → 403 |
+| **B3** unpaired phone shows "AI ready" | Medium, UI | ✅ **FIXED** | 9 honest states; real `app.js` logic tested in Node (14 scenarios). Real-device display NOT TESTED |
+| B4 acceptance tests on real hardware | Process blocker | ❌ **OPEN** | No second PC or phones were available. See the acceptance docs |
+| F1 build paths in `.pyc` | Low | ✅ **FIXED** | Payload scan: 9,267 `.pyc`, **0** build paths, 0 personal strings; the build now fails on any build path; Sandbox scan of the installed runtime: 0 |
+| F2 `#pair=` ignored while the app is open | Low | ✅ **FIXED** (logic) | `hashchange` + `storage` handling tested in Node. Browser / real device NOT TESTED |
+| F3 query strings in access logs | Low | ✅ **FIXED** | Central filter; real dev server with the access log on: secret absent, line shows `?token=***`; real-LAN server: same |
+| F4 unsigned installer | Info | ⚠️ **UNCHANGED** | `NotSigned`. Signing needs your decision (`CODE_SIGNING.md`) |
+| F5 online build path | Info | ⚠️ **NOT TESTED** | Built with `--site-packages-from` again (slow internet). `pip --no-compile` was added for the online path but hasn't run |
+| F6 finish page opens `.md` | Info | ✅ **FIXED** | `INSTALL.html` installed (Sandbox); `.md` removed on upgrade |
+
+## Installer artifact: VERIFIED
+| Item | Value |
+|---|---|
+| File | `dist\windows\2.0.0-dev.3\Abhify.AI-Setup-2.0.0-dev.3.exe` |
+| Size | 128,987,754 bytes (123.0 MiB) |
+| SHA-256 | `ccbd42f90d73addd5a3464b879a7a94a4974881d4441b8a94842771065e057e3`, matches `SHA256SUMS.txt` and the in-Sandbox re-hash |
+| Authenticode | **NotSigned** |
+| Version resource | ProductVersion / FileVersion `2.0.0-dev.3` |
+| Payload | 20,774 files, 674.3 MB uncompressed; `check_package.py`: 0 problems; secrets: 0 real (8 false positives, listed in the fix report) |
+| dev.2 installer | **unchanged**: `dist\windows\Abhify.AI-Setup-2.0.0-dev.2.exe`, SHA-256 `9e299def…52f8b2`, its `SHA256SUMS.txt` untouched |
+
+## Tests: VERIFIED
+| Test | Result |
+|---|---|
+| Full suite, 3 consecutive runs | **196 passed** each time; 0 failed, 0 skipped, 0 errors |
+| Windows Sandbox, clean machine | **28/28 PASS** |
+| Windows Sandbox, **upgrade dev.2 → dev.3** while dev.2 is running | **34/34 PASS** (first upgrade between *different* versions) |
+| Real-LAN companion test (isolated server, temporary data) | PASS (see B2/F3 above) |
+
+## Still NOT VERIFIED (dev.3)
+- Installation and use on a **second physical Windows PC** (Windows 10 and 11, standard user).
+- **Model download and inference on a clean PC** (the Sandbox has no network).
+- **Real phones:** Android Chrome and iPhone Safari install, icon, pairing, status texts, microphone, offline behaviour, Tailscale HTTPS.
+- The PWA status and pairing UI in a **real browser**: tested as JavaScript logic in Node only this time; the Edge emulation from the dev.2 audit was not repeated.
+- The **online build** path.
+- SmartScreen / Defender on a downloaded (Mark-of-the-Web) copy.
+- GPU use after installation on a real NVIDIA PC.
+- Recovery from a model download interrupted mid-way.
+
+## Path to GO
+1. Run `PHYSICAL_PC_ACCEPTANCE_TEST.md` with the dev.3 installer on a real second PC (at least steps 0–14).
+2. Run the phone procedure in `MOBILE_ACCEPTANCE_TEST.md` on a real Android phone and an iPhone, or explicitly accept phones as a disclosed limitation of a *dev* prerelease.
+3. Then the merge-readiness review can be repeated.
+
+---
+
+# Previous audit: Abhify.AI 2.0.0-dev.2 (2026-10-14, kept for history)
 
 Audit date: 2026-10-14. Auditor role: release engineer.
 

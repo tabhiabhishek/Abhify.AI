@@ -2,6 +2,13 @@
 
 Date: 2026-10-14
 
+> **Update 2026-10-16 (2.0.0-dev.3):**
+> - Blockers 1–3 (B1, B2, B3) and the recommended fixes F1, F2, F3 and F6 are **done and verified**: the full suite passed 3× (196 tests), Windows Sandbox passed a clean install (28/28) and a dev.2 → dev.3 upgrade (34/34), plus a real-LAN test.
+> - **Blocker 4 (B4: physical-PC and real-phone acceptance) is still open, so this is still NO-GO.**
+> - The proposed prerelease below should use the **dev.3** build (`ccbd42f9…e057e3`), not a new one, unless something changes.
+>
+> See `INSTALLER_READINESS_AUDIT.md` (dev.3 re-audit) and `RELEASE_BLOCKER_FIXES_DEV3.md`.
+
 # 🔴 NO-GO. No merge was performed.
 
 This follows the merge procedure's own stop rule: *"If any critical acceptance test is missing or any data-loss/security blocker remains, stop before merging."* Both conditions apply.

@@ -1,4 +1,40 @@
-# Mobile companion access: acceptance test (2.0.0-dev.2)
+# Mobile companion access: acceptance test
+
+## 2.0.0-dev.3 re-test (2026-10-16)
+
+**No physical Android or iPhone was available. Every real-device check is still NOT TESTED.** Simulated or logic tests below are **not** real-device acceptance.
+
+What was run:
+- **Real LAN, server side:** an isolated dev.3 server on `0.0.0.0:8410` with temporary data (deleted afterwards), called through the PC's private LAN address, so the server saw a genuine non-loopback client.
+- **Installed build:** the same checks in Windows Sandbox through a forwarding header (counted as remote).
+- **PWA logic:** the real `connectionStatus()` and `readPairingLink()` functions from `frontend/app.js`, run in Node with stubs.
+- **Not repeated this time:** the Edge mobile-emulation run from dev.2.
+
+| Check | dev.2 | dev.3 | Evidence |
+|---|---|---|---|
+| Companion off: remote `/memory` refused; `/health` reveals only reachability | PASS | **PASS** | LAN: 403; `/health` has no model names, document count or setup state |
+| No / wrong / valid token on `/memory` | PASS | **PASS** | 401 / 401 / 200 |
+| **System data with a valid token** (`/system/diagnostics`, `/backup`, `/setup/profiles`, `/setup/models/pull`, `/system/update-check`, `/docs`, `/openapi.json`, `POST /setup/test`) | **FAIL (B2)** | **PASS** | LAN: every one → 401 without a token, 401 with a wrong one, **403 with a valid one**. Sandbox (installed): 403 |
+| Paired responses contain no token hash, home folder or data folder | FAIL (B2) | **PASS** | LAN: 8 allowed endpoints scanned; knowledge folder shown as `Abhify_Knowledge` only |
+| Token or secret query values in logs | PASS (app), F3 open | **PASS** | LAN server with the access log on: secret absent, line reads `?token=***` |
+| Unpaired phone status | **FAIL (B3)** "AI ready" | **PASS (logic)** | Shows "Not paired"; wrong token → "Not paired · access token rejected"; companion off → "Companion access is off on your computer" |
+| Paired phone, PC states | PASS ("via your computer") | **PASS (logic)** | "AI ready · runs on your computer" / "Computer connected · Ollama not running" / "… AI model not installed" / "Paired · your computer isn't reachable" / "Connection to your computer lost · retrying" / "Offline mode" |
+| Pairing link while the app is already open | **FAIL (F2)** | **PASS (logic)** | `hashchange` stores the token; "Paired" shown only when the PC accepts it; a rejected link says so |
+| Status never claims the AI runs on the phone | PASS | **PASS (logic)** | Automated check over all 14 status scenarios |
+| System panel on a phone | PASS ("only works on the computer") | **PASS (logic)** | Explains that system details and backups are on the PC, instead of showing a raw error |
+| Layout at 412 px, no JS errors | PASS (emulated) | NOT RE-TESTED | Changes are text and colour only (one added CSS class) |
+
+### Real devices: still NOT TESTED
+Run the device table further down with the **dev.3** build. Extra checks for dev.3:
+- Before pairing, the status bar says **"Not paired"**, never "AI ready".
+- Open the `#pair=` link **while the app is already open**: the toast says "✅ Paired with your computer", and the status changes to "AI ready · runs on your computer".
+- On the PC, turn companion access off: the phone shows "Companion access is off on your computer" within 30 s, or when the app comes back to the foreground.
+- Stop Ollama on the PC: the phone shows "Computer connected · Ollama not running".
+- Settings → System on the phone: the explanation, and no PC paths.
+
+---
+
+## Previous test: 2.0.0-dev.2 (2026-10-14, kept for history)
 
 Date: 2026-10-14. **No physical Android or iPhone was available.** Device-only checks are **NOT TESTED**, with exact steps below.
 
@@ -58,7 +94,7 @@ The test token was never printed in full, and it was deleted afterwards. Nothing
 
 **Never do:** router port forwarding, public tunnels without access control, disabling TLS validation, or sharing the token in chats, screenshots or issue reports.
 
-## Defects for the fix list
+## Defects for the fix list (all four fixed in dev.3; see the re-test at the top)
 - **B2 (Medium):** redact or restrict system endpoints for remote clients; never return `token_sha256`.
 - **B3 (Medium):** detect "unpaired" (401 on an authenticated probe) and show "Not paired" instead of "AI ready".
 - **F2 (Low):** handle `hashchange` for `#pair=`.

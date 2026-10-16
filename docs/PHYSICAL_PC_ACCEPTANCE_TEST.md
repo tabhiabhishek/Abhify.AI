@@ -1,4 +1,26 @@
-# Acceptance test on a second physical Windows PC: Abhify.AI 2.0.0-dev.2
+# Acceptance test on a second physical Windows PC
+
+## Status for 2.0.0-dev.3 (2026-10-16): **NOT EXECUTED**
+No second physical PC was available in this session either, so **every step below is still NOT TESTED on physical hardware**. Use the **dev.3** installer for this test, not dev.2:
+
+| Item | Value |
+|---|---|
+| Installer | `Abhify.AI-Setup-2.0.0-dev.3.exe` (from `dist\windows\2.0.0-dev.3\`) |
+| Expected SHA-256 (step 0) | `ccbd42f90d73addd5a3464b879a7a94a4974881d4441b8a94842771065e057e3` |
+| Signature | NotSigned (SmartScreen warning expected) |
+| Finish-page guide | now `INSTALL.html` (F6 fixed) |
+
+Changes to the procedure and proxy evidence since dev.2:
+- **Step 12 (upgrade):** a real N-1 → N upgrade (**dev.2 → dev.3, over a running app**) now passes in Windows Sandbox: version changed, pre-upgrade backup created, memory preserved. It still needs doing on physical hardware: install dev.2 first, then run the dev.3 installer.
+- **Step 14 (localhost only):** unchanged in behaviour. Companion access is still off by default; with it on, a valid phone token can no longer read system data (B2).
+- **New step 16 (optional, needs a phone or a second device):** turn on companion access, then open `http://<pc-ip>:8000/` on the second device **without** pairing. Expected: "Not paired" (not "AI ready"), and Settings → System shows "only available on the computer running Abhify.AI".
+- **B1** (the watcher stalling when you change folders quickly) is fixed. During step 9, changing the knowledge folder twice in a row should answer immediately.
+
+Proxy evidence for dev.3 (Windows Sandbox, not a substitute): clean install 28/28 PASS; upgrade dev.2 → dev.3 34/34 PASS (`docs/RELEASE_BLOCKER_FIXES_DEV3.md`).
+
+---
+
+## Original procedure (written for 2.0.0-dev.2; applies to dev.3 with the changes above)
 
 **Status: NOT EXECUTED. No second physical PC was available in this session.**
 
@@ -43,7 +65,7 @@ Every row below is **NOT TESTED** on physical hardware. The closest *proxy* evid
 
 **Cleanup:** uninstall and choose **Yes** to delete data (only the test account's data), uninstall Ollama if it was installed only for this test, then delete the test Windows account.
 
-## Defects found so far that affect this test (from the readiness audit)
-- B1: watcher start/stop deadlock-until-timeout (could appear when changing folders quickly).
-- F6: the "Open the installation guide" checkbox opens a `.md` file.
-- F4: the installer is unsigned (SmartScreen warning expected).
+## Defects found so far that affect this test (from the readiness audit; status as of dev.3)
+- B1: watcher start/stop deadlock-until-timeout (could appear when changing folders quickly). **Fixed in dev.3.**
+- F6: the "Open the installation guide" checkbox opened a `.md` file. **Fixed in dev.3 (opens `INSTALL.html`).**
+- F4: the installer is unsigned (SmartScreen warning expected). **Still open.**

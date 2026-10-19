@@ -1,5 +1,7 @@
 # Installer readiness audit: Abhify.AI 2.0.0-dev.3 (re-audit)
 
+> **Current decision record: `FINAL_ACCEPTANCE_DEV5.md` (2026-10-19).** Recommendation: continue internal testing. A restricted dev prerelease is possible after the second-PC test passes. Not eligible for merge or release candidate.
+
 > **Current decision record: `FINAL_ACCEPTANCE_DEV4.md` (2026-10-19).**
 > - Current build: **2.0.0-dev.5** (`612750ed…72f2f2`, hash-locked online build, unsigned, signing-ready).
 > - NO-GO until the physical-PC and phone acceptance tests are performed.

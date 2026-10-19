@@ -6,6 +6,9 @@ This document is a proposal. It needs your approval before any purchase, key cre
 
 ## Readiness status (2026-10-19, 2.0.0-dev.5)
 
+Provider choice: see `SIGNING_PROVIDER_DECISION.md` (Artifact Signing is limited to US/Canada individuals; the alternatives are compared there).
+
+
 | Step (§8) | Status |
 |---|---|
 | 1. Choose the identity type and provider | ⏳ **Your decision.** Nothing bought, no account created |

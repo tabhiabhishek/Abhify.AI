@@ -1,5 +1,8 @@
 # Mobile companion access: acceptance test
 
+## Status at the dev.5 gate (2026-10-19): **Android NOT TESTED · iPhone NOT TESTED**
+No devices available; see `FINAL_ACCEPTANCE_DEV5.md` §4. On the development PC the app uses port **18000** (8000 is reserved by Windows there), so use `tailscale serve --bg 18000` when testing against it.
+
 ## Status at the dev.4/dev.5 gate (2026-10-19): **Android NOT TESTED · iPhone NOT TESTED** (no devices)
 - Use **2.0.0-dev.5** for the device tests.
 - For each device, record: model, OS version, browser and version, Tailscale version, and the result of every row of the device table.

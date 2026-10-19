@@ -1,5 +1,10 @@
 # Acceptance test on a second physical Windows PC
 
+## Status at the dev.5 gate (2026-10-19)
+- **Second physical PC: BLOCKED.** No second PC is available. This procedure has **not** been executed on one.
+- **New, not a substitute:** the dev.5 packaged payload was run on the **development PC's** physical hardware with isolated data (RTX A2000 12 GB): 14/14 PASS. That covered GPU detection, LLM 100% on the GPU, Whisper on CUDA, port fallback 18000, document citation, single instance, clean stop and persistence. See `FINAL_ACCEPTANCE_DEV5.md` §3b.
+- Standard-user installation, the tray icon, upgrade, uninstall and reinstall on a physical PC remain **NOT TESTED**.
+
 ## Status at the dev.4/dev.5 gate (2026-10-19): **BLOCKED, no second physical PC**
 - **Use 2.0.0-dev.5:**
   - installer `dist\windows.0.0-dev.5\Abhify.AI-Setup-2.0.0-dev.5.exe`

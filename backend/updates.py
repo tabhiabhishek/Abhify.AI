@@ -235,6 +235,11 @@ async def download() -> dict[str, Any]:
     STATE["cancel"] = False
     try:
         await _fetch(pkg["url"], part, pkg["size"])
+    except UpdateError:
+        raise
+    except (httpx.HTTPError, OSError) as e:          # connection lost, timeout, server error: resumable
+        raise UpdateError(f"The download was interrupted ({type(e).__name__}). Press Download again to resume; "
+                          "the part already downloaded is kept.") from None
     finally:
         STATE["download"] = None
     if part.stat().st_size != pkg["size"] or _sha256(part) != pkg["sha256"]:

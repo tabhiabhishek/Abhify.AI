@@ -307,3 +307,16 @@ def test_download_can_be_cancelled_and_resumed(upd, monkeypatch):
     assert not (updates.staging_dir() / "Abhify.AI-Setup-9.0.0.exe").exists()
     monkeypatch.setattr(updates, "_fetch", real_fetch)
     assert run(updates.download())["prepared"] is True           # a new Download works (and resumes)
+
+
+def test_connection_lost_during_download_is_a_clear_resumable_error(upd, monkeypatch):
+    """Found while writing the dev.6 E2E script: a dropped connection used to escape as a 500."""
+    run(updates.check(force=True))
+
+    async def drop(url, part, total):
+        part.write_bytes(PAYLOAD[:3000])
+        raise httpx.RemoteProtocolError("peer closed connection")
+    monkeypatch.setattr(updates, "_fetch", drop)
+    with pytest.raises(updates.UpdateError, match="interrupted .*resume"):
+        run(updates.download())
+    assert (updates.staging_dir() / "Abhify.AI-Setup-9.0.0.exe.part").stat().st_size == 3000   # kept for resuming

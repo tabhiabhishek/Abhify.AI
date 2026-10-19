@@ -89,36 +89,22 @@ def test_update_check_not_configured(data_root):
     assert r["configured"] is False and r["update_available"] is False
 
 
-def test_update_check_rejects_http_and_offline(data_root, monkeypatch):
+def test_unsigned_manifests_are_rejected_since_dev6(data_root, monkeypatch):
+    """dev.6: the update manager (updates.py) only trusts SIGNED manifests. The checks these tests used to
+    make (HTTPS only, offline, invalid fields, newer/older versions) now live in test_updates.py, signed."""
+    import base64, hashlib
+    import ed25519_verify as ed
     import system_service as system
-    lfs.update_settings(updates={"manifest_url": "http://example.com/latest.json"})
-    assert "HTTPS" in _run(system.check_for_update())["error"]
-    lfs.update_settings(updates={"manifest_url": "https://example.com/latest.json"})
-    monkeypatch.setattr(system, "internet_available", lambda: False)
-    assert "Offline" in _run(system.check_for_update())["error"]
-
-
-@pytest.mark.parametrize("manifest,expect", [
-    ({"version": "9.0.0", "windows": {"url": "https://x/s.exe", "sha256": "a" * 64}}, True),
-    ({"version": "1.0.0", "windows": {"url": "https://x/s.exe", "sha256": "a" * 64}}, False),
-    ({"version": "9.0.0", "windows": {"url": "http://x/s.exe", "sha256": "a" * 64}}, "invalid"),
-    ({"version": "9.0.0", "windows": {"url": "https://x/s.exe", "sha256": "not-a-hash"}}, "invalid"),
-    ({"windows": {}}, "invalid"),
-])
-def test_update_manifest_validation(data_root, monkeypatch, manifest, expect):
-    import system_service as system
-    lfs.update_settings(updates={"manifest_url": "https://example.com/latest.json"})
-    monkeypatch.setattr(system, "internet_available", lambda: True)
-
-    def handler(request):
-        return httpx.Response(200, json=manifest)
+    import updates
+    key = base64.b64encode(ed.public_key(hashlib.sha256(b"k").digest())).decode()
+    lfs.update_settings(updates={"manifest_url": "https://example.com/latest.json", "trusted_keys": {"k": key}})
+    monkeypatch.setattr(updates, "_internet", lambda: True)
+    old_format = {"version": "9.0.0", "windows": {"url": "https://x/s.exe", "sha256": "a" * 64}}
     real = httpx.AsyncClient
-    monkeypatch.setattr(system.httpx, "AsyncClient", lambda **kw: real(transport=httpx.MockTransport(handler)))
+    monkeypatch.setattr(updates.httpx, "AsyncClient",
+                        lambda **kw: real(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=old_format))))
     r = _run(system.check_for_update())
-    if expect == "invalid":
-        assert "Invalid update manifest" in r["error"]
-    else:
-        assert r["update_available"] is expect and r["sha256"] == "a" * 64
+    assert r["update_available"] is False and "not a signed" in r["error"]
 
 
 # --------------------------------------------------------------------------- upgrade preservation (v3 -> v4)

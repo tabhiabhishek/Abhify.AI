@@ -28,7 +28,7 @@ const SHELL = [
 ];
 const API_PATHS = ['/health', '/ping', '/chat', '/news', '/generate-question', '/generate-mcq', '/transcribe', '/voice',
                    '/knowledge', '/progress', '/memory', '/preferences', '/conversations', '/system', '/setup',
-                   '/backup', '/companion', '/docs', '/redoc', '/openapi.json'];
+                   '/backup', '/companion', '/updates', '/docs', '/redoc', '/openapi.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

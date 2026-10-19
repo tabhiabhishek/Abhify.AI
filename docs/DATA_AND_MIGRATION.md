@@ -53,3 +53,36 @@ Two caveats:
 - **If the new PC uses a different embedding model** than the old one, re-index your documents (available in milestone M2). Chat, memory and progress are unaffected.
 
 Manual alternative: copy the whole `AbhifyAI` folder while Abhify.AI is **closed** on both machines.
+
+## Components, models and storage (2.0.0-dev.6)
+
+Everything is **per Windows user** by default: another Windows account on the same PC has its own data and its own setup.
+
+| What | Where (Windows) | Removed by uninstall? |
+|---|---|---|
+| Program + private Python runtime | `%LOCALAPPDATA%\Programs\Abhify.AI` (never `Program Files`; no admin rights) | Yes |
+| Settings (`settings.json`), installed-component record (`components.json`) | `%LOCALAPPDATA%\AbhifyAI\config` | Only if you choose "delete my data" |
+| Chats, memories, progress (`abhify.db`), document index (`chroma`), uploads | `%LOCALAPPDATA%\AbhifyAI\data` | Only if you choose |
+| Backups (pre-migration `.db`, pre-upgrade `.zip`, manual) | `%LOCALAPPDATA%\AbhifyAI\data\backups` | Only if you choose |
+| Logs (no chat text, no tokens) | `%LOCALAPPDATA%\AbhifyAI\logs` | Only if you choose |
+| Download staging (Ollama installer while it downloads; deleted after a successful install) | `%LOCALAPPDATA%\AbhifyAI\downloads` | Only if you choose |
+| Update staging and the archive of installed installers (for rollback) | `%LOCALAPPDATA%\AbhifyAI\updates\staging`, `…\archive` | Only if you choose |
+| Ollama runtime | `%LOCALAPPDATA%\Programs\Ollama` (Ollama's own per-user install) | No (uninstall Ollama separately) |
+| AI model weights | Ollama's folder, `%USERPROFILE%\.ollama\models` (or `OLLAMA_MODELS`) | No |
+| Whisper model (private voice) | Hugging Face cache in your profile, after its first use | No |
+| Your knowledge folder | `%USERPROFILE%\Abhify_Knowledge` (changeable) | Never |
+
+The data folder can be moved (Settings → System & data → Move data folder; the old copy is kept).
+
+**`config\components.json`** records what automatic setup installed and verified:
+- app version and profile
+- Ollama version, executable and models folder
+- each active model's name, role (chat or embeddings), **digest**, size and date
+- the validation result (the test answer, embedding size) and when it was verified
+
+It's informational: deleting it never deletes a model. The next "See what will be installed" rebuilds it from what Ollama reports.
+
+**Models are never removed silently:**
+- Changing the profile only changes which models are used.
+- A model update keeps the previous version as `<name>-abhify-backup` until you remove it.
+- To free space yourself: `ollama list`, then `ollama rm <name>`.

@@ -23,6 +23,17 @@ Database schema: **v5** (additive: `members` and `invitations` tables; v4 databa
   - "Join as guest" appears only in public mode.
   - Guest devices see an honest status, and personal controls are hidden (the server enforces this).
 
+- **Automatic first-run setup** (`setup_manager.py`, `AUTOMATIC_SETUP.md`):
+  - One confirmed plan (components, sizes, disk check), then everything runs in the background: the Ollama runtime if missing (official installer, Authenticode **Valid + Ollama Inc.** required, otherwise deleted and never run), the profile's models, and real validation (a chat answer + an embedding).
+  - Versions and digests are recorded in `config/components.json`.
+  - Pause, cancel, resume and retry; nothing is downloaded twice.
+- **Offline-first test:** the full app with every non-local connection refused (`test_offline.py`). ChromaDB telemetry is switched off explicitly.
+- **Update manager** (`updates.py`, `AUTOMATIC_UPDATES.md`):
+  - It accepts only **Ed25519-signed manifests** from publisher keys configured in settings (no key in the repo).
+  - Downloads are verified against size + SHA-256 (+ Authenticode) and resumable; installs need confirmation, re-verify the file, and archive it for rollback.
+  - Model updates keep a backup and restore it if validation fails.
+  - The publisher tool `packaging/windows/release_manifest.py` refuses keys inside the repo.
+
 ### Changed
 - **Network binding:** with companion access on, Abhify.AI now still listens on **127.0.0.1 only** (Tailscale Serve forwards there).
   - Listening on the whole local network (plain HTTP) is a separate opt-in with a warning.
@@ -33,6 +44,9 @@ Database schema: **v5** (additive: `members` and `invitations` tables; v4 databa
 ### Known limitations
 - Data is still **single-owner**: guests are kept away from the owner's data, rather than getting their own chats, memories or documents (that needs per-user isolation, a separate decision).
 - The phone keeps its device credential in browser storage (owner's decision); it's revocable, and guest credentials expire after 30 days by default.
+- **Update check behaviour change:** unsigned manifests are rejected since dev.6. No release channel or publisher key exists yet.
+- The Whisper model is still downloaded on first use of private voice mode (not part of automatic setup).
+- Automatic setup and the update flow are tested with stand-ins only; real runs: `UPDATE_RECOVERY_TEST.md` (NOT TESTED).
 - Not tested on a real Android phone or iPhone.
 
 ## [2.0.0-dev.5]: hash-locked dependencies and a signing-ready pipeline, unreleased (branch `feature/m2-knowledge-packaging`)

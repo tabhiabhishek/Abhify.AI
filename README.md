@@ -145,6 +145,8 @@ On macOS the data folder is `~/Library/Application Support/AbhifyAI/`, and on Li
 | Memory | `GET/POST/DELETE /memory` · `PATCH/DELETE /memory/{id}` · `GET/PUT /preferences` | ✅ |
 | Conversations & progress | `GET/DELETE /conversations` · `GET/DELETE /conversations/{id}` · `GET /progress/{user_id}` · `POST /progress` | ✅ |
 | Setup / system | `GET /system/diagnostics` · `GET /setup/profiles` · `POST /setup/profile` · `GET/POST /setup/models/pull` · `POST /setup/test` · `POST /setup/complete` · `GET /system/update-check` · `POST /system/shutdown` | PC only |
+| Automatic setup (dev.6) | `GET /setup/plan` · `POST /setup/auto` · `GET /setup/auto` · `POST /setup/auto/pause` · `POST /setup/auto/cancel` | PC only |
+| Updates (dev.6) | `GET /updates` · `POST /updates/check` · `POST /updates/download` · `POST /updates/cancel` · `POST /updates/install` · `POST /updates/models/check` · `POST /updates/models/apply` · `POST /updates/models/remove-backup` | PC only |
 | Backup / data | `GET/POST /backup` · `GET /backup/export` · `POST /backup/restore` · `POST /system/data-location` | PC only |
 | Companion | `POST /companion/enable` · `POST /companion/disable` | PC only |
 | Membership (dev.6) | `POST /companion/redeem` (single-use invitation) · `POST /companion/register` (public mode only, guest) | Open, rate-limited |

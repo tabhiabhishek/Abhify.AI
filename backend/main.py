@@ -26,11 +26,15 @@ Setup & system (all local machine only; companion.REMOTE_ROUTES lists what a pai
   GET  /setup/models/pull         download progress
   POST /setup/test                quick local inference test
   POST /setup/complete            mark first-run setup as done
+  GET  /setup/plan                automatic setup plan (components, sizes, disk); downloads nothing
+  POST /setup/auto  GET /setup/auto  POST /setup/auto/pause|cancel   automatic setup job (setup_manager.py)
   GET  /backup                    list backups;  POST /backup  create one
   GET  /backup/export             download a fresh backup zip
   POST /backup/restore            upload a backup zip; applied on next start
   POST /system/data-location      move user data to another folder (restart required)
-  GET  /system/update-check       opt-in HTTPS update manifest check (never installs)
+  GET  /system/update-check       update check (signed manifest; same as POST /updates/check)
+  GET  /updates  POST /updates/check|download|install  POST /updates/models/check|apply|remove-backup
+                                  update manager (updates.py); install and model updates need confirm=true
   POST /system/shutdown           stop the app (desktop launcher only)
 
 Knowledge folder (M2)
@@ -74,6 +78,8 @@ import local_file_service as lfs
 import log_redaction
 import membership
 import memory_service as mem
+import setup_manager
+import updates
 import system_service as system
 from agent import run_agent
 from config import get_settings
@@ -126,7 +132,11 @@ async def lifespan(_: FastAPI):
             await asyncio.to_thread(_start_watcher)
         except Exception as e:                    # a bad folder setting must never stop the app
             log.warning("Knowledge watcher not started: %s", e)
+    STARTUP["update_result"] = updates.record_startup()       # did an update we started finish?
+    stop_updates = asyncio.Event()
+    update_task = asyncio.create_task(updates.periodic(stop_updates))   # only checks if the owner enabled it
     yield
+    stop_updates.set(); update_task.cancel()
     watcher.stop()                 # clean shutdown of the observer + worker threads
 
 
@@ -630,6 +640,40 @@ async def test_model():
     return await system.test_inference()
 
 
+class AutoSetupIn(BaseModel):
+    confirm: bool = False
+
+
+@app.get("/setup/plan", dependencies=[Depends(local_only)])
+async def setup_plan():
+    """What automatic setup would install on this device (sizes, disk, internet). Downloads nothing."""
+    return await setup_manager.plan()
+
+
+@app.post("/setup/auto", dependencies=[Depends(local_only)])
+async def setup_auto_start(c: AutoSetupIn):
+    """Start (or resume / retry) automatic setup after the user confirmed the plan."""
+    try:
+        return await setup_manager.start(c.confirm)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/setup/auto", dependencies=[Depends(local_only)])
+def setup_auto_status():
+    return setup_manager.status()
+
+
+@app.post("/setup/auto/pause", dependencies=[Depends(local_only)])
+def setup_auto_pause():
+    return setup_manager.stop("pause")
+
+
+@app.post("/setup/auto/cancel", dependencies=[Depends(local_only)])
+def setup_auto_cancel():
+    return setup_manager.stop("cancel")
+
+
 @app.post("/setup/complete", dependencies=[Depends(local_only)])
 def complete_setup():
     return lfs.update_settings(setup_completed=True)
@@ -812,6 +856,64 @@ def companion_disable():
 
 
 # --------------------------------------------------------------------------- updates & lifecycle
+class ConfirmModelIn(BaseModel):
+    model: str = Field(..., min_length=1, max_length=100, pattern=r"^[A-Za-z0-9._:\-/]+$")
+    confirm: bool = False
+
+
+def _update_error(e: Exception) -> HTTPException:
+    return HTTPException(400, str(e))
+
+
+@app.get("/updates", dependencies=[Depends(local_only)])
+def updates_status():
+    return updates.status()
+
+
+@app.post("/updates/check", dependencies=[Depends(local_only)])
+async def updates_check():
+    return await updates.check(force=True)
+
+
+@app.post("/updates/download", dependencies=[Depends(local_only)])
+async def updates_download():
+    try:
+        return await updates.download()
+    except updates.UpdateError as e:
+        raise _update_error(e)
+
+
+@app.post("/updates/cancel", dependencies=[Depends(local_only)])
+def updates_cancel():
+    return updates.cancel_download()
+
+
+@app.post("/updates/install", dependencies=[Depends(local_only)])
+def updates_install(c: ConfirmIn):
+    try:
+        return updates.install(c.confirm)
+    except updates.UpdateError as e:
+        raise _update_error(e)
+
+
+@app.post("/updates/models/check", dependencies=[Depends(local_only)])
+async def updates_models_check():
+    return await updates.check_models()
+
+
+@app.post("/updates/models/apply", dependencies=[Depends(local_only)])
+async def updates_models_apply(m: ConfirmModelIn):
+    try:
+        return await updates.apply_model_update(m.model, m.confirm)
+    except updates.UpdateError as e:
+        raise _update_error(e)
+
+
+@app.post("/updates/models/remove-backup", dependencies=[Depends(local_only)])
+async def updates_models_remove_backup(m: ConfirmModelIn):
+    return await updates.remove_model_backup(m.model)
+
+
 @app.get("/system/update-check", dependencies=[Depends(local_only)])
 async def update_check():
     return await system.check_for_update()

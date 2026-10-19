@@ -88,7 +88,8 @@ def rebuild_required() -> bool:
 
 @lru_cache
 def _client(path: str) -> chromadb.api.ClientAPI:
-    return chromadb.PersistentClient(path=path)
+    # Telemetry off explicitly: nothing about the user's index leaves the device (offline-first, dev.6).
+    return chromadb.PersistentClient(path=path, settings=chromadb.config.Settings(anonymized_telemetry=False))
 
 
 def client() -> chromadb.api.ClientAPI:

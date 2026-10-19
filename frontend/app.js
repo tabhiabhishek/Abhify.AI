@@ -805,7 +805,7 @@ const gb = (n) => (n == null ? '?' : `${n} GB`);
 const stat = (k, v, cls = '') => `<div class="stat ${cls}"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`;
 
 /* -- first-run setup wizard -- */
-const setup = { diag: null, profiles: null, polling: null, pullStatus: {}, testMsg: '' };
+const setup = { diag: null, profiles: null, polling: null, pullStatus: {}, testMsg: '', autoPlan: null, autoTimer: null };
 
 async function openSetup() {
   if (sessionStorage.getItem('abhify_setup_skipped')) return;
@@ -850,6 +850,10 @@ function renderSetup() {
   }
 
   $('#setupBody').innerHTML = `
+    <div class="step"><h3>⚡ Set up automatically</h3>
+      <p class="small">Abhify.AI picks the AI that fits this computer, downloads it once, checks that it really works, and then runs without internet.</p>
+      <div class="row"><button class="btn btn-primary btn-sm" data-setup="auto-plan">See what will be installed</button></div>
+      <div id="autoBox"></div></div>
     <div class="step"><h3>1 · This computer</h3><div class="stats">
       ${stat('System', `${d.os.system} ${d.os.release} (${d.os.arch})`)}
       ${stat('CPU', `${d.cpu.logical_cores} threads`)}
@@ -887,6 +891,15 @@ async function setupAction(el) {
       if (!confirm(`Download ${m}?\n\nAbout ${c.estimated_download_gb} GB will be downloaded once and stored by Ollama in:\n${c.models_dir}`)) return;
       await api('/setup/models/pull', { method: 'POST', body: { model: m, confirm: true } });
       pollPull();
+    } else if (a === 'auto-plan') {
+      renderAutoPlan(await api('/setup/plan'));
+    } else if (a === 'auto-start') {
+      const p = setup.autoPlan;
+      if (!confirm(`Start automatic setup?\n\nAbout ${p.download_gb} GB will be downloaded once:\n${p.components.filter((c) => c.action !== 'ok').map((c) => `• ${c.label}`).join('\n')}\n\nYou can pause or cancel at any time; nothing already downloaded is lost.`)) return;
+      await api('/setup/auto', { method: 'POST', body: { confirm: true } });
+      pollAuto();
+    } else if (a === 'auto-pause' || a === 'auto-cancel') {
+      await api(`/setup/auto/${a === 'auto-pause' ? 'pause' : 'cancel'}`, { method: 'POST' });
     } else if (a === 'test') {
       $('#setupTest').textContent = ' Testing… (the first run loads the model and can take a minute)';
       const r = await api('/setup/test', { method: 'POST', timeout: 200000 });
@@ -894,6 +907,37 @@ async function setupAction(el) {
       $('#setupTest').innerHTML = setup.testMsg;
     }
   } catch (e) { toast(adminError(e)); }
+}
+
+function renderAutoPlan(p) {
+  setup.autoPlan = p;
+  const rows = p.components.map((c) => `<li>${c.action === 'ok' ? '✅' : '⬇️'} ${esc(c.label)}${c.download_gb ? ` · ~${c.download_gb} GB` : ''}${c.action === 'start' ? ' · will be started' : ''}</li>`).join('');
+  const disk = p.disk.models ? `Models need ~${p.disk.models.required_free_gb} GB free (${p.disk.models.free_gb} GB free).` : '';
+  $('#autoBox').innerHTML = `
+    <p class="small">Recommended for this computer: <b>${esc(p.profile_label)}</b> (${esc(p.reason)}).</p>
+    <ul class="small">${rows}</ul>
+    <p class="small">${p.nothing_to_do ? 'Everything is already installed.' : `Download: about <b>${p.download_gb} GB</b>, once. ${esc(disk)} Internet is needed only for this step.`}</p>
+    ${p.problems.length ? `<p class="small bad">⚠️ ${p.problems.map(esc).join('<br>⚠️ ')}</p>` : ''}
+    <div class="row"><button class="btn btn-primary btn-sm" data-setup="auto-start" ${p.ready_to_start ? '' : 'disabled'}>${p.nothing_to_do ? 'Check and finish' : 'Start automatic setup'}</button>
+      <button class="btn btn-ghost btn-sm" data-setup="auto-plan">↻ Re-check</button></div>`;
+}
+
+function pollAuto() {
+  clearInterval(setup.autoTimer);
+  const tick = async () => {
+    let j;
+    try { j = await api('/setup/auto'); } catch { return; }
+    const pct = j.progress && j.progress.total ? Math.round((100 * j.progress.done) / j.progress.total) : null;
+    const running = j.status === 'running';
+    $('#autoBox').innerHTML = `
+      <p class="small"><b>${esc(j.status === 'done' ? '✅ Done' : j.status === 'failed' ? '❌ Stopped' : j.status === 'paused' ? '⏸ Paused' : j.status === 'cancelled' ? '⏹ Cancelled' : '⏳ Working')}</b> · ${esc(j.message || '')}</p>
+      ${pct !== null && running ? `<div class="progress-line"><span style="width:${pct}%"></span></div><p class="small">${pct}%</p>` : ''}
+      ${j.error ? `<p class="small bad">${esc(j.error)}</p>` : ''}
+      <div class="row">${running ? '<button class="btn btn-ghost btn-sm" data-setup="auto-pause">⏸ Pause</button><button class="btn btn-ghost btn-sm danger" data-setup="auto-cancel">Cancel</button>'
+        : j.status === 'done' ? '' : '<button class="btn btn-primary btn-sm" data-setup="auto-plan">↻ Resume / retry</button>'}</div>`;
+    if (!running) { clearInterval(setup.autoTimer); if (j.status === 'done') { toast('✅ Setup complete'); refreshSetup(); checkConnection(); } }
+  };
+  tick(); setup.autoTimer = setInterval(tick, 1500);
 }
 
 function pollPull() {
@@ -1298,11 +1342,26 @@ function readPairingLink() {
 async function checkUpdates() {
   $('#updateResult').textContent = 'Checking…';
   try {
-    const r = await api('/system/update-check');
+    const r = await api('/updates/check', { method: 'POST' });
+    const when = r.last_check_at ? ` · checked ${timeAgo(r.last_check_at * 1000)}` : '';
     $('#updateResult').innerHTML = r.error ? esc(r.error)
       : !r.configured ? `v${esc(r.current)} · no update source configured`
-      : r.update_available ? `🎉 v${esc(r.latest)} available. <a href="${esc(r.download_url)}" target="_blank" rel="noopener">Download</a> · SHA-256 <code class="break">${esc(r.sha256)}</code>`
-      : `✅ Up to date (v${esc(r.current)})`;
+      : r.update_available ? `🎉 v${esc(r.latest)} available (signed by your trusted publisher)${!r.upgrade_supported ? ' · ⚠️ needs an intermediate version first' : ''}. <button class="btn btn-sm btn-primary" data-u="download">Download</button>`
+      : `✅ Up to date (v${esc(r.current)})${when}`;
+  } catch (e) { $('#updateResult').textContent = e.message; }
+}
+
+async function updateAction(a) {
+  try {
+    if (a === 'download') {
+      $('#updateResult').textContent = 'Downloading and verifying…';
+      const r = await api('/updates/download', { method: 'POST', timeout: 3600000 });
+      $('#updateResult').innerHTML = `✅ v${esc(r.version)} downloaded and verified (size and SHA-256 match the signed manifest). <button class="btn btn-sm btn-primary" data-u="install">Install…</button>`;
+    } else if (a === 'install') {
+      if (!confirm('Install the update now?\n\nThe installer stops Abhify.AI, backs up your data and keeps it. No administrator rights are needed. The previous installer is kept so you can go back if needed.\n\nStart Abhify.AI again when the installer finishes.')) return;
+      const r = await api('/updates/install', { method: 'POST', body: { confirm: true } });
+      $('#updateResult').textContent = r.note;
+    }
   } catch (e) { $('#updateResult').textContent = e.message; }
 }
 
@@ -1322,6 +1381,7 @@ function bindM2Events() {
   });
   $('#openSystem').addEventListener('click', renderCompanion);
   $('#checkUpdates').addEventListener('click', checkUpdates);
+  $('#updateResult').addEventListener('click', (e) => { const el = e.target.closest('[data-u]'); if (el) updateAction(el.dataset.u); });
 }
 
 document.addEventListener('DOMContentLoaded', boot);

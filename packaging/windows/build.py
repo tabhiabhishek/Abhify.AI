@@ -226,7 +226,8 @@ def verify_runtime(rt: Path) -> None:
 
 
 APP_MODULES = ("main, agent, knowledge, document_indexer, folder_watcher, generators, system_service, "
-               "companion, log_redaction, transcribe, memory_service, local_file_service, database")
+               "companion, log_redaction, transcribe, memory_service, local_file_service, database, membership, "
+               "setup_manager, updates, ed25519_verify")
 
 
 def verify_app() -> None:

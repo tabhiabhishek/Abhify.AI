@@ -247,6 +247,16 @@ def _reset_model_caches() -> None:
 
 # --------------------------------------------------------------------------- downloads
 PULLS: dict[str, dict[str, Any]] = {}       # model -> progress state (in-process)
+_PULL_TASKS: dict[str, "asyncio.Task"] = {}   # model -> running download task (for pause/cancel)
+
+
+def cancel_pull(model: str) -> bool:
+    """Stop a running download (pause/cancel). Ollama keeps what was downloaded; a new pull resumes."""
+    task = _PULL_TASKS.get(model)
+    if task and not task.done():
+        task.cancel()
+        return True
+    return False
 
 
 def estimate_download_gb(model: str) -> float:
@@ -277,7 +287,7 @@ async def start_pull(model: str, confirm: bool) -> dict[str, Any]:
     if st and st["status"] == "downloading":
         return st
     PULLS[model] = {"model": model, "status": "downloading", "completed": 0, "total": 0, "message": "starting"}
-    asyncio.create_task(_pull_worker(model))
+    _PULL_TASKS[model] = asyncio.create_task(_pull_worker(model))
     return PULLS[model]
 
 
@@ -334,6 +344,9 @@ async def _pull_worker(model: str) -> None:
                 raise PullError("Ollama reported success, but the model isn't listed as installed. "
                                 "Restart Ollama and press Download again.")
         st.update(status="done", message="installed")
+    except asyncio.CancelledError:                  # paused/cancelled by the user: Ollama keeps the partial download
+        st.update(status="cancelled", message="Stopped. Start again to resume where it left off.")
+        raise
     except Exception as e:
         st.update(status="failed", message=_pull_problem(e))
         log.warning("Model pull failed for %s: %s", model, type(e).__name__)
@@ -364,47 +377,9 @@ async def test_inference(model: str | None = None) -> dict[str, Any]:
         return {"ok": False, "model": model, "error": f"{type(e).__name__}: {e}"[:300]}
 
 
-# --------------------------------------------------------------------------- update check (no auto-install)
-_HEX64 = set("0123456789abcdef")
-
-
-async def check_for_update() -> dict[str, Any]:
-    """Compare the installed version with a release manifest (if one is configured).
-
-    Manifest format (JSON, served over HTTPS):
-      {"version": "2.1.0", "released": "2026-11-01", "notes": "...", "min_supported": "2.0.0",
-       "windows": {"url": "https://.../Abhify.AI-Setup-2.1.0.exe", "sha256": "<64 hex>"}}
-    Nothing is downloaded or installed: the user downloads the installer and can
-    verify the SHA-256 shown here before running it.
-    """
-    from packaging.version import InvalidVersion, Version
-    cfg = lfs.load_settings().get("updates", {})
-    url = cfg.get("manifest_url")
-    base = {"current": __version__, "configured": bool(url)}
-    if not url:
-        return {**base, "update_available": False, "message": "No update source configured."}
-    if not str(url).startswith("https://"):
-        return {**base, "update_available": False, "error": "The update manifest URL must use HTTPS."}
-    if not internet_available():
-        return {**base, "update_available": False, "error": "Offline: can't check for updates."}
-    try:
-        async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
-            r = await client.get(url)
-            r.raise_for_status()
-            if len(r.content) > 64 * 1024:
-                raise ValueError("manifest too large")
-            m = r.json()
-        latest = Version(str(m["version"]))
-        win = m.get("windows") or {}
-        dl, sha = str(win.get("url", "")), str(win.get("sha256", "")).lower()
-        if not dl.startswith("https://") or len(sha) != 64 or not set(sha) <= _HEX64:
-            raise ValueError("manifest has an invalid download URL or checksum")
-        current = Version(__version__)
-        return {**base, "update_available": latest > current, "latest": str(m["version"]),
-                "released": m.get("released"), "notes": str(m.get("notes", ""))[:5000],
-                "download_url": dl, "sha256": sha,
-                "upgrade_supported": Version(str(m.get("min_supported", "0"))) <= current}
-    except (InvalidVersion, KeyError, ValueError, TypeError) as e:
-        return {**base, "update_available": False, "error": f"Invalid update manifest: {e}"}
-    except Exception as e:
-        return {**base, "update_available": False, "error": f"Update check failed ({type(e).__name__})"}
+# --------------------------------------------------------------------------- update check
+async def check_for_update(force: bool = True) -> dict[str, Any]:
+    """Kept for existing callers: the update manager (updates.py) does the work. Since dev.6 the
+    manifest must be SIGNED by a configured publisher key; unsigned manifests are rejected."""
+    import updates
+    return await updates.check(force=force)

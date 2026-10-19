@@ -102,3 +102,19 @@ A native mobile build is a separate project, not part of this release.
 - Nothing is sent to any central server: there is none.
 - In Mode B the phone sends your questions to **your** PC and receives answers. Your memories, documents and chat history stay on the PC.
 - The phone's browser stores only preferences, cached content, the access token and the offline queue. Remove them with your browser's "clear site data".
+
+## Offline on the phone: what is and isn't possible (2.0.0-dev.6)
+The phone app is a **PWA**: a web page with an offline cache. It **does not** contain Python, Ollama or any AI model, and Abhify.AI does not install them on the phone.
+
+| On the phone, without the PC | Works? |
+|---|---|
+| Open the app from the home screen (cached app shell) | ✅ |
+| Saved news (with its age), saved interview questions and quizzes, built-in samples | ✅ |
+| Quiz answers (queued, sent when the PC is reachable again) | ✅ |
+| Chat, document search, memories, voice | ❌ needs the PC (the AI runs there) |
+| Access to phone folders or files without you picking them | ❌ never (browsers don't allow it, and Abhify.AI doesn't try) |
+
+Further limits:
+- **Storage:** browsers may clear PWA storage when space is low (especially on iPhone after weeks without use). If that happens, pair again.
+- **Fully offline AI on a phone** would need a native app with an on-device model runtime. It's not built, and not claimed.
+- **Nothing moves between devices automatically.** Any future sync would be a separate, optional feature.

@@ -162,7 +162,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
     "companion": {"enabled": False, "token_sha256": None, "created_at": None,
                   "registration_mode": "invite_only",   # invite_only | public (see membership.py)
                   "lan_access": False},                 # listen on all interfaces (plain Wi-Fi HTTP); off = 127.0.0.1
-    "updates": {"manifest_url": None, "check_on_start": False},
+    "updates": {"manifest_url": None, "check_on_start": False,   # opt-in; nothing is checked by default
+                "trusted_keys": {},                # {key_id: base64 Ed25519 PUBLIC key} of the publisher (updates.py)
+                "check_interval_hours": 24},
 }
 
 

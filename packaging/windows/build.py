@@ -98,7 +98,22 @@ def app_version() -> str:
     return re.search(r'__version__\s*=\s*"([^"]+)"', text).group(1)
 
 
-def stage_runtime(py_zip: Path, site_from: Path | None) -> None:
+LOCK = ROOT / "packaging" / "windows" / "requirements.lock"
+
+
+def pip_sources(use_lock: bool) -> list[str]:
+    """Online build inputs. Default: the hash-locked, fully pinned set (requirements.lock), so every
+    build installs exactly the same files and pip refuses anything whose hash differs. --no-lock
+    resolves from the top-level requirements instead (used to refresh the lock; see lock.ps1)."""
+    if use_lock:
+        if not LOCK.exists():
+            raise SystemExit(f"{LOCK} not found: generate it with packaging\\windows\\lock.ps1, or pass --no-lock")
+        return ["--require-hashes", "--only-binary", ":all:", "-r", str(LOCK)]
+    return ["-r", str(ROOT / "backend" / "requirements.txt"),
+            "-r", str(ROOT / "packaging" / "windows" / "requirements-desktop.txt")]
+
+
+def stage_runtime(py_zip: Path, site_from: Path | None, use_lock: bool = True) -> None:
     rt = STAGE / "runtime"
     with zipfile.ZipFile(py_zip) as z:
         z.extractall(rt)
@@ -118,11 +133,11 @@ def stage_runtime(py_zip: Path, site_from: Path | None) -> None:
             else:
                 shutil.copy2(item, target / item.name)
     else:
-        log("installing dependencies into the private runtime (this takes a few minutes)")
+        log("installing dependencies into the private runtime ("
+            + ("hash-locked: requirements.lock" if use_lock else "unlocked: resolving requirements.txt") + ")")
         subprocess.run([sys.executable, "-m", "pip", "install", "--disable-pip-version-check",
                         "--no-warn-script-location", "--no-compile", "--target", str(target),
-                        "-r", str(ROOT / "backend" / "requirements.txt"),
-                        "-r", str(ROOT / "packaging" / "windows" / "requirements-desktop.txt")], check=True)
+                        *pip_sources(use_lock)], check=True)
         # F7 (dev.4): pip --target writes console-script launchers (bin\*.exe) that embed the BUILD
         # machine's python.exe path (and so its user name). The app never uses them: it always runs
         # through runtime\python.exe. Remove them.
@@ -254,10 +269,37 @@ def release_notes(version: str) -> str:
     return m.group(0) if m else f"## {version}\n\nSee CHANGELOG.md."
 
 
+def sign_command() -> str:
+    """NSIS runs this for Uninstall.exe (!uninstfinalize) and the installer (!finalize); %1 is the file."""
+    script = ROOT / "packaging" / "windows" / "sign.ps1"
+    missing = [v for v in ("ABHIFY_SIGN_MODE", "ABHIFY_SIGN_SUBJECT") if not __import__("os").environ.get(v)]
+    if missing:
+        raise SystemExit(f"--sign needs {', '.join(missing)} (see docs/CODE_SIGNING.md); nothing was signed")
+    return f'powershell -NoProfile -ExecutionPolicy Bypass -File "{script}" -File "%1"'
+
+
+def verify_signature(exe: Path, required: bool) -> bool:
+    out = subprocess.run(["powershell", "-NoProfile", "-Command",
+                          f"(Get-AuthenticodeSignature -LiteralPath '{exe}').Status"], capture_output=True, text=True)
+    status = out.stdout.strip()
+    if required and status != "Valid":
+        exe.unlink(missing_ok=True)
+        raise SystemExit(f"Signature check failed ({status}); the installer was deleted and no checksums were written")
+    return status == "Valid"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Build the Abhify.AI Windows installer")
     ap.add_argument("--site-packages-from", type=Path, default=None,
                     help="copy dependencies from this site-packages (same Python 3.11 x64) instead of downloading")
+    ap.add_argument("--no-lock", action="store_true",
+                    help="resolve from requirements.txt instead of the hash-locked requirements.lock")
+    ap.add_argument("--sign", action="store_true",
+                    help="Authenticode-sign Uninstall.exe and the installer with packaging/windows/sign.ps1 "
+                         "(configuration from ABHIFY_SIGN_* environment variables, see docs/CODE_SIGNING.md); "
+                         "checksums are written only if the final file verifies")
+    ap.add_argument("--out-dir", type=Path, default=None,
+                    help="write the installer here instead of dist/windows/<version>/ (tests, experiments)")
     args = ap.parse_args()
     if sys.version_info[:2] != (3, 11):
         raise SystemExit("Build with Python 3.11 so compiled wheels match the bundled runtime (py -3.11 ...)")
@@ -269,7 +311,7 @@ def main() -> None:
     if STAGE.exists():
         shutil.rmtree(STAGE)
     STAGE.mkdir(parents=True)
-    stage_runtime(py_zip, args.site_packages_from)
+    stage_runtime(py_zip, args.site_packages_from, use_lock=not args.no_lock)
     stage_app()
     verify_app()
     make_icon()
@@ -291,15 +333,21 @@ def main() -> None:
             z.extractall(CACHE)
     # Each version gets its own folder, so building a new version never overwrites an earlier
     # version's installer, checksum file or notes (dist/windows/<version>/...).
-    dist = DIST / version
-    dist.mkdir(parents=True, exist_ok=True)
+    dist = args.out_dir or DIST / version
     out = dist / f"Abhify.AI-Setup-{version}.exe"
-    log("compiling installer (LZMA; takes a few minutes)")
-    subprocess.run([str(nsis_dir / "makensis.exe"), "/V2", f"/DVERSION={version}", f"/DVIVERSION={vi}",
-                    f"/DSTAGING={STAGE}", f"/DOUTFILE={out}", str(ROOT / "packaging" / "windows" / "installer.nsi")],
-                   check=True)
+    if out.exists() and args.out_dir is None:
+        raise SystemExit(f"{out} already exists. A version is never rebuilt with different content: "
+                         "bump backend/version.py, or use --out-dir for an experiment.")
+    dist.mkdir(parents=True, exist_ok=True)
+    defines = [f"/DVERSION={version}", f"/DVIVERSION={vi}", f"/DSTAGING={STAGE}", f"/DOUTFILE={out}"]
+    if args.sign:
+        defines.append(f"/DSIGN_CMD={sign_command()}")
+    log("compiling installer (LZMA; takes a few minutes)" + (", signing Uninstall.exe and the installer" if args.sign else ""))
+    subprocess.run([str(nsis_dir / "makensis.exe"), "/V2", *defines,
+                    str(ROOT / "packaging" / "windows" / "installer.nsi")], check=True)
+    signed = verify_signature(out, required=args.sign)
 
-    digest = sha256(out)
+    digest = sha256(out)                           # always computed on the FINAL (signed) file
     (dist / "SHA256SUMS.txt").write_text(f"{digest}  {out.name}\n", encoding="utf-8")
     shutil.copy2(STAGE / "RELEASE_NOTES.md", dist / "RELEASE_NOTES.md")
     shutil.copy2(ROOT / "docs" / "WINDOWS_INSTALLATION.md", dist / "INSTALL.md")
@@ -310,7 +358,8 @@ def main() -> None:
         "windows": {"url": f"https://github.com/<owner>/<repo>/releases/download/v{version}/{out.name}",
                     "sha256": digest},
     }, indent=2), encoding="utf-8")
-    log(f"done: {out} ({out.stat().st_size / 1024 ** 2:.0f} MB) sha256={digest}")
+    log(f"done: {out} ({out.stat().st_size / 1024 ** 2:.0f} MB) sha256={digest} "
+        f"signature={'Valid' if signed else 'NotSigned'}")
 
 
 if __name__ == "__main__":

@@ -119,7 +119,8 @@ def test_installer_finish_page_opens_html_guide():
 # --------------------------------------------------------------------------- versions and output
 def test_each_version_builds_into_its_own_folder():
     src = (PKG / "build.py").read_text(encoding="utf-8")
-    assert "dist = DIST / version" in src
+    assert "dist = args.out_dir or DIST / version" in src              # per-version folder unless --out-dir
+    assert "A version is never rebuilt with different content" in src   # and never overwritten
     assert 'DIST / "SHA256SUMS.txt"' not in src                        # never overwrite another version's sums
 
 

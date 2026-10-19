@@ -34,6 +34,25 @@ py -3.11 packaging\windows\build.py --site-packages-from backend\.venv\Lib\site-
 >
 > The `--site-packages-from` build copies what is installed in that environment, **including packages the app doesn't declare** (for example `langchain_community` in the dev venv). Run `pip check` and the test suite in it first. For official releases, prefer the online build from `requirements.txt`, or add a lock file (`pip-compile --generate-hashes`) and `pip install --require-hashes`.
 
+## Dependency lock (2.0.0-dev.5 and later)
+- The online build installs `packaging\windows\requirements.lock`: every package pinned, with SHA-256 hashes, wheels only.
+- **To change dependencies:**
+  1. Edit `backend\requirements.txt`.
+  2. Run `packaging\windows\lock.ps1`.
+  3. Review the lock diff like code.
+  4. Create a fresh venv from the lock (`pip install --require-hashes -r packaging\windows\requirements.lock`, plus `pytest`) and run the full suite **in that venv**.
+  5. Commit both files. `test_lock_and_signing.py` fails if the lock drifts from `requirements.txt` or loses its hashes.
+- The lock is for the Windows x64 / Python 3.11 runtime only. Docker, macOS and Linux use `requirements.txt`.
+
+## Signing (when a certificate exists; see CODE_SIGNING.md)
+```powershell
+$env:ABHIFY_SIGN_MODE = "TrustedSigning"          # or "Store" (hardware token / cloud HSM in the cert store)
+$env:ABHIFY_SIGN_SUBJECT = "<validated publisher name>"
+$env:ABHIFY_SIGN_DLIB = "<path>\Azure.CodeSigning.Dlib.dll"; $env:ABHIFY_SIGN_METADATA = "<path>\metadata.json"
+py -3.11 packaging\windows\build.py --sign
+```
+NSIS signs `Uninstall.exe` and the installer through `packaging\windows\sign.ps1`, which timestamps and verifies (chain policy `/pa`, Valid status, publisher, timestamp). `build.py` writes `SHA256SUMS.txt` and `latest.json.template` only after the signed file verifies, so the checksum is always of the signed file.
+
 ## Test before publishing
 1. `pytest` (automated suite).
 2. **Clean-machine test in Windows Sandbox:** `packaging\windows\sandbox\run-sandbox-test.ps1`, then check `build\sandbox-results\result.json`.

@@ -5,7 +5,7 @@
 
 Abhify.AI combines live AI news, AI-generated interview questions and quizzes, a chat agent that knows your documents and remembers what you ask it to, and voice control. The AI runs **locally through Ollama**, so there are no paid APIs and no cloud account, and your documents and memories stay on your machine.
 
-> **Status:** `2.0.0-dev.4`, a development build of the v2 line (milestones 1–2 plus the release-blocker and model-setup fixes; see [CHANGELOG.md](CHANGELOG.md) and [docs/ROADMAP.md](docs/ROADMAP.md)). Not released yet: the Windows installer is **unsigned**, and real-device phone tests and a second-PC test are still outstanding. The v1.0.0 baseline is Git tag `v1.0.0`.
+> **Status:** `2.0.0-dev.5`, a development build of the v2 line (milestones 1–2 plus the release-blocker and model-setup fixes, built from a hash-locked dependency set; see [CHANGELOG.md](CHANGELOG.md) and [docs/ROADMAP.md](docs/ROADMAP.md)). Not released yet: the Windows installer is **unsigned**, and real-device phone tests and a second-PC test are still outstanding. The v1.0.0 baseline is Git tag `v1.0.0`.
 >
 > **Install on Windows:** [docs/WINDOWS_INSTALLATION.md](docs/WINDOWS_INSTALLATION.md) · **Phones:** [docs/MOBILE_INSTALLATION.md](docs/MOBILE_INSTALLATION.md) · **Knowledge folder:** [docs/M2_KNOWLEDGE_FOLDER.md](docs/M2_KNOWLEDGE_FOLDER.md) · **Your data:** [docs/DATA_AND_MIGRATION.md](docs/DATA_AND_MIGRATION.md) · **Releases:** [docs/RELEASE_PROCESS.md](docs/RELEASE_PROCESS.md)
 

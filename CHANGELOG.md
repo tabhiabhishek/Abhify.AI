@@ -3,6 +3,22 @@
 All notable changes to Abhify.AI. Format: [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 The database schema version is listed separately, because not every release changes it.
 
+## [2.0.0-dev.5]: hash-locked dependencies and a signing-ready pipeline, unreleased (branch `feature/m2-knowledge-packaging`)
+
+Database schema: **v4** (unchanged). **No application code changes since dev.4**: the same 118 dependency versions, now installed from a lock. Details: `docs/FINAL_ACCEPTANCE_DEV4.md`.
+
+### Added
+- **`packaging\windows\requirements.lock`:** every direct and transitive dependency of the Windows build, pinned to the exact versions in the verified dev.4 installer (118 packages, 3,235 SHA-256 hashes).
+  - The online build installs from it by default with `--require-hashes --only-binary :all:`; pip refuses any file whose hash differs.
+  - `build.py --no-lock` resolves fresh, for example to refresh it.
+  - `packaging\windows\lock.ps1` regenerates it in a throw-away venv.
+  - The lock covers Windows x64 and Python 3.11 only (the bundled runtime); Docker, macOS and Linux keep `requirements.txt`.
+- **Signing pipeline (not used yet; no certificate exists):**
+  - `packaging\windows\sign.ps1` signs and timestamps one file, then verifies chain, timestamp and publisher.
+  - `build.py --sign` makes NSIS sign `Uninstall.exe` (`!uninstfinalize`) and the installer (`!finalize`), and writes checksums **only** if the final file verifies as Valid; otherwise it deletes the output.
+  - All configuration comes from `ABHIFY_SIGN_*` environment variables, never from files in the repo.
+- `build.py --out-dir` for experiments. `build.py` refuses to overwrite an existing `dist\windows\<version>\` installer.
+
 ## [2.0.0-dev.4]: model-setup and reproducible-build fixes, unreleased (branch `feature/m2-knowledge-packaging`)
 
 Database schema: **v4** (unchanged). Found during the dev.3 final acceptance run; details in `docs/FINAL_ACCEPTANCE_DEV3.md`.

@@ -27,6 +27,14 @@ RequestExecutionLevel user
 
 Name "${APPNAME}"
 OutFile "${OUTFILE}"
+
+; Optional Authenticode signing (build.py --sign; see docs/CODE_SIGNING.md). NSIS calls the
+; command for Uninstall.exe before embedding it, and for the finished installer; "= 0" makes
+; the build fail if signing or verification fails.
+!ifdef SIGN_CMD
+  !uninstfinalize '${SIGN_CMD}' = 0
+  !finalize '${SIGN_CMD}' = 0
+!endif
 InstallDir "$LOCALAPPDATA\Programs\${APPNAME}"
 InstallDirRegKey HKCU "${APP_KEY}" "InstallDir"
 BrandingText "${APPNAME} ${VERSION}"

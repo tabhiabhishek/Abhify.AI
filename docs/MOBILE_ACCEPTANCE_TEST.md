@@ -1,5 +1,10 @@
 # Mobile companion access: acceptance test
 
+## Status after the final acceptance gate (2026-10-16): **real devices NOT TESTED**
+- No Android or iPhone device was available. Every device check below is still **NOT TESTED**, and no simulated or Node test is counted as device acceptance. See `FINAL_ACCEPTANCE_DEV3.md` §7.
+- Use **2.0.0-dev.4** for the device tests.
+- If the PC had to use a port other than 8000 (see the tray tooltip), use that port in the pairing address and in `tailscale serve --bg <port>`.
+
 ## 2.0.0-dev.3 re-test (2026-10-16)
 
 **No physical Android or iPhone was available. Every real-device check is still NOT TESTED.** Simulated or logic tests below are **not** real-device acceptance.

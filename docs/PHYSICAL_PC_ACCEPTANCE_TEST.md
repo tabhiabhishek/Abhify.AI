@@ -1,5 +1,16 @@
 # Acceptance test on a second physical Windows PC
 
+## Status after the final acceptance gate (2026-10-16): **still NOT EXECUTED**
+- No second physical PC was available, so every physical step is still **NOT TESTED**. See `FINAL_ACCEPTANCE_DEV3.md` §4.
+- **Use 2.0.0-dev.4 for this test, not dev.3:**
+  - installer `dist\windows.0.0-dev.4\Abhify.AI-Setup-2.0.0-dev.4.exe`
+  - SHA-256 `1f0a61ca60c2d30ea37ab4286d6aba7bdfe5347ef8466e4e45614a348d36b9ee`
+  - unsigned
+- Reason: dev.3 can fail to start where Windows reserves ports 8000–8010 (D4), and has the model-setup issues D1 and D3. All three are fixed in dev.4.
+- **Step 12 (upgrade):** install dev.3 first, then run dev.4 over it. In Windows Sandbox this passed 34/34.
+- **Step 7 (model download):** clean-VM evidence: dev.4 22/22, including an interrupted download, a network error and CPU inference.
+- **New check:** if the app opens on a port other than 8000, run `netsh interface ipv4 show excludedportrange protocol=tcp` and record the reserved ranges. The app should still start, and keep that port next time.
+
 ## Status for 2.0.0-dev.3 (2026-10-16): **NOT EXECUTED**
 No second physical PC was available in this session either, so **every step below is still NOT TESTED on physical hardware**. Use the **dev.3** installer for this test, not dev.2:
 

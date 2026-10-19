@@ -27,7 +27,12 @@ py -3.11 packaging\windows\build.py --site-packages-from backend\.venv\Lib\site-
 - Bytecode: third-party packages are copied **without** `__pycache__`, then compiled by the bundled runtime with a neutral path prefix. The build **fails** if any `.pyc` contains a build-machine path (source folder, staging folder, home folder or dev venv).
 - `check_package.py` refuses `.env`, keys, databases, user data, tests and secret-like strings in the app files.
 
-> The `--site-packages-from` build copies what is installed in that environment. Run `pip check` and the test suite in it first. For official releases, prefer the online build from `requirements.txt`, or add a lock file (`pip-compile --generate-hashes`) and `pip install --require-hashes`.
+> **Use the online build for releases** (verified end to end with 2.0.0-dev.4).
+> - Build from a short folder such as `D:\Abhify.AI`: NSIS fails on file paths over 260 characters (chromadb's test files are deep).
+> - The build also imports the app's own modules with the bundled runtime, and fails if a dependency is missing from `requirements.txt`. That is what D2 was: an online build that "passed" but couldn't start.
+> - It also fails if **any** runtime file contains a build-machine path, such as pip's console-script launchers (F7).
+>
+> The `--site-packages-from` build copies what is installed in that environment, **including packages the app doesn't declare** (for example `langchain_community` in the dev venv). Run `pip check` and the test suite in it first. For official releases, prefer the online build from `requirements.txt`, or add a lock file (`pip-compile --generate-hashes`) and `pip install --require-hashes`.
 
 ## Test before publishing
 1. `pytest` (automated suite).

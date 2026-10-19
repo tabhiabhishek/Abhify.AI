@@ -23,6 +23,13 @@ Database schema: **v4** (unchanged). Found during the dev.3 final acceptance run
 - **D4, the app couldn't start when Windows reserved ports 8000–8010.** Hyper-V, WSL2, Docker and Windows Sandbox reserve dynamic blocks of 100 ports; on the dev PC, 7914–8213 was reserved, so the launcher stopped with "No free port between 8000 and 8010".
   - The launcher now tries the last port that worked, then 8000–8010, then 18000 / 28000 / 38000, and finally any free port.
   - The working port is remembered, so the browser keeps the same address (saved settings, pairing and the installed PWA stay).
+- **F7, online builds carried the builder's path.** `pip install --target` wrote 37 `bin\*.exe` console-script launchers embedding the build machine's `python.exe` path (and user name).
+  - They are now removed; the app never used them.
+  - The build-path check now scans every runtime file, not only `.pyc`.
+  - The first dev.4 build (`24d75f81…`) had this problem. It was set aside in `build\` before any test or distribution and replaced by a rebuild.
+
+### Changed
+- Releases are built with the **online** build (`build.py` without `--site-packages-from`). It now works end to end. The offline build copies the whole dev environment, which also shipped unused packages (for example `langchain_community`, `sqlalchemy`).
 
 ### Added
 - `packaging\windows\sandbox\run-sandbox-modeltest.ps1`: a clean-PC model-setup test in Windows Sandbox **with networking**. It installs the app and Ollama, then checks consent, a network error, an interrupted download and resume, a model that can't start, real inference, document Q&A from the knowledge folder, and a restart.

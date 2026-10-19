@@ -1,5 +1,9 @@
 # Installer readiness audit: Abhify.AI 2.0.0-dev.3 (re-audit)
 
+> **Superseded for decisions by `FINAL_ACCEPTANCE_DEV3.md` (2026-10-16).**
+> - The final gate found D1–D4 and F7 in dev.3, fixed in **2.0.0-dev.4** (`1f0a61ca…36b9ee`, online build, unsigned).
+> - **Decision unchanged: NO-GO for merge or release** until the physical-PC and real-phone acceptance tests are done. GO for internal testing with dev.4.
+
 Audit date: 2026-10-16. The dev.2 audit from 2026-10-14 is kept unchanged below as history.
 
 Scope: re-check every dev.2 finding against the dev.3 code and the **real dev.3 installer**. Installs ran only in Windows Sandbox; server tests used temporary data folders. Nothing was merged, tagged, signed or published. Details and evidence: `docs/RELEASE_BLOCKER_FIXES_DEV3.md`.

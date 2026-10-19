@@ -55,6 +55,9 @@ out.local_ready = status({ remote: false }, true, H({ remote: false, authorized:
 out.local_no_internet = status({ remote: false }, true, H({ remote: false, authorized: true, internet: false }));
 out.local_no_ollama = status({ remote: false }, false, H({ remote: false, authorized: true, ollama: false }));
 out.local_lost = status({ remote: false, everConnected: true }, false, null);
+out.member_ready = status({ token: 't'.repeat(32) }, true, H({ remote: true, authorized: true, role: 'member' }));
+out.public_join = status({}, false, H({ remote: true, authorized: false, companion_enabled: true, registration: 'public' }));
+out.invite_only_unpaired = status({}, false, H({ remote: true, authorized: false, companion_enabled: true, registration: 'invite_only' }));
 
 // pairing link: fresh load and while the app is already open (hashchange calls the same function)
 (async () => {

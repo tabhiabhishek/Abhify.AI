@@ -29,11 +29,8 @@ Ollama itself is never exposed: it keeps listening on its own 127.0.0.1 port.
 """
 from __future__ import annotations
 
-import hashlib
-import hmac
 import os
 import re
-import secrets
 import socket
 import time
 from pathlib import Path
@@ -42,6 +39,7 @@ from typing import Any, Iterable
 from starlette.requests import Request
 
 import local_file_service as lfs
+import membership
 
 LOOPBACK = {"127.0.0.1", "::1", "localhost", "testclient"}
 FORWARD_HEADERS = ("x-forwarded-for", "forwarded", "x-real-ip", "cf-connecting-ip", "true-client-ip",
@@ -56,7 +54,13 @@ REMOTE_ROUTES = {
     "/progress", "/memory", "/preferences", "/conversations",
 }
 REMOTE_PREFIXES = ("/progress/", "/memory/", "/conversations/")
+# What a *member* device (someone else's phone) may use: nothing that reads or writes the owner's
+# data. /chat and /voice run as a "guest" chat for members (agent.run_agent(guest=True)).
+MEMBER_ROUTES = {"/chat", "/news", "/generate-question", "/generate-mcq", "/transcribe", "/voice"}
+# Reachable without a device credential (rate-limited), but only while companion access is on.
+PAIRING_ROUTES = {"/companion/redeem", "/companion/register"}
 LOCAL_ONLY_MESSAGE = "This action is only allowed from the computer running Abhify.AI"
+MEMBER_DENIED_MESSAGE = "This feature is only available to the owner's devices."
 
 
 def register_api_routes(paths: Iterable[str]) -> None:
@@ -85,34 +89,52 @@ def _token_from(request: Request) -> str | None:
     return request.headers.get("x-abhify-token") or None
 
 
-def _hash(token: str) -> str:
-    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+def device(request: Request) -> dict | None:
+    """The paired device making this remote request (id, name, role), or None. Companion access must be on."""
+    if not lfs.load_settings()["companion"].get("enabled"):
+        return None
+    return membership.authenticate(_token_from(request))
 
 
 def token_valid(request: Request) -> bool:
-    cfg = lfs.load_settings()["companion"]
-    token, stored = _token_from(request), cfg.get("token_sha256")
-    return bool(cfg.get("enabled") and token and stored and hmac.compare_digest(_hash(token), stored))
+    return device(request) is not None
 
 
 def remote_allowed(path: str) -> bool:
     return path in REMOTE_ROUTES or path.startswith(REMOTE_PREFIXES)
 
 
+def member_allowed(path: str) -> bool:
+    return path in MEMBER_ROUTES
+
+
+def role_of(request: Request) -> str:
+    """'owner' (this PC), 'owner_device', 'member', or 'none'. Set by check() for every API request."""
+    return getattr(request.state, "role", "owner" if is_local_request(request) else "none")
+
+
 def check(request: Request, allow_remote_admin: bool = False) -> tuple[int, str] | None:
-    """None = allowed; otherwise (status code, message)."""
+    """None = allowed; otherwise (status code, message). Runs for EVERY request (middleware), and
+    records the caller's role on request.state for the route handlers."""
     if request.method == "OPTIONS" or is_local_request(request):
+        request.state.role = "owner"
         return None
     path = request.url.path
     if not is_api(path) or path in OPEN_API:
         return None
     if not lfs.load_settings()["companion"].get("enabled"):
         return 403, "Companion access is turned off on the computer running Abhify.AI."
-    if not token_valid(request):
-        return 401, "Missing or invalid access token. Enter it in Settings → Backend on this device."
-    if not remote_allowed(path) and not allow_remote_admin:
-        return 403, LOCAL_ONLY_MESSAGE
-    return None
+    if path in PAIRING_ROUTES:
+        return None                                   # rate-limited inside; no credential yet
+    dev = membership.authenticate(_token_from(request))
+    if dev is None:
+        return 401, "This device isn't paired (or its access was revoked or has expired). Pair it again from the computer."
+    request.state.role, request.state.device = dev["role"], dev
+    if allow_remote_admin:
+        return None
+    if dev["role"] == "member":
+        return None if member_allowed(path) else (403, MEMBER_DENIED_MESSAGE if remote_allowed(path) else LOCAL_ONLY_MESSAGE)
+    return None if remote_allowed(path) else (403, LOCAL_ONLY_MESSAGE)
 
 
 def is_remote(request: Request) -> bool:
@@ -141,14 +163,19 @@ def health_view(health: dict[str, Any], request: Request) -> dict[str, Any]:
     """/health is open so a phone can tell "PC reachable" from "offline". Unpaired remote callers
     only learn whether the AI is reachable, never model names, document counts or setup state."""
     if is_local_request(request):
-        return {**health, "remote": False, "authorized": True}
+        return {**health, "remote": False, "authorized": True, "role": "owner"}
     cfg = lfs.load_settings()["companion"]
-    authorized = token_valid(request)
-    if authorized:
-        return {**health, "remote": True, "authorized": True, "companion_enabled": True}
+    dev = device(request)
+    if dev and dev["role"] == "owner_device":
+        return {**health, "remote": True, "authorized": True, "companion_enabled": True, "role": "owner_device"}
     keep = ("app", "version", "status", "ollama", "llm_ready")
-    return {**{k: health.get(k) for k in keep}, "remote": True, "authorized": False,
-            "companion_enabled": bool(cfg.get("enabled"))}
+    out = {**{k: health.get(k) for k in keep}, "remote": True, "authorized": bool(dev),
+           "companion_enabled": bool(cfg.get("enabled"))}
+    if dev:                                    # member: AI status only, nothing about the owner's data
+        out["role"] = "member"
+    elif cfg.get("enabled"):
+        out["registration"] = membership.get_mode()           # lets an unpaired phone offer "Join"
+    return out
 
 
 def lan_addresses() -> list[str]:
@@ -163,32 +190,59 @@ def lan_addresses() -> list[str]:
     return sorted(ips)
 
 
+def actual_port() -> int:
+    """The port this server really uses (the launcher sets ABHIFY_PORT, including fallback ports)."""
+    try:
+        return int(os.environ.get("ABHIFY_PORT", "8000"))
+    except ValueError:
+        return 8000
+
+
+def listening_on_lan() -> bool:
+    return os.environ.get("ABHIFY_BOUND_HOST", "127.0.0.1") not in ("127.0.0.1", "localhost", "::1")
+
+
+def connection_info() -> dict:
+    """For the owner on the PC: how phones reach this PC, with the ACTUAL port."""
+    port = actual_port()
+    cfg = lfs.load_settings()["companion"]
+    return {"port": port, "tailscale_command": f"tailscale serve --bg {port}",
+            "lan_access": bool(cfg.get("lan_access")), "listening_on_lan": listening_on_lan(),
+            "lan_urls": [f"http://{ip}:{port}" for ip in lan_addresses()] if cfg.get("lan_access") else []}
+
+
 def enable() -> dict:
-    token = secrets.token_urlsafe(24)
-    lfs.update_settings(companion={"enabled": True, "token_sha256": _hash(token), "created_at": time.time()})
-    port = os.environ.get("ABHIFY_PORT", "8000")
+    """Owner action on the PC: turn companion access on and pair one of the owner's own devices."""
+    lfs.update_settings(companion={"enabled": True, "created_at": time.time()})
+    dev = membership.issue_owner_device("Paired device")
     return {
         "enabled": True,
-        "token": token,                                    # shown once; not stored in plain text
-        "lan_urls": [f"http://{ip}:{port}" for ip in lan_addresses()],
-        "listening_on_lan": os.environ.get("ABHIFY_BOUND_HOST", "127.0.0.1") not in ("127.0.0.1", "localhost"),
-        "next_steps": "Restart Abhify.AI so it listens on your network (the launcher does this automatically when "
-                      "companion access is on). For installing the app and using the microphone on a phone, "
-                      "use HTTPS via Tailscale Serve. See docs/MOBILE_INSTALLATION.md.",
+        "token": dev["token"],                             # shown once; only its hash is stored
+        **connection_info(),
+        "next_steps": "Recommended: install Tailscale on this PC and the phone, run the Tailscale command shown "
+                      "here, then open the https://…ts.net address on the phone with the pairing link. Plain Wi-Fi "
+                      "(HTTP) needs 'Allow access from my local network' and can't install the app or use the "
+                      "microphone. See docs/MOBILE_SETUP.md.",
     }
 
 
 def disable() -> dict:
+    """Turn companion access off and revoke every device credential and open invitation (rows are kept)."""
     lfs.update_settings(companion={"enabled": False, "token_sha256": None, "created_at": None})
-    return {"enabled": False}
+    return {"enabled": False, "revoked_devices": membership.revoke_all()}
 
 
 def status(request: Request) -> dict:
     cfg = lfs.load_settings()["companion"]
     local = is_local_request(request)
+    dev = None if local else device(request)
     out = {"enabled": bool(cfg.get("enabled")), "this_device_is_host": local,
-           "authorized": local or token_valid(request)}
+           "authorized": local or dev is not None, "role": "owner" if local else (dev["role"] if dev else "none")}
     if local:                                              # never reveal network details to remote callers
-        out["lan_addresses"] = lan_addresses()
-        out["listening_on_lan"] = os.environ.get("ABHIFY_BOUND_HOST", "127.0.0.1") not in ("127.0.0.1", "localhost")
+        out.update({"lan_addresses": lan_addresses(), "registration_mode": membership.get_mode(),
+                    **connection_info()})          # connection_info() includes listening_on_lan
+    elif dev:
+        out["device_name"] = dev["name"]
+    elif cfg.get("enabled"):
+        out["registration"] = membership.get_mode()
     return out

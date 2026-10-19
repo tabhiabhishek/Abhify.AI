@@ -198,15 +198,17 @@ function connectionStatus(on, h) {
     if (h.authorized === false) {
       if (h.companion_enabled === false) return ['Companion access is off on your computer', 'off',
         '🔒 <strong>Companion access is turned off</strong> on your computer. Turn it on there (Settings → System & data).'];
+      if (!paired && h.registration === 'public') return ['Not paired', 'off',
+        '🔓 <strong>This computer accepts new guest devices.</strong> <button class="btn btn-sm btn-primary" data-join="1">Join as guest</button> Guests can use news, quizzes and a private guest chat; they never see the owner\'s data.'];
       return [paired ? 'Not paired · access token rejected' : 'Not paired', 'off',
-        paired ? '🔗 <strong>The access token was rejected</strong> (it may have been replaced or turned off). Pair again from your computer.'
-          : '🔗 <strong>Not paired.</strong> Open the pairing link from your computer, or enter the access token in Settings.'];
+        paired ? '🔗 <strong>This device\'s access was rejected</strong> (revoked, expired or replaced). Ask the owner for a new invitation.'
+          : '🔗 <strong>Not paired.</strong> Open the invitation link from the computer\'s owner, or enter an access token in Settings.'];
     }
     if (!h.ollama) return ['Computer connected · Ollama not running', 'warn',
       '⚠️ <strong>Your computer is connected, but Ollama isn\'t running there.</strong> Start Ollama on the computer.'];
     if (!h.llm_ready) return ['Computer connected · AI model not installed', 'warn',
       '⚠️ <strong>Your computer is connected, but its AI model isn\'t installed.</strong> Finish setup on the computer.'];
-    return ['AI ready · runs on your computer', 'on', ''];
+    return [h.role === 'member' ? 'AI ready · runs on the owner\'s computer (guest)' : 'AI ready · runs on your computer', 'on', ''];
   }
   if (on) return [h.internet ? 'Online · AI ready' : 'Local AI ready · no internet', 'on', ''];
   return [h.ollama ? 'Backend up · model not installed' : 'Backend up · Ollama offline', 'off',
@@ -218,6 +220,7 @@ function setOnline(on, health) {
   state.online = on;
   state.health = health || null;
   const [text, dot, banner] = connectionStatus(on, health || null);
+  document.body.classList.toggle('guest', Boolean(health && health.role === 'member'));   // cosmetic; the server enforces
   $('#statusDot').className = 'dot ' + dot;
   $('#statusText').textContent = text;
   $('#offlineText').innerHTML = banner;
@@ -707,7 +710,8 @@ function bindEvents() {
   bindV2Events();
 
   // Connectivity changes
-  window.addEventListener('hashchange', () => { if (readPairingLink()) checkConnection(); });
+  window.addEventListener('hashchange', () => { if (readPairingLink()) checkConnection(); else readInviteLink(); });
+  $('#offlineBanner').addEventListener('click', (e) => { if (e.target.closest('[data-join]')) joinAsGuest(); });
   window.addEventListener('storage', (e) => { if (e.key === LS.token || e.key === LS.api) checkConnection(); });   // paired in another window
   window.addEventListener('online', checkConnection);
   window.addEventListener('offline', () => setOnline(false));
@@ -729,6 +733,7 @@ async function boot() {
 
   readPairingLink();
   state.ready = checkConnection();
+  readInviteLink();
   await state.ready;
   setInterval(checkConnection, 30000);
   loadNews();
@@ -1158,28 +1163,82 @@ async function knowledgeAction(action, el) {
 }
 
 /* -- companion access (Mode B) -- */
+const ROLE_LABEL = { owner_device: 'Your device', member: 'Guest' };
+const fmtTime = (t) => (t ? esc(String(t).replace('T', ' ').slice(0, 16)) + ' UTC' : '—');
+
 async function renderCompanion() {
   const box = $('#companionBox');
   try {
     const st = await api('/companion');
     if (!st.this_device_is_host) {
-      box.innerHTML = `<p class="small">This device is connected to Abhify.AI on another computer${st.authorized ? ' ✅' : ' (token missing or wrong)'}. Companion settings can only be changed on that computer.</p>`;
+      box.innerHTML = `<p class="small">This device${st.device_name ? ` (<b>${esc(st.device_name)}</b>)` : ''} is connected to Abhify.AI on another computer${st.authorized ? ` as ${st.role === 'member' ? '<b>a guest</b>: news, quizzes and guest chat only' : '<b>one of the owner\'s devices</b>'} ✅` : ' (not paired)'}. Membership and companion settings can only be changed on that computer.</p>`;
       return;
     }
-    box.innerHTML = st.enabled
-      ? `<p class="small">✅ On${st.listening_on_lan ? ', listening on your network' : '. Restart Abhify.AI so it listens on your network'}.
-           ${st.lan_addresses.length ? `Addresses: ${st.lan_addresses.map((ip) => `<code>http://${esc(ip)}:8000</code>`).join(', ')}` : ''}</p>
-         <div class="row"><button class="btn btn-ghost btn-sm" data-c="new">New token</button><button class="btn btn-ghost btn-sm danger" data-c="off">Turn off</button></div>`
-      : `<div class="row"><button class="btn btn-ghost btn-sm" data-c="on">Turn on companion access</button></div>`;
+    if (!st.enabled) {
+      box.innerHTML = '<div class="row"><button class="btn btn-ghost btn-sm" data-c="on">Turn on companion access</button></div>';
+      return;
+    }
+    const a = await api('/companion/admin');
+    const pub = a.registration_mode === 'public';
+    const devices = a.members.filter((m) => m.status === 'active');
+    const openInv = a.invitations.filter((i) => i.status === 'active');
+    box.innerHTML = `
+      <p class="small">✅ On · port <b>${esc(a.port)}</b> · ${a.listening_on_lan ? '⚠️ listening on your local network' : 'this computer only (use Tailscale)'}${a.lan_access !== a.listening_on_lan ? ' · <b>restart Abhify.AI to apply the network setting</b>' : ''}</p>
+      <p class="small">Phone over HTTPS (recommended): install Tailscale on this computer and the phone, then run <code class="break">${esc(a.tailscale_command)}</code></p>
+      <div class="step small"><b>Registration: ${pub ? '⚠️ Public' : '🔒 Invite-only'}</b><br>
+        ${pub ? 'Anyone who can reach this computer can join as a <b>guest</b> (news, quizzes, guest chat; never your data).'
+              : 'Only devices with an invitation you create here can connect.'}
+        <div class="row"><button class="btn btn-ghost btn-sm ${pub ? '' : 'danger'}" data-c="${pub ? 'mode-invite' : 'mode-public'}">${pub ? 'Return to invite-only' : 'Enable public registration…'}</button></div></div>
+      <div class="step small"><b>Invite a device</b>
+        <div class="row"><input id="invLabel" placeholder="Name (e.g. Asha's phone)" maxlength="40">
+          <select id="invRole"><option value="member">Guest (no access to your data)</option><option value="owner_device">My own device (my chats, memories, documents)</option></select>
+          <select id="invHours"><option value="24">valid 1 day</option><option value="72" selected>valid 3 days</option><option value="168">valid 7 days</option></select>
+          <button class="btn btn-primary btn-sm" data-c="invite">Create invitation</button></div>
+        <div id="invResult"></div></div>
+      <div class="small"><b>Devices (${devices.length})</b>${devices.map((m) => `
+        <div class="list-item"><div class="text">${esc(m.name)} <span class="muted">· ${ROLE_LABEL[m.role] || esc(m.role)}${m.origin === 'legacy' ? ' · paired before 2.0.0-dev.6' : ''}</span>
+          <div class="meta">added ${fmtTime(m.created_at)} · last seen ${fmtTime(m.last_seen_at)}${m.expires_at ? ` · expires ${fmtTime(m.expires_at)}` : ''}</div></div>
+          <div class="actions"><button class="mini-btn" data-c="rev-member" data-id="${m.id}" title="Revoke this device">Revoke</button></div></div>`).join('') || '<p class="muted">No devices yet.</p>'}</div>
+      ${openInv.length ? `<div class="small"><b>Open invitations (${openInv.length})</b>${openInv.map((i) => `
+        <div class="list-item"><div class="text">${esc(i.label || 'Invitation')} <span class="muted">· ${ROLE_LABEL[i.role]}</span><div class="meta">expires ${fmtTime(i.expires_at)}</div></div>
+          <div class="actions"><button class="mini-btn" data-c="rev-inv" data-id="${i.id}">Cancel</button></div></div>`).join('')}</div>` : ''}
+      <div class="row">
+        <button class="btn btn-ghost btn-sm" data-c="${a.lan_access ? 'lan-off' : 'lan-on'}">${a.lan_access ? 'Stop local-network access' : 'Allow local-network access (HTTP)…'}</button>
+        <button class="btn btn-ghost btn-sm danger" data-c="off">Turn off (revokes all devices)</button></div>`;
   } catch (e) { box.innerHTML = `<p class="muted small">${esc(e.message)}</p>`; }
 }
 
-async function companionAction(a) {
+async function companionAction(a, el) {
   try {
-    if (a === 'off') { await api('/companion/disable', { method: 'POST' }); return renderCompanion(); }
+    if (a === 'off') {
+      if (!confirm('Turn off companion access?\n\nEvery paired device and open invitation is revoked. Your chats, memories and documents are not affected.')) return;
+      await api('/companion/disable', { method: 'POST' }); return renderCompanion();
+    }
+    if (a === 'mode-public') {
+      if (!confirm('Enable PUBLIC registration?\n\nAnyone who can reach this computer (for example through your Tailscale network or local network) can register a device WITHOUT an invitation.\n\nThey join as GUESTS only: news, interview questions, quizzes and a guest chat. Guests never see your chats, memories or documents, and can never change settings.\n\nThis is not a hosted website: it only affects people who can already reach this computer.\n\nYou can return to invite-only at any time; existing guest devices stay until you revoke them.')) return;
+      await api('/companion/registration-mode', { method: 'POST', body: { mode: 'public', confirm: true } }); return renderCompanion();
+    }
+    if (a === 'mode-invite') { await api('/companion/registration-mode', { method: 'POST', body: { mode: 'invite_only' } }); toast('Registration is invite-only again'); return renderCompanion(); }
+    if (a === 'lan-on') {
+      if (!confirm('Allow access from your local network?\n\nAfter a restart, Abhify.AI listens on ALL network connections of this computer (plain HTTP, not encrypted). Anyone on the same network can reach it; paired-device checks still apply.\n\nTailscale does NOT need this. Use it only on a trusted home network.')) return;
+      await api('/companion/lan-access', { method: 'POST', body: { enabled: true, confirm: true } }); toast('Restart Abhify.AI to apply'); return renderCompanion();
+    }
+    if (a === 'lan-off') { await api('/companion/lan-access', { method: 'POST', body: { enabled: false } }); toast('Restart Abhify.AI to apply'); return renderCompanion(); }
+    if (a === 'rev-member') {
+      if (!confirm('Revoke this device? It loses access immediately.')) return;
+      await api(`/companion/members/${el.dataset.id}/revoke`, { method: 'POST' }); return renderCompanion();
+    }
+    if (a === 'rev-inv') { await api(`/companion/invitations/${el.dataset.id}/revoke`, { method: 'POST' }); return renderCompanion(); }
+    if (a === 'invite') {
+      const r = await api('/companion/invitations', { method: 'POST', body: { label: $('#invLabel').value.trim(), role: $('#invRole').value, hours: +$('#invHours').value } });
+      const lan = (r.lan_urls || [])[0];
+      $('#invResult').innerHTML = `<p class="small"><b>Invitation code (shown once, single use, expires ${fmtTime(r.expires_at)}):</b><br><code class="break">${esc(r.code)}</code></p>
+        <p class="small">On the phone, open <code class="break">https://&lt;your-pc&gt;.&lt;tailnet&gt;.ts.net/#invite=${esc(r.code)}</code> (after <code>${esc(r.tailscale_command)}</code>)${lan ? `, or on your local network <code class="break">${esc(lan)}/#invite=${esc(r.code)}</code>` : ''}. Send it privately.</p>`;
+      return;
+    }
     if (a === 'on' && !confirm('Turn on companion access?\n\nYour phone will be able to use Abhify.AI through this computer with an access token. Admin actions (backups, moving data, model downloads) stay limited to this computer. Never forward this port to the internet; use your home network or a private tunnel such as Tailscale.')) return;
     const r = await api('/companion/enable', { method: 'POST' });
-    const link = `${r.lan_urls[0] || 'http://<this-computer>:8000'}/#pair=${r.token}`;
+    const link = `${r.lan_urls[0] || 'https://<your-pc>.<tailnet>.ts.net'}/#pair=${r.token}`;   // real port: see the Tailscale command
     $('#companionBox').innerHTML = `
       <div class="step small">
         <b>Your access token (shown once):</b><br><code class="break">${esc(r.token)}</code><br><br>
@@ -1188,6 +1247,34 @@ async function companionAction(a) {
       </div>
       <div class="row"><button class="btn btn-ghost btn-sm" data-c="done">I've saved it</button></div>`;
   } catch (e) { toast(adminError(e)); }
+}
+
+/** Invitation link: https://pc-address/#invite=<code>. The code is redeemed ONCE for this device's own
+ *  credential; the code is removed from the address bar immediately. */
+async function readInviteLink() {
+  const m = location.hash.match(/invite=([A-Za-z0-9_\-]{16,64})/);
+  if (!m) return false;
+  history.replaceState(null, '', location.pathname + location.search);
+  await state.ready;
+  const guess = /iphone/i.test(navigator.userAgent) ? 'iPhone' : /ipad/i.test(navigator.userAgent) ? 'iPad' : /android/i.test(navigator.userAgent) ? 'Android phone' : 'Browser';
+  const name = (prompt('Name this device (shown to the computer\'s owner):', guess) || guess).slice(0, 40);
+  try {
+    const r = await api('/companion/redeem', { method: 'POST', body: { code: m[1], device_name: name } });
+    store.set(LS.token, r.token);
+    await checkConnection();
+    toast(r.role === 'member' ? '✅ Joined as a guest' : '✅ Paired with your computer');
+  } catch (e) { toast(`❌ ${e.message}`); }
+  return true;
+}
+
+async function joinAsGuest() {
+  const guess = /iphone/i.test(navigator.userAgent) ? 'iPhone' : /android/i.test(navigator.userAgent) ? 'Android phone' : 'Browser';
+  try {
+    const r = await api('/companion/register', { method: 'POST', body: { device_name: guess } });
+    store.set(LS.token, r.token);
+    await checkConnection();
+    toast('✅ Joined as a guest');
+  } catch (e) { toast(`❌ ${e.message}`); }
 }
 
 /** Phone pairing: https://pc-address/#pair=<token> stores the token and removes it from the URL.
@@ -1231,7 +1318,7 @@ function bindM2Events() {
   $('#kFilter').addEventListener('change', (e) => { knowledgeUI.filter = e.target.value; refreshKnowledge(); });
   $('#companionBox').addEventListener('click', (e) => {
     const el = e.target.closest('[data-c]'); if (!el) return;
-    if (el.dataset.c === 'done') renderCompanion(); else companionAction(el.dataset.c === 'new' ? 'on' : el.dataset.c);
+    if (el.dataset.c === 'done') renderCompanion(); else companionAction(el.dataset.c === 'new' ? 'on' : el.dataset.c, el);
   });
   $('#openSystem').addEventListener('click', renderCompanion);
   $('#checkUpdates').addEventListener('click', checkUpdates);

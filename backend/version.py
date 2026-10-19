@@ -11,7 +11,7 @@ a code release does not always change the schema.
 """
 APP_NAME = "Abhify.AI"
 APP_ID = "AbhifyAI"            # used for the per-user data directory name
-__version__ = "2.0.0-dev.5"
+__version__ = "2.0.0-dev.6"
 
 # Oldest application version whose user data this release can upgrade in place.
 MIN_UPGRADABLE_VERSION = "1.0.0"

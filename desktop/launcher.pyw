@@ -116,8 +116,11 @@ def remember_port(port: int) -> None:
 
 
 def bind_host() -> str:
+    """127.0.0.1 unless the owner explicitly allowed local-network access (dev.6). Tailscale Serve
+    forwards to 127.0.0.1, so phones over Tailscale work without listening on every network."""
     try:
-        return "0.0.0.0" if lfs.load_settings()["companion"].get("enabled") else "127.0.0.1"
+        comp = lfs.load_settings()["companion"]
+        return "0.0.0.0" if comp.get("enabled") and comp.get("lan_access") else "127.0.0.1"
     except Exception:
         return "127.0.0.1"
 

@@ -25,11 +25,17 @@ def launcher(data_root):
 
 
 # --------------------------------------------------------------------------- launcher
-def test_launcher_binds_localhost_unless_companion_enabled(launcher):
+def test_launcher_binds_localhost_unless_lan_access_is_allowed(launcher):
+    """dev.6: companion access alone keeps 127.0.0.1 (Tailscale Serve forwards there); listening on
+    every interface needs the owner's explicit 'local network access' opt-in."""
     import local_file_service as lfs
     assert launcher.bind_host() == "127.0.0.1"
     lfs.update_settings(companion={"enabled": True})
+    assert launcher.bind_host() == "127.0.0.1"
+    lfs.update_settings(companion={"lan_access": True})
     assert launcher.bind_host() == "0.0.0.0"
+    lfs.update_settings(companion={"enabled": False})
+    assert launcher.bind_host() == "127.0.0.1"                     # off means off
 
 
 def test_launcher_picks_next_free_port(launcher):

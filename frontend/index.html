@@ -93,7 +93,7 @@
           <button class="link-btn kb-link" id="kbInfo" title="Open your knowledge folder settings">📚 –</button>
           <span class="row-tight">
             <button class="chip" id="newChat" title="Start a new conversation">＋ New</button>
-            <label class="chip" for="kbFile" title="Add a PDF, .txt or .md file to your knowledge base">📎 Add file</label>
+            <label class="chip personal" for="kbFile" title="Add a PDF, .txt or .md file to your knowledge base">📎 Add file</label>
           </span>
           <input type="file" id="kbFile" accept=".pdf,.txt,.md" hidden>
         </div>
@@ -139,9 +139,9 @@
     <div class="sheet glass" role="dialog" aria-label="Settings">
       <h2>Settings</h2>
       <div class="row">
-        <button class="btn btn-ghost" id="openMemory">🧠 Memory &amp; history</button>
+        <button class="btn btn-ghost personal" id="openMemory">🧠 Memory &amp; history</button>
         <button class="btn btn-ghost" id="openSystem">🖥️ System &amp; data</button>
-        <button class="btn btn-ghost" id="openKnowledge">📚 Knowledge folder</button>
+        <button class="btn btn-ghost personal" id="openKnowledge">📚 Knowledge folder</button>
       </div>
       <label class="field">Your name
         <input id="setName" maxlength="24" autocomplete="nickname">

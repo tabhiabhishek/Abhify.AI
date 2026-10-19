@@ -1,5 +1,21 @@
 # Mobile companion access: acceptance test
 
+## dev.6 membership checks (add to every real-device run)
+Status: **NOT TESTED** on real devices. The server and PWA logic are covered by automated tests (`test_membership*.py`, `test_pwa_behaviour.py`). Setup: `MOBILE_SETUP.md`.
+
+| # | Step (Android Chrome and iPhone Safari, over Tailscale HTTPS) | Expected | Android | iPhone |
+|---|---|---|---|---|
+| M1 | Open the PC's ts.net address **without** an invitation (invite-only mode) | "Not paired"; **no** Join button; any API call → refused | NOT TESTED | NOT TESTED |
+| M2 | Open a **guest** invitation link | Asks for a device name; "Joined as a guest"; the code disappears from the address bar; the device appears on the PC as *Guest* | NOT TESTED | NOT TESTED |
+| M3 | As a guest: Chat tab, News, Quiz | Guest chat answers; status "(guest)"; no 📎 Add file, Memory or Knowledge buttons | NOT TESTED | NOT TESTED |
+| M4 | Open the same invitation link again on another phone | "This invitation isn't valid" | NOT TESTED | NOT TESTED |
+| M5 | Open a **My own device** invitation on your phone | "Paired"; your chats, memories and documents are visible; admin actions say "only on the computer" | NOT TESTED | NOT TESTED |
+| M6 | On the PC, revoke the phone | Within 30 s (or on returning to the app): "access token rejected" | NOT TESTED | NOT TESTED |
+| M7 | On the PC, enable public registration (confirm the warning); on an unpaired phone tap **Join as guest** | Joins as a guest; never as your device | NOT TESTED | NOT TESTED |
+| M8 | Return to invite-only; open the address on another unpaired phone | No Join button; the earlier guest still works until revoked | NOT TESTED | NOT TESTED |
+| M9 | Add to Home Screen, then open from the icon | Standalone window, correct icon and name; pairing kept (Android); on iPhone, pair inside the installed app | NOT TESTED | NOT TESTED |
+| M10 | Turn Wi-Fi/Tailscale off, then on | "Connection … lost · retrying", then back to ready without re-pairing | NOT TESTED | NOT TESTED |
+
 ## Status at the dev.5 gate (2026-10-19): **Android NOT TESTED · iPhone NOT TESTED**
 No devices available; see `FINAL_ACCEPTANCE_DEV5.md` §4. On the development PC the app uses port **18000** (8000 is reserved by Windows there), so use `tailscale serve --bg 18000` when testing against it.
 

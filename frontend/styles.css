@@ -118,6 +118,7 @@ a { color: var(--violet-2); }
 .dot.on { background: var(--green); box-shadow: 0 0 8px var(--green); }
 .dot.off { background: var(--red); }
 .dot.warn { background: var(--amber); }
+body.guest .personal { display: none !important; }   /* guest devices: cosmetic only, the server enforces */
 
 /* ---------- shared controls ---------- */
 .btn {

@@ -81,8 +81,8 @@ def test_every_route_is_allowlisted_or_local_only(app_client, token):
     import main
     p = phone()
     for r in main.app.routes:
-        if not hasattr(r, "methods") or r.path in companion.OPEN_API:
-            continue
+        if not hasattr(r, "methods") or r.path in companion.OPEN_API or r.path in companion.PAIRING_ROUTES:
+            continue                       # open by design (pairing routes are rate-limited; see test_membership_api)
         path = re.sub(r"\{[^}]+\}", "1", r.path)
         for method in r.methods - {"HEAD", "OPTIONS"}:
             resp = p.request(method, path, headers=bearer(token))
@@ -140,7 +140,11 @@ def test_error_details_are_redacted():
 
 
 def test_token_hash_never_returned_locally_either(app_client, token):
-    for path in ["/system/diagnostics", "/companion", "/health"]:
+    import database as db
+    with db.connect() as c:                       # dev.6: device hashes live in the members table
+        hashes = [r[0] for r in c.execute("SELECT token_sha256 FROM members")]
+    assert hashes
+    for path in ["/system/diagnostics", "/companion", "/health", "/companion/admin", "/companion/members"]:
         body = app_client.get(path).text
-        assert lfs.load_settings()["companion"]["token_sha256"] not in body, path
-        assert "token_sha256" not in body, path
+        assert not any(h in body for h in hashes), path
+        assert "token_sha256" not in body and "code_sha256" not in body, path

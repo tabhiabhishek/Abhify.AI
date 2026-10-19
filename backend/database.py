@@ -153,6 +153,37 @@ MIGRATIONS: list[tuple[str, str]] = [
         CREATE INDEX idx_documents_hash ON documents(sha256);
         CREATE INDEX idx_documents_status ON documents(source, status);
     """),
+    # v5 (2.0.0-dev.6): companion membership. Additive only: no existing table is changed.
+    # Each paired phone/device is a member with its own revocable credential (only a SHA-256 hash is
+    # stored); invitations are single-use codes (hash only) with an expiry. See membership.py.
+    ("v5 companion members and invitations", """
+        CREATE TABLE members (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            name          TEXT NOT NULL,
+            role          TEXT NOT NULL CHECK (role IN ('owner_device', 'member')),
+            token_sha256  TEXT NOT NULL UNIQUE,
+            created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+            last_seen_at  TEXT,
+            expires_at    TEXT,                      -- NULL = no expiry
+            revoked_at    TEXT,
+            origin        TEXT NOT NULL DEFAULT 'invitation'
+                          CHECK (origin IN ('invitation', 'public', 'legacy', 'owner')),
+            invitation_id INTEGER
+        );
+        CREATE TABLE invitations (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            code_sha256   TEXT NOT NULL UNIQUE,
+            label         TEXT NOT NULL DEFAULT '',
+            role          TEXT NOT NULL CHECK (role IN ('owner_device', 'member')),
+            device_days   INTEGER NOT NULL DEFAULT 0,  -- credential lifetime after redemption; 0 = no expiry
+            created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+            expires_at    TEXT NOT NULL,
+            used_at       TEXT,
+            member_id     INTEGER REFERENCES members(id),
+            revoked_at    TEXT
+        );
+        CREATE INDEX idx_members_active ON members(revoked_at, role);
+    """),
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)

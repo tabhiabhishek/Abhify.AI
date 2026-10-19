@@ -3,6 +3,38 @@
 All notable changes to Abhify.AI. Format: [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 The database schema version is listed separately, because not every release changes it.
 
+## [2.0.0-dev.6]: invite-only device membership, unreleased (branch `feature/m2-knowledge-packaging`, not built)
+
+Database schema: **v5** (additive: `members` and `invitations` tables; v4 databases upgrade automatically with a backup taken first). No installer has been built for this version; the latest installer is still 2.0.0-dev.5. Details: `docs/MEMBERSHIP_AND_REGISTRATION.md`.
+
+### Added
+- **Per-device membership.** Every paired phone has its own revocable credential (only a SHA-256 hash is stored); "last seen" and expiry are tracked.
+- **Invitations:** single-use, 128-bit, hashed, expiring (1 h to 30 days), created on the PC only, with rate-limited redemption (per client and global) and the same vague error for every failure.
+- **Roles:**
+  - *Your device*: the owner's phones, with the same access as before.
+  - *Guest*: someone else's phone. News, interview questions, quizzes, transcription, and a guest chat with no access to the owner's memories, documents or history; nothing is saved.
+  - Neither role can use admin actions.
+- **Registration modes:** `invite_only` (the default, and the fallback for any invalid value) and `public` (anyone who can reach this PC can join as a *guest*).
+  - Switching to `public` only works on the PC, after a confirmation warning; one click returns to invite-only.
+  - Switching never deletes devices or data.
+- **Owner panel** in Settings → System & data → Companion access: mode, devices, invitations, revoke, the actual port, and the Tailscale command.
+- **Phone:**
+  - `#invite=<code>` links are redeemed once and removed from the address bar.
+  - "Join as guest" appears only in public mode.
+  - Guest devices see an honest status, and personal controls are hidden (the server enforces this).
+
+### Changed
+- **Network binding:** with companion access on, Abhify.AI now still listens on **127.0.0.1 only** (Tailscale Serve forwards there).
+  - Listening on the whole local network (plain HTTP) is a separate opt-in with a warning.
+  - **If you used a phone over plain Wi-Fi with dev.5, turn on "Allow local-network access" and restart.**
+- The dev.5 shared token is moved automatically into the device list as "Legacy paired device", so already-paired phones keep working until revoked.
+- "Turn off companion access" revokes every device and open invitation (the rows are kept for the record).
+
+### Known limitations
+- Data is still **single-owner**: guests are kept away from the owner's data, rather than getting their own chats, memories or documents (that needs per-user isolation, a separate decision).
+- The phone keeps its device credential in browser storage (owner's decision); it's revocable, and guest credentials expire after 30 days by default.
+- Not tested on a real Android phone or iPhone.
+
 ## [2.0.0-dev.5]: hash-locked dependencies and a signing-ready pipeline, unreleased (branch `feature/m2-knowledge-packaging`)
 
 Database schema: **v4** (unchanged). **No application code changes since dev.4**: the same 118 dependency versions, now installed from a lock. Details: `docs/FINAL_ACCEPTANCE_DEV4.md`.

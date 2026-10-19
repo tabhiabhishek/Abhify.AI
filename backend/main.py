@@ -38,8 +38,13 @@ Knowledge folder (M2)
   local only: PUT /knowledge/folder, POST /knowledge/watcher/{start,stop,pause,resume},
               POST /knowledge/rescan, /knowledge/retry, /knowledge/rebuild, /knowledge/rebuild/cleanup
 
-Companion access (Mode B)
+Companion access (Mode B) and membership (dev.6, see membership.py)
   GET  /companion                 pairing status (open)      POST /companion/enable|disable (local only)
+  POST /companion/redeem          phone redeems a single-use invitation (open, rate-limited)
+  POST /companion/register        self-registration as a member, only in public mode (open, rate-limited)
+  local only: GET /companion/admin, GET/POST /companion/invitations, POST /companion/invitations/{id}/revoke,
+              GET /companion/members, POST /companion/members/{id}/revoke,
+              POST /companion/registration-mode, POST /companion/lan-access
 
 The PWA in ../frontend is served at "/".
 Run:  uvicorn main:app --host 127.0.0.1 --port 8000
@@ -67,6 +72,7 @@ import generators
 import knowledge
 import local_file_service as lfs
 import log_redaction
+import membership
 import memory_service as mem
 import system_service as system
 from agent import run_agent
@@ -89,6 +95,7 @@ def prepare_storage() -> dict:
     info["restore"] = lfs.apply_pending_restore()
     info["legacy_migration"] = lfs.migrate_legacy_data()
     info["schema"] = db.migrate()
+    info["legacy_companion_token_migrated"] = membership.migrate_legacy_token()   # dev.5 -> dev.6
     info["purged_conversations"] = mem.purge_expired_history()
     _add_file_log()
     return info
@@ -269,9 +276,11 @@ async def health(request: Request):
 
 # --------------------------------------------------------------------------- chat
 @app.post("/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, request: Request):
+    guest = companion.role_of(request) == "member"           # members never touch the owner's data
     try:
-        result = await run_agent(req.message.strip(), req.thread_id)
+        result = await (run_agent(req.message.strip(), None, guest=True) if guest
+                        else run_agent(req.message.strip(), req.thread_id))
     except Exception as e:
         raise _unavailable(e)
     return {**result, "thread_id": result["conversation_id"]}
@@ -330,7 +339,9 @@ async def transcribe_audio(file: UploadFile = File(...), language: str | None = 
 
 
 @app.post("/voice")
-async def voice(file: UploadFile = File(...), thread_id: str | None = Form(None), language: str | None = Form(None)):
+async def voice(request: Request, file: UploadFile = File(...), thread_id: str | None = Form(None),
+                language: str | None = Form(None)):
+    guest = companion.role_of(request) == "member"
     from transcribe import transcribe
     audio = await _read_audio(file)
     try:
@@ -340,7 +351,7 @@ async def voice(file: UploadFile = File(...), thread_id: str | None = Form(None)
     if not tr["text"]:
         return {"transcript": "", "answer": "I didn't catch that. Please try again.", "thread_id": thread_id}
     try:
-        result = await run_agent(tr["text"], thread_id)
+        result = await (run_agent(tr["text"], None, guest=True) if guest else run_agent(tr["text"], thread_id))
     except Exception as e:
         raise _unavailable(e)
     return {"transcript": tr["text"], "thread_id": result["conversation_id"], **result}
@@ -670,6 +681,124 @@ async def move_data(loc: LocationIn):
 @app.get("/companion")
 def companion_status(request: Request):
     return companion.status(request)
+
+
+class RedeemIn(BaseModel):
+    code: str = Field(..., min_length=1, max_length=128)
+    device_name: str = Field("Phone", max_length=60)
+
+
+class RegisterIn(BaseModel):
+    device_name: str = Field("Phone", max_length=60)
+
+
+class InvitationIn(BaseModel):
+    label: str = Field("", max_length=60)
+    role: Literal["owner_device", "member"] = "member"
+    hours: int = Field(72, ge=1, le=720)
+    device_days: int | None = Field(None, ge=0, le=3650)
+
+
+class ModeIn(BaseModel):
+    mode: Literal["invite_only", "public"]
+    confirm: bool = False
+
+
+class LanIn(BaseModel):
+    enabled: bool
+    confirm: bool = False
+
+
+def _client_key(request: Request) -> str:
+    """Rate-limit key. Forwarded-for is only a hint (spoofable); the global limit backs it up."""
+    fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    return f"{request.client.host if request.client else '?'}|{fwd}"
+
+
+def _pairing_error(e: membership.MembershipError) -> HTTPException:
+    if isinstance(e, membership.RateLimited):
+        return HTTPException(429, str(e), headers={"Retry-After": str(e.retry_after)})
+    return HTTPException(400, str(e))
+
+
+@app.post("/companion/redeem")
+def companion_redeem(r: RedeemIn, request: Request):
+    """A phone turns a single-use invitation into its own device credential (returned once)."""
+    try:
+        return membership.redeem(r.code, r.device_name, _client_key(request))
+    except membership.MembershipError as e:
+        raise _pairing_error(e)
+
+
+@app.post("/companion/register")
+def companion_register(r: RegisterIn, request: Request):
+    """Public mode only: register this device as a restricted member."""
+    try:
+        return membership.register_public(r.device_name, _client_key(request))
+    except membership.MembershipError as e:
+        raise _pairing_error(e)
+
+
+@app.get("/companion/admin", dependencies=[Depends(local_only)])
+def companion_admin():
+    """Everything the owner's membership screen shows. No secrets, no hashes."""
+    cfg = lfs.load_settings()["companion"]
+    return {"enabled": bool(cfg.get("enabled")), "registration_mode": membership.get_mode(),
+            **companion.connection_info(), "members": membership.list_members(),
+            "invitations": membership.list_invitations()}
+
+
+@app.get("/companion/invitations", dependencies=[Depends(local_only)])
+def list_invitations():
+    return {"invitations": membership.list_invitations()}
+
+
+@app.post("/companion/invitations", dependencies=[Depends(local_only)])
+def create_invitation(inv: InvitationIn):
+    if not lfs.load_settings()["companion"].get("enabled"):
+        raise HTTPException(409, "Turn on companion access first")
+    try:
+        out = membership.create_invitation(inv.label, inv.role, inv.hours, inv.device_days)
+    except membership.MembershipError as e:
+        raise HTTPException(400, str(e))
+    return {**out, **companion.connection_info()}
+
+
+@app.post("/companion/invitations/{inv_id}/revoke", dependencies=[Depends(local_only)])
+def revoke_invitation(inv_id: int):
+    if not membership.revoke_invitation(inv_id):
+        raise HTTPException(404, "No open invitation with that id")
+    return {"revoked": inv_id}
+
+
+@app.get("/companion/members", dependencies=[Depends(local_only)])
+def list_members():
+    return {"members": membership.list_members()}
+
+
+@app.post("/companion/members/{member_id}/revoke", dependencies=[Depends(local_only)])
+def revoke_member(member_id: int):
+    if not membership.revoke_member(member_id):
+        raise HTTPException(404, "No active device with that id")
+    return {"revoked": member_id}
+
+
+@app.post("/companion/registration-mode", dependencies=[Depends(local_only)])
+def set_registration_mode(m: ModeIn):
+    try:
+        return membership.set_mode(m.mode, m.confirm)
+    except membership.MembershipError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/companion/lan-access", dependencies=[Depends(local_only)])
+def set_lan_access(l: LanIn):
+    """Listen on all network interfaces (plain Wi-Fi HTTP) after the next restart. Off by default:
+    Tailscale Serve only needs 127.0.0.1."""
+    if l.enabled and not l.confirm:
+        raise HTTPException(400, "Allowing local-network access needs explicit confirmation (confirm=true).")
+    lfs.update_settings(companion={"lan_access": l.enabled})
+    return {"lan_access": l.enabled, "restart_required": l.enabled != companion.listening_on_lan()}
 
 
 @app.post("/companion/enable", dependencies=[Depends(local_only)])

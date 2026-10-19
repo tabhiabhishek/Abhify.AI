@@ -77,3 +77,19 @@ def test_app_js_wires_hashchange_and_storage_events():
     assert re.search(r"addEventListener\('storage',[^\n]*LS\.token", js)
     assert "headers: authHeaders()" in js                                  # /health carries the token
     assert "AI ready · via your computer" not in js                         # the old misleading text is gone
+
+
+def test_guest_and_join_states(r):
+    """dev.6 membership: guests see an honest guest status; an unpaired phone is offered 'Join' only
+    when the PC is in public mode."""
+    assert r["member_ready"][0] == "AI ready · runs on the owner's computer (guest)" and r["member_ready"][1] == "on"
+    assert "data-join" in r["public_join"][2] and r["public_join"][0] == "Not paired"
+    assert "data-join" not in r["invite_only_unpaired"][2] and "invitation" in r["invite_only_unpaired"][2]
+
+
+def test_invitation_links_are_redeemed_and_removed_from_the_address_bar():
+    js = APP_JS.read_text(encoding="utf-8")
+    fn = js[js.index("async function readInviteLink"):js.index("async function joinAsGuest")]
+    assert fn.index("history.replaceState") < fn.index("/companion/redeem")    # code leaves the URL first
+    assert "store.set(LS.token, r.token)" in fn and "m[1]" in fn
+    assert re.search(r"addEventListener\('hashchange'.*readInviteLink", js)

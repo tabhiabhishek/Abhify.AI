@@ -159,7 +159,9 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "previous_collections": [],     # kept after a rebuild until the user cleans them up
         "max_file_mb": 20,
     },
-    "companion": {"enabled": False, "token_sha256": None, "created_at": None},
+    "companion": {"enabled": False, "token_sha256": None, "created_at": None,
+                  "registration_mode": "invite_only",   # invite_only | public (see membership.py)
+                  "lan_access": False},                 # listen on all interfaces (plain Wi-Fi HTTP); off = 127.0.0.1
     "updates": {"manifest_url": None, "check_on_start": False},
 }
 

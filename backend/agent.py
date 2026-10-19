@@ -148,6 +148,14 @@ def web_search(query: str) -> str:
 
 
 TOOLS = [knowledge_base_search, search_memory, save_memory, web_search]
+# Guest chat (member devices, see membership.py): no tool that can read or write the owner's
+# documents or memories, no history, no personal context.
+GUEST_TOOLS = [web_search]
+GUEST_PROMPT = """You are Abhify.AI, a friendly AI/ML learning companion and interview coach running on someone's
+own computer. You are talking to a GUEST: you have no access to anyone's personal notes, documents, memories or
+chat history, and nothing from this chat is saved. If asked about personal documents or memories, say that
+guests can't access them. Use `web_search` only for recent or time-sensitive questions (if it reports the computer
+is offline, say so). Be concise and clear, use Markdown."""
 
 
 # --------------------------------------------------------------------------- graph
@@ -160,13 +168,32 @@ def get_llm(temperature: float | None = None, json_mode: bool = False) -> ChatOl
 
 
 @lru_cache
-def get_agent():
+def get_agent(guest: bool = False):
     """Build the ReAct agent once (history comes from SQLite, so no checkpointer)."""
-    return create_react_agent(model=get_llm(), tools=TOOLS)
+    return create_react_agent(model=get_llm(), tools=GUEST_TOOLS if guest else TOOLS)
 
 
-async def run_agent(message: str, conversation_id: str | None) -> dict:
+async def run_guest(message: str) -> dict:
+    """One stateless turn for a member (guest) device: no owner data in, nothing saved."""
+    inputs = {"messages": [SystemMessage(GUEST_PROMPT), HumanMessage(message)]}
+    result = await get_agent(True).ainvoke(inputs, config={"recursion_limit": 8})
+    new_msgs = result["messages"][len(inputs["messages"]):]
+    tools_used, sources = [], []
+    for m in new_msgs:
+        if isinstance(m, AIMessage):
+            tools_used += [tc["name"] for tc in (m.tool_calls or [])]
+        if isinstance(m, ToolMessage):
+            sources += [line[8:].strip() for line in str(m.content).splitlines() if line.startswith("Source: ")]
+    answer = next((m.content for m in reversed(new_msgs) if isinstance(m, AIMessage) and m.content), "") \
+        or "Sorry, I couldn't produce an answer."
+    return {"answer": answer, "conversation_id": None, "tools_used": list(dict.fromkeys(tools_used)),
+            "sources": list(dict.fromkeys(sources))[:6], "guest": True}
+
+
+async def run_agent(message: str, conversation_id: str | None, guest: bool = False) -> dict:
     """Run one user turn. Returns {answer, conversation_id, tools_used, sources}."""
+    if guest:
+        return await run_guest(message)
     prefs = db.get_prefs()
     cid = mem.ensure_conversation(conversation_id, message)
     history = []

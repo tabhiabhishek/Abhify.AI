@@ -1,5 +1,18 @@
 # Acceptance test on a second physical Windows PC
 
+## Status at the dev.4/dev.5 gate (2026-10-19): **BLOCKED, no second physical PC**
+- **Use 2.0.0-dev.5:**
+  - installer `dist\windows.0.0-dev.5\Abhify.AI-Setup-2.0.0-dev.5.exe`
+  - SHA-256 `612750ed34c39fb9697d82bcfe3f0f81b343397cf8a3cd86f38bc55cce72f2f2`
+  - unsigned
+- No physical step has been performed. See `FINAL_ACCEPTANCE_DEV4.md` §3.
+- For step 12 (upgrade), install dev.4 first, then dev.5. In Windows Sandbox this passed 34/34.
+- **Also record:**
+  - the GPU model and driver
+  - `ollama ps` during a chat (whether the model is on GPU or CPU)
+  - Task Manager → GPU while answering
+  - the port in the tray tooltip
+
 ## Status after the final acceptance gate (2026-10-16): **still NOT EXECUTED**
 - No second physical PC was available, so every physical step is still **NOT TESTED**. See `FINAL_ACCEPTANCE_DEV3.md` §4.
 - **Use 2.0.0-dev.4 for this test, not dev.3:**

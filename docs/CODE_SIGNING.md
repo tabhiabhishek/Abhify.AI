@@ -4,6 +4,52 @@
 
 This document is a proposal. It needs your approval before any purchase, key creation or release change.
 
+## Readiness status (2026-10-19, 2.0.0-dev.5)
+
+| Step (§8) | Status |
+|---|---|
+| 1. Choose the identity type and provider | ⏳ **Your decision.** Nothing bought, no account created |
+| 2. Identity validation | ⏳ Your decision (you share identity documents with the provider) |
+| 3. Signing in the build | ✅ **Implemented, disabled by default** (`931969d` + the `/pa` fix below) |
+| 4. Pipeline lab test with a throw-away certificate | ✅ **PASS 10/10** in Windows Sandbox (details below) |
+| 5. CI release workflow (OIDC) | ⏳ Needs the GitHub repository; not started |
+| 6. First signed prerelease | ⏳ Needs a certificate and your approval |
+
+**What exists now:**
+- `packaging\windows\sign.ps1`: signs one file, then verifies it.
+  - Modes: `Store` (certificate in the Windows store, for example a hardware token or cloud HSM, by thumbprint) or `TrustedSigning` (Azure Trusted Signing `dlib` + `metadata.json`).
+  - It always timestamps (RFC 3161), then checks: `signtool verify /pa` (exit 0), `Get-AuthenticodeSignature` = Valid, the signer contains the expected publisher (`ABHIFY_SIGN_SUBJECT`), and a timestamp is present. Any failure gives exit code 1.
+  - All settings come from `ABHIFY_SIGN_*` environment variables. **No key, certificate, password or account ID is in the repo.**
+- `py -3.11 packaging\windows\build.py --sign`:
+  - NSIS calls `sign.ps1` for `Uninstall.exe` (`!uninstfinalize`) and then for the installer (`!finalize`); `= 0` stops the build if signing fails.
+  - `build.py` then checks `Valid` and **only then** writes `SHA256SUMS.txt` / `latest.json.template`, computed on the **signed** file. If the check fails, it deletes the output.
+  - The hook wiring was confirmed with a dummy command: NSIS called it for the temporary `Uninstall.exe` and then for the installer.
+
+**Lab test** (`packaging\windows\sandbox\run-sandbox-signlab.ps1`; throw-away self-signed certificate created **inside** the Sandbox, private key non-exportable, valid 1 day, trusted only inside the VM):
+
+| Check | Result |
+|---|---|
+| Input is an exact copy of the dev.4 installer, unsigned | PASS |
+| Misconfiguration (`ABHIFY_SIGN_MODE=Nonsense`) refused before signing | PASS |
+| Sign + RFC 3161 timestamp (DigiCert) + verify | PASS: Valid, timestamped |
+| SHA-256 changes after signing; the checksum file matches the signed file | PASS |
+| Wrong expected publisher refused | PASS |
+| Tampering detected | PASS: untampered verify exit 0; tampered `HashMismatch`, verify exit 1 |
+| Signed installer still installs and runs | PASS |
+| Host untouched | PASS: 0 lab certificates in the host's stores; no signed copy left the VM; dev.4 still `NotSigned` |
+
+The lab test found one bug in `sign.ps1`: a "lab mode" verified **without** `/pa`, so signtool applied the Windows *driver* policy, which normal programs never pass. Verification now always uses `/pa`, and there is no lab shortcut any more. Not tested in the lab: the `build.py --sign` run end to end with a real certificate (that needs a certificate on the build machine), and Azure Trusted Signing mode.
+
+### Certificate requirements (checklist for step 1)
+- [ ] Code-signing (not TLS) certificate, **SHA-256**, RSA ≥ 3072 or ECC P-256. The key is in a **FIPS 140-2 Level 2+ HSM or token**, which has been mandatory for publicly trusted code signing since June 2023. Azure Trusted Signing meets this automatically.
+- [ ] Validated **publisher name**: the name Windows shows. It becomes `ABHIFY_SIGN_SUBJECT`.
+- [ ] RFC 3161 timestamp URL from the provider.
+- [ ] A named person who may sign (MFA on the account), plus a recovery method.
+- [ ] Renewal date in the release checklist (§7).
+
+### Release order once a certificate exists
+`build.py --sign` (signs `Uninstall.exe` and the installer, verifies, then checksums) → `signtool verify /pa /v` once more by hand → Windows Sandbox clean + upgrade tests **with the signed build** → Defender scan → draft release → your approval → publish → download the published asset again and compare its SHA-256 with `SHA256SUMS.txt`.
+
 ## 1. What signing does (and doesn't)
 
 | | What it gives you | What it doesn't |

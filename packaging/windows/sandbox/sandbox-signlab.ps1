@@ -34,7 +34,7 @@ foreach ($storeName in "Root", "TrustedPublisher") {
 Step "lab_certificate_created" ($null -ne $cert) "thumbprint $($cert.Thumbprint), created with KeyExportPolicy NonExportable, valid 1 day"
 
 $env:ABHIFY_SIGN_MODE = "Store"; $env:ABHIFY_SIGN_THUMBPRINT = $cert.Thumbprint
-$env:ABHIFY_SIGNTOOL = "C:\abhify\signtool\signtool.exe"; $env:ABHIFY_SIGN_LAB = "1"
+$env:ABHIFY_SIGNTOOL = "C:\abhify\signtool\signtool.exe"
 
 # 1. misconfiguration is refused before anything is signed
 $env:ABHIFY_SIGN_MODE = "Nonsense"
@@ -61,8 +61,10 @@ Copy-Item "$work\lab.exe" "$work\tampered.exe"
 $bytes = [IO.File]::ReadAllBytes("$work\tampered.exe"); $bytes[4096] = $bytes[4096] -bxor 0xFF
 [IO.File]::WriteAllBytes("$work\tampered.exe", $bytes)
 $t = Get-AuthenticodeSignature "$work\tampered.exe"
-& C:\abhify\signtool\signtool.exe verify /v "$work\tampered.exe" *> $null
-Step "tampering_detected" (($t.Status -ne "Valid") -and ($LASTEXITCODE -ne 0)) "status=$($t.Status) signtool verify exit=$LASTEXITCODE"
+& C:\abhify\signtool\signtool.exe verify /pa "$work\lab.exe" *> $null
+$goodExit = $LASTEXITCODE                                   # control: the untampered file must verify (0)
+& C:\abhify\signtool\signtool.exe verify /pa "$work\tampered.exe" *> $null
+Step "tampering_detected" (($goodExit -eq 0) -and ($t.Status -ne "Valid") -and ($LASTEXITCODE -ne 0)) "untampered verify exit=$goodExit; tampered: status=$($t.Status) verify exit=$LASTEXITCODE"
 
 # 5. the signed installer still installs and starts
 $p = Start-Process "$work\lab.exe" -ArgumentList "/S" -PassThru; $null = $p.WaitForExit(300000)

@@ -1,5 +1,9 @@
 # Installer readiness audit: Abhify.AI 2.0.0-dev.3 (re-audit)
 
+> **Current decision record: `FINAL_ACCEPTANCE_DEV4.md` (2026-10-19).**
+> - Current build: **2.0.0-dev.5** (`612750ed…72f2f2`, hash-locked online build, unsigned, signing-ready).
+> - NO-GO until the physical-PC and phone acceptance tests are performed.
+
 > **Superseded for decisions by `FINAL_ACCEPTANCE_DEV3.md` (2026-10-16).**
 > - The final gate found D1–D4 and F7 in dev.3, fixed in **2.0.0-dev.4** (`1f0a61ca…36b9ee`, online build, unsigned).
 > - **Decision unchanged: NO-GO for merge or release** until the physical-PC and real-phone acceptance tests are done. GO for internal testing with dev.4.

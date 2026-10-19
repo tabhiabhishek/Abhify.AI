@@ -1,5 +1,9 @@
 # Mobile companion access: acceptance test
 
+## Status at the dev.4/dev.5 gate (2026-10-19): **Android NOT TESTED · iPhone NOT TESTED** (no devices)
+- Use **2.0.0-dev.5** for the device tests.
+- For each device, record: model, OS version, browser and version, Tailscale version, and the result of every row of the device table.
+
 ## Status after the final acceptance gate (2026-10-16): **real devices NOT TESTED**
 - No Android or iPhone device was available. Every device check below is still **NOT TESTED**, and no simulated or Node test is counted as device acceptance. See `FINAL_ACCEPTANCE_DEV3.md` §7.
 - Use **2.0.0-dev.4** for the device tests.

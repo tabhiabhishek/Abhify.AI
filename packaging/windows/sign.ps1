@@ -11,8 +11,8 @@
 #   ABHIFY_SIGN_TIMESTAMP   RFC 3161 timestamp URL (default: DigiCert; Trusted Signing: Microsoft)
 #   ABHIFY_SIGN_SUBJECT     expected publisher text in the signer subject (verification fails otherwise)
 #   ABHIFY_SIGNTOOL         path to signtool.exe (default: newest Windows SDK x64)
-#   ABHIFY_SIGN_LAB         1 = lab test with a throwaway self-signed cert (skips the public-trust
-#                           chain policy /pa; NEVER for anything that is distributed)
+# There is no "lab" shortcut: the lab test (sandbox-signlab.ps1) trusts its throw-away root
+# inside the VM only, so the same /pa verification runs as for a real release.
 # Exit code 0 only if the file is signed, timestamped and verifies.
 # =====================================================================
 param(
@@ -55,9 +55,9 @@ Write-Host "signing $File (unsigned sha256 $before)"
 & $Signtool @signArgs $File
 if ($LASTEXITCODE -ne 0) { Fail "signtool sign exited $LASTEXITCODE" }
 
-# ---- verify: chain policy, timestamp, publisher
-$policy = if ($env:ABHIFY_SIGN_LAB -eq "1") { @("/v") } else { @("/pa", "/v") }   # lab certs aren't publicly trusted
-& $Signtool verify @policy $File | Out-Null
+# ---- verify: chain policy, timestamp, publisher. Always /pa (the Authenticode policy): without it
+# signtool applies the Windows *driver* policy, which an ordinary program never satisfies.
+& $Signtool verify /pa /v $File | Out-Null
 if ($LASTEXITCODE -ne 0) { Fail "signtool verify exited $LASTEXITCODE" }
 $sig = Get-AuthenticodeSignature -LiteralPath $File
 if ($sig.Status -ne "Valid") { Fail "Get-AuthenticodeSignature: $($sig.Status) ($($sig.StatusMessage))" }

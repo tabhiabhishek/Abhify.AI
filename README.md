@@ -166,7 +166,7 @@ cd backend
 .venv\Scripts\python.exe -m pytest tests -q -p no:cacheprovider
 ```
 
-**Automated suite:** 219 tests. Ollama, the network and downloads are mocked, and every test uses a throw-away data folder, never your real data. They cover:
+**Automated suite:** 230 tests. Ollama, the network and downloads are mocked, and every test uses a throw-away data folder, never your real data. They cover:
 - migrations, backup/restore safety (including zip-slip and newer-version backups), data relocation, disk checks
 - memory and history; missing Ollama; local-only admin endpoints
 - the knowledge folder: indexing, edits, renames, deletes, partial writes, retries, rebuilds, exclusions

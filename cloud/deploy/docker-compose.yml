@@ -1,0 +1,41 @@
+# Abhify cloud on ONE server you own (e.g. an Oracle Cloud "Always Free" ARM VM).
+# Only Caddy is reachable from the internet (ports 80/443). The API and Ollama stay on the private network.
+#   cp .env.example .env   # fill in your domain, email and SMTP
+#   docker compose up -d
+#   docker compose exec ollama ollama pull qwen2.5:3b
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      ABHIFY_DOMAIN: ${ABHIFY_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on: [api]
+
+  api:
+    build: ..
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      ABHIFY_CLOUD_ENV: prod
+      ABHIFY_CLOUD_TRUST_PROXY: "true"
+      ABHIFY_CLOUD_OLLAMA_URL: http://ollama:11434
+    volumes:
+      - api-data:/data
+    expose: ["8100"]
+    depends_on: [ollama]
+
+  ollama:
+    image: ollama/ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    expose: ["11434"]          # private only: never "ports:"
+
+volumes:
+  caddy-data:
+  api-data:
+  ollama-models:

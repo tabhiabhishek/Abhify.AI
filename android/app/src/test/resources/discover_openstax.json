@@ -1,0 +1,60 @@
+{
+ "items": [
+  {
+   "title": "Biology 2e",
+   "book_state": "live",
+   "meta": {
+    "slug": "biology-2e"
+   }
+  },
+  {
+   "title": "Calculus Volume 1",
+   "book_state": "live",
+   "meta": {
+    "slug": "calculus-volume-1"
+   }
+  },
+  {
+   "title": "Calculus Volume 2",
+   "book_state": "live",
+   "meta": {
+    "slug": "calculus-volume-2"
+   }
+  },
+  {
+   "title": "Calculus Volume 3",
+   "book_state": "live",
+   "meta": {
+    "slug": "calculus-volume-3"
+   }
+  },
+  {
+   "title": "Introduction to Python Programming",
+   "book_state": "live",
+   "meta": {
+    "slug": "introduction-python-programming"
+   }
+  },
+  {
+   "title": "Introductory Business Statistics",
+   "book_state": "retired",
+   "meta": {
+    "slug": "introductory-business-statistics"
+   }
+  },
+  {
+   "title": "Introductory Business Statistics 2e",
+   "book_state": "live",
+   "meta": {
+    "slug": "introductory-business-statistics-2e"
+   }
+  },
+  {
+   "title": "Introductory Statistics",
+   "book_state": "retired",
+   "meta": {
+    "slug": "introductory-statistics"
+   }
+  }
+ ]
+}

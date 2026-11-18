@@ -50,7 +50,8 @@ DOWNLOADS = {
              "file": "nsis-3.10.zip",
              "sha256": "fcdce3229717a2a148e7cda0ab5bdb667f39d8fb33ede1da8dabc336bd5ad110"},
 }
-APP_ALLOW = {"backend": ["*.py", "requirements.txt"], "desktop": ["launcher.pyw"], "frontend": ["**/*"]}
+APP_ALLOW = {"backend": ["*.py", "requirements.txt", "news_sources.json"],   # 6.1: news_center.CATALOG_FILE (dev.8 package lacked it: /news/categories 500)
+              "desktop": ["launcher.pyw"], "frontend": ["**/*"]}
 DEV_ONLY = {"pip", "setuptools", "wheel", "pytest", "_pytest", "pluggy", "iniconfig", "py.py",
             "_distutils_hack", "distutils-precedence.pth"}
 # Bytecode in the package must not contain build-machine paths (F1). site-packages is copied

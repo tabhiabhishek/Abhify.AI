@@ -1,0 +1,17 @@
+{$ABHIFY_DOMAIN} {
+	encode gzip
+	# only the app's API is published; everything else is 404
+	@api path /api/v1/*
+	handle @api {
+		reverse_proxy api:8100 {
+			flush_interval -1    # stream AI tokens immediately
+		}
+	}
+	handle {
+		respond 404
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+}

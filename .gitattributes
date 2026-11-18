@@ -2,3 +2,5 @@
 *.bat text eol=crlf
 *.png binary
 *.ico binary
+*.wasm binary
+frontend/vendor/** -text

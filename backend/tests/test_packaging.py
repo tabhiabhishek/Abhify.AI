@@ -107,7 +107,9 @@ def test_package_check_rejects_user_data_and_secrets(tmp_path):
 def test_build_allowlist_excludes_dev_and_user_files():
     sys.path.insert(0, str(PKG))
     import build
-    assert build.APP_ALLOW["backend"] == ["*.py", "requirements.txt"]  # no tests/, data/, .venv, .env
+    assert build.APP_ALLOW["backend"] == ["*.py", "requirements.txt", "news_sources.json"]  # no tests/, data/, .venv, .env
+    import news_center                                                    # 6.1: the runtime data file the backend reads is packaged
+    assert news_center.CATALOG_FILE.name in build.APP_ALLOW["backend"]
     assert {"pytest", "pip"} <= build.DEV_ONLY
 
 

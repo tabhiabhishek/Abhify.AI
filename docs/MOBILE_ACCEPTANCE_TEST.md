@@ -16,6 +16,23 @@ Status: **NOT TESTED** on real devices. The server and PWA logic are covered by 
 | M9 | Add to Home Screen, then open from the icon | Standalone window, correct icon and name; pairing kept (Android); on iPhone, pair inside the installed app | NOT TESTED | NOT TESTED |
 | M10 | Turn Wi-Fi/Tailscale off, then on | "Connection … lost · retrying", then back to ready without re-pairing | NOT TESTED | NOT TESTED |
 
+## On-device AI (Abhify Lite, 2.0.0-dev.7): **Android NOT TESTED · iPhone NOT TESTED**
+Run on a real phone, loading the app over HTTPS. Record the phone model, OS and browser versions, and RAM. Details: [ON_DEVICE_AI.md](ON_DEVICE_AI.md).
+
+| # | Step | Expected | Result |
+|---|---|---|---|
+| 1 | Settings → Where the AI runs → **This device** → Save | Banner *On-device AI not set up* with the size, or *not supported here* with a reason | NOT TESTED |
+| 2 | Tap **Set up…**, then **Cancel** | Nothing downloaded (storage unchanged) | NOT TESTED |
+| 3 | **Set up…** → OK on Wi-Fi | Progress in the status bar; then *AI ready · runs on this device*. Note the time | NOT TESTED |
+| 4 | Ask "In two sentences, what is gradient descent?" | A sensible answer; note the seconds | NOT TESTED |
+| 5 | "remember that my favourite framework is PyTorch", then ask which framework you like | Saved note; the answer says PyTorch | NOT TESTED |
+| 6 | Install the app (Android ⋮ → Install app; iPhone Share → Add to Home Screen), **airplane mode**, reopen from the home screen, chat | Opens; *starts when you chat*; answers with no network | NOT TESTED |
+| 7 | Close and reopen the app (online) | Earlier on-device chat shown; no new download | NOT TESTED |
+| 8 | Settings → **Remove on-device AI model** | Confirm dialog; storage freed; *not set up* | NOT TESTED |
+| 9 | Settings → **Delete on-device chats** | Confirm dialog; chats and memories gone | NOT TESTED |
+| 10 | Settings → back to **My computer** | Normal pairing / companion statuses, unchanged | NOT TESTED |
+| 11 | Battery / heat during a 5-minute chat | Note it; no crash | NOT TESTED |
+
 ## Status at the dev.5 gate (2026-10-19): **Android NOT TESTED · iPhone NOT TESTED**
 No devices available; see `FINAL_ACCEPTANCE_DEV5.md` §4. On the development PC the app uses port **18000** (8000 is reserved by Windows there), so use `tailscale serve --bg 18000` when testing against it.
 

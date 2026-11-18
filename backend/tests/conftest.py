@@ -78,3 +78,30 @@ def kb(migrated, tmp_path, monkeypatch):
     yield folder
     FakeEmbeddings.fail_with = None
     knowledge.reset_caches()
+
+
+# --------------------------------------------------------------------------- real-time engine: never the real internet in tests
+@pytest.fixture(autouse=True)
+def _no_live_network(monkeypatch):
+    """realtime.py must never reach DuckDuckGo, Google News, Open-Meteo, Frankfurter, Brave or Tavily from pytest: every
+    test starts "offline" for the live engine, with blocked HTTP, search and news hooks (tests that need them mock them)."""
+    import httpx
+    import realtime
+
+    def blocked(request):
+        raise httpx.ConnectError("network blocked in tests", request=request)
+
+    def no_ddgs(*a, **k):
+        raise RuntimeError("network blocked in tests")
+
+    async def no_news(*a, **k):
+        raise RuntimeError("network blocked in tests")
+    monkeypatch.setattr(realtime, "_transport", httpx.MockTransport(blocked))
+    monkeypatch.setattr(realtime, "_online", lambda: False)
+    monkeypatch.setattr(realtime, "_ddgs_text", no_ddgs)
+    monkeypatch.setattr(realtime, "_news_search", no_news)
+    monkeypatch.setattr(realtime, "_news_top", no_news)
+    monkeypatch.setattr(realtime, "MIN_INTERVAL", 0.0)
+    realtime.reset()
+    yield
+    realtime.reset()

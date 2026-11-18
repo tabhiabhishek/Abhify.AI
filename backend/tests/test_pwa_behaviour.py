@@ -26,6 +26,43 @@ def r():
     return json.loads(out.stdout)
 
 
+def test_news_audio_reads_the_briefing_in_items_without_citations_or_links(r):
+    texts = [c["text"] for c in r["audio_chunks"]]
+    assert texts[0] == "Briefing from 3 stories." and [c["item"] for c in r["audio_chunks"]] == [0, 1, 2, 3]
+    assert texts[1] == "Markets rose after the rate decision."                  # no [1], no Markdown
+    assert not any("http" in t or "[" in t for t in texts)
+    assert max(r["audio_long"]) <= 220 and len(r["audio_long"]) > 1             # long text: sentence-sized parts, nothing dropped
+    assert r["audio_empty"] == 0
+
+
+def test_news_audio_controls_pause_resume_skip_speed_replay(r):
+    assert r["audio_start"] == {"state": "playing", "saying": "Briefing from 3 stories.", "item": 0, "items": 4}
+    assert r["audio_second"]["i"] == 1                                         # parts play in order
+    assert r["audio_pause"] == {"state": "paused", "i": 1, "spoken": 2}          # a late event of the stopped part doesn't advance
+    assert r["audio_resume"]["state"] == "playing" and r["audio_resume"]["i"] == 1 and r["audio_resume"]["saying"].startswith("Markets")
+    assert r["audio_no_duplicates"]["last_cancel"] == r["audio_no_duplicates"]["spoken_after_two_presses"] - 1   # cancelled before each start
+    assert r["audio_next_item"]["item"] == 2 and r["audio_prev_item"]["item"] == 1
+    assert r["audio_rate"] == {"rate": 1.5, "state": "playing"}
+    assert r["audio_ended"] == {"state": "ended", "i": 0}
+    assert r["audio_replay"]["state"] == "playing" and r["audio_replay"]["saying"] == "Briefing from 3 stories."
+    assert r["audio_stop"] == {"state": "idle", "i": 0}
+
+
+def test_news_audio_failures_are_reported(r):
+    assert r["audio_error"] == {"state": "error", "error": "synthesis-failed"}
+    assert r["audio_unavailable"] == {"ok": False, "state": "error", "error": "Read aloud is not available in this browser."}
+    assert r["audio_nothing"]["error"] == "Nothing to read."
+
+
+def test_news_audio_reuses_the_briefing_and_stops_when_leaving_news():
+    src = APP_JS.read_text(encoding="utf-8")
+    listen = src[src.index("function newsAudio("):src.index("function newsAudio(") + 900]
+    assert "api(" not in listen and "speechChunks(news.audioText)" in listen          # no new AI request to listen
+    assert "news.audioText = `${title}.\\n\\n${r.text}`" in src
+    assert "if (name !== 'news' && reader.owner === 'news') reader.stop();" in src
+    assert "if (reader.owner === 'news') reader.stop();                          // new content" in src
+
+
 def test_unpaired_phone_never_claims_ai_ready(r):
     for k in ("unpaired_no_token", "unpaired_wrong_token", "companion_off", "remote_unpaired_unreachable"):
         text, dot, banner = r[k]
@@ -93,3 +130,15 @@ def test_invitation_links_are_redeemed_and_removed_from_the_address_bar():
     assert fn.index("history.replaceState") < fn.index("/companion/redeem")    # code leaves the URL first
     assert "store.set(LS.token, r.token)" in fn and "m[1]" in fn
     assert re.search(r"addEventListener\('hashchange'.*readInviteLink", js)
+
+
+def test_model_chip_is_honest_about_the_model_list(r):
+    """dev.8: the chip names the model that answers next, and says so when it can't."""
+    assert r["model_default"] == {"label": "qwen2.5 · default", "kind": "ok", "problem": None}
+    assert r["model_chosen"]["label"] == "qwen2.5:1.5b" and r["model_chosen"]["kind"] == "ok"
+    assert r["model_removed"]["kind"] == "error" and "not installed" in r["model_removed"]["label"]   # never shows a model that can't run
+    assert r["model_empty"]["kind"] == "error" and r["model_empty"]["label"] == "No chat model installed"
+    assert r["model_ollama_down"]["kind"] == "error" and "Ollama" in r["model_ollama_down"]["label"]
+    assert r["model_loading"]["kind"] == "loading"
+    assert r["model_phone"]["kind"] == "remote"                                                       # phones use the PC default
+    assert r["model_device"]["label"] == "On this device · Qwen 2.5 · 1.5B"

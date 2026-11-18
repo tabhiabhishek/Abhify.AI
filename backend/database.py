@@ -193,6 +193,11 @@ DEFAULT_PREFS: dict[str, Any] = {
     "memory_enabled": True,          # long-term personal memory (injection + save_memory tool)
     "save_history": True,            # store chat conversations
     "history_retention_days": 0,     # 0 = keep forever
+    # 5.2 answer style (same choices as the Android app); "auto"/"" add nothing to prompts
+    "answer_detail": "auto",         # auto | concise | detailed
+    "answer_depth": "auto",          # auto | beginner | intermediate | expert
+    "answer_style": "auto",          # auto | direct | steps | examples
+    "answer_language": "",           # a language name, or "" = the language the user writes in
 }
 
 

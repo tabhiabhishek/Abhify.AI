@@ -1,0 +1,117 @@
+{
+  "best_cosine_answerable_mean": 0.7189102746822216,
+  "best_cosine_answerable_min": 0.57957256,
+  "hybrid_rrf": {
+    "sent@8": 1,
+    "recall@5": 0.9444444444444444,
+    "method": "hybrid RRF",
+    "ms_per_query": 1.2306451612903226,
+    "misses": [],
+    "no_answer_returned_nothing": "3/4",
+    "mrr": 0.8364197530864197,
+    "by_type": {
+      "exact": {
+        "recall@5": 1,
+        "mrr": 0.9375,
+        "n": 8
+      },
+      "paraphrase": {
+        "recall@5": 0.9,
+        "mrr": 0.8,
+        "n": 10
+      },
+      "concept": {
+        "recall@5": 1,
+        "mrr": 0.6805555555555557,
+        "n": 6
+      },
+      "multi": {
+        "recall@5": 0.8333333333333334,
+        "mrr": 1,
+        "n": 3
+      }
+    },
+    "precision@5": 0.20740740740740748,
+    "hit@1": 0.7407407407407407
+  },
+  "dims": 768,
+  "threshold_used": 0.63218045,
+  "hybrid_rrf_no_threshold": {
+    "sent@8": 1,
+    "recall@5": 0.9444444444444444,
+    "method": "hybrid RRF, no threshold",
+    "ms_per_query": 1.0143064516129032,
+    "misses": [],
+    "no_answer_returned_nothing": "0/4",
+    "mrr": 0.8379629629629629,
+    "by_type": {
+      "exact": {
+        "recall@5": 1,
+        "mrr": 0.9375,
+        "n": 8
+      },
+      "paraphrase": {
+        "recall@5": 1,
+        "mrr": 0.8,
+        "n": 10
+      },
+      "concept": {
+        "recall@5": 0.8333333333333334,
+        "mrr": 0.6875,
+        "n": 6
+      },
+      "multi": {
+        "recall@5": 0.8333333333333334,
+        "mrr": 1,
+        "n": 3
+      }
+    },
+    "precision@5": 0.20740740740740748,
+    "hit@1": 0.7407407407407407
+  },
+  "chunks": 30,
+  "semantic_only": {
+    "sent@8": 0.8518518518518519,
+    "recall@5": 0.8518518518518519,
+    "method": "semantic only",
+    "ms_per_query": 0.10110645161290324,
+    "misses": [
+      "What is LoRA?",
+      "How do I make lookups faster on a huge table?",
+      "Smoothing the updates by remembering the previous steps",
+      "Stopping a token from looking at tokens that come after it"
+    ],
+    "no_answer_returned_nothing": "4/4",
+    "mrr": 0.8086419753086419,
+    "by_type": {
+      "exact": {
+        "recall@5": 0.875,
+        "mrr": 0.875,
+        "n": 8
+      },
+      "paraphrase": {
+        "recall@5": 0.8,
+        "mrr": 0.8,
+        "n": 10
+      },
+      "concept": {
+        "recall@5": 0.8333333333333334,
+        "mrr": 0.7222222222222223,
+        "n": 6
+      },
+      "multi": {
+        "recall@5": 1,
+        "mrr": 0.8333333333333334,
+        "n": 3
+      }
+    },
+    "precision@5": 0.19259259259259268,
+    "hit@1": 0.7777777777777778
+  },
+  "best_cosine_no_answer_max": 0.62218046,
+  "vector_bytes_total": 92160,
+  "model": "nomic-embed-text",
+  "embed_calls": 35,
+  "embed_ms_avg_call_pc": 1421.0986857142857,
+  "index_ms_total_pc": 30150.4847
+}

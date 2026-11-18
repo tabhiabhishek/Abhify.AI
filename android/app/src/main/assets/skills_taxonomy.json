@@ -1,0 +1,1393 @@
+{
+ "version": 1,
+ "note": "Canonical skills, their aliases, and explicit related concepts. Aliases are treated as the same skill; 'related' is NEVER counted as a match. Aliases marked in 'ambiguous' only count when one of 'context' words also appears in the text (e.g. CV = curriculum vitae in most resumes).",
+ "skills": [
+  {
+   "name": "Python",
+   "aliases": [
+    "python3",
+    "python 3"
+   ],
+   "related": [
+    "Programming"
+   ]
+  },
+  {
+   "name": "Java",
+   "aliases": [
+    "core java",
+    "java se",
+    "java ee"
+   ],
+   "related": [
+    "Programming"
+   ]
+  },
+  {
+   "name": "Kotlin",
+   "aliases": [],
+   "related": [
+    "Android",
+    "Programming"
+   ]
+  },
+  {
+   "name": "JavaScript",
+   "aliases": [
+    "js",
+    "ecmascript",
+    "es6"
+   ],
+   "related": [
+    "Web Development",
+    "Programming"
+   ]
+  },
+  {
+   "name": "TypeScript",
+   "aliases": [
+    "ts"
+   ],
+   "related": [
+    "Web Development",
+    "Programming"
+   ],
+   "ambiguous": [
+    "ts"
+   ],
+   "context": [
+    "typescript",
+    "javascript",
+    "node",
+    "react",
+    "angular",
+    "frontend"
+   ]
+  },
+  {
+   "name": "C++",
+   "aliases": [
+    "cpp",
+    "c plus plus"
+   ],
+   "related": [
+    "Programming"
+   ]
+  },
+  {
+   "name": "C#",
+   "aliases": [
+    "c sharp",
+    "csharp"
+   ],
+   "related": [
+    "Programming",
+    ".NET"
+   ]
+  },
+  {
+   "name": "Go",
+   "aliases": [
+    "golang"
+   ],
+   "related": [
+    "Programming",
+    "Backend Development"
+   ],
+   "ambiguous": [
+    "go"
+   ],
+   "context": [
+    "backend",
+    "gin",
+    "golang",
+    "goroutine",
+    "goroutines",
+    "microservice",
+    "microservices"
+   ]
+  },
+  {
+   "name": "Rust",
+   "aliases": [],
+   "related": [
+    "Programming"
+   ],
+   "ambiguous": [
+    "rust"
+   ],
+   "context": [
+    "cargo",
+    "rustlang",
+    "systems programming",
+    "tokio"
+   ]
+  },
+  {
+   "name": "Swift",
+   "aliases": [],
+   "related": [
+    "iOS",
+    "Programming"
+   ],
+   "ambiguous": [
+    "swift"
+   ],
+   "context": [
+    "apple",
+    "cocoa",
+    "ios",
+    "swiftui",
+    "xcode"
+   ]
+  },
+  {
+   "name": "PHP",
+   "aliases": [],
+   "related": [
+    "Web Development",
+    "Backend Development"
+   ]
+  },
+  {
+   "name": "Ruby",
+   "aliases": [],
+   "related": [
+    "Programming"
+   ],
+   "ambiguous": [
+    "ruby"
+   ],
+   "context": [
+    "gem",
+    "gems",
+    "rails",
+    "rspec"
+   ]
+  },
+  {
+   "name": "Scala",
+   "aliases": [],
+   "related": [
+    "Programming",
+    "Big Data"
+   ]
+  },
+  {
+   "name": "R",
+   "aliases": [
+    "r programming",
+    "r language"
+   ],
+   "related": [
+    "Statistics",
+    "Data Analysis"
+   ],
+   "ambiguous": [
+    "r"
+   ],
+   "context": [
+    "cran",
+    "dataframe",
+    "ggplot",
+    "regression",
+    "rstudio",
+    "statistics",
+    "tidyverse"
+   ]
+  },
+  {
+   "name": "MATLAB",
+   "aliases": [],
+   "related": [
+    "Programming"
+   ]
+  },
+  {
+   "name": "SQL",
+   "aliases": [
+    "structured query language",
+    "t-sql",
+    "pl/sql",
+    "plsql"
+   ],
+   "related": [
+    "Databases"
+   ]
+  },
+  {
+   "name": "NoSQL",
+   "aliases": [
+    "no-sql"
+   ],
+   "related": [
+    "Databases"
+   ]
+  },
+  {
+   "name": "PostgreSQL",
+   "aliases": [
+    "postgres",
+    "psql"
+   ],
+   "related": [
+    "Databases",
+    "SQL"
+   ]
+  },
+  {
+   "name": "MySQL",
+   "aliases": [],
+   "related": [
+    "Databases",
+    "SQL"
+   ]
+  },
+  {
+   "name": "SQLite",
+   "aliases": [],
+   "related": [
+    "Databases",
+    "SQL"
+   ]
+  },
+  {
+   "name": "Oracle Database",
+   "aliases": [
+    "oracle db"
+   ],
+   "related": [
+    "Databases",
+    "SQL"
+   ]
+  },
+  {
+   "name": "MongoDB",
+   "aliases": [
+    "mongo"
+   ],
+   "related": [
+    "Databases",
+    "NoSQL"
+   ]
+  },
+  {
+   "name": "Redis",
+   "aliases": [],
+   "related": [
+    "Databases",
+    "Caching"
+   ]
+  },
+  {
+   "name": "Elasticsearch",
+   "aliases": [
+    "elastic search",
+    "opensearch"
+   ],
+   "related": [
+    "Search",
+    "Databases"
+   ]
+  },
+  {
+   "name": "HTML",
+   "aliases": [
+    "html5"
+   ],
+   "related": [
+    "Web Development"
+   ]
+  },
+  {
+   "name": "CSS",
+   "aliases": [
+    "css3"
+   ],
+   "related": [
+    "Web Development"
+   ]
+  },
+  {
+   "name": "React",
+   "aliases": [
+    "react.js",
+    "reactjs"
+   ],
+   "related": [
+    "Web Development",
+    "Frontend Development"
+   ]
+  },
+  {
+   "name": "Angular",
+   "aliases": [
+    "angularjs",
+    "angular.js"
+   ],
+   "related": [
+    "Web Development",
+    "Frontend Development"
+   ]
+  },
+  {
+   "name": "Vue",
+   "aliases": [
+    "vue.js",
+    "vuejs"
+   ],
+   "related": [
+    "Web Development",
+    "Frontend Development"
+   ]
+  },
+  {
+   "name": "Node.js",
+   "aliases": [
+    "nodejs",
+    "node js"
+   ],
+   "related": [
+    "Backend Development",
+    "JavaScript"
+   ]
+  },
+  {
+   "name": "Express",
+   "aliases": [
+    "express.js",
+    "expressjs"
+   ],
+   "related": [
+    "Backend Development",
+    "Node.js"
+   ],
+   "ambiguous": [
+    "express"
+   ],
+   "context": [
+    "api",
+    "javascript",
+    "middleware",
+    "node",
+    "node.js",
+    "nodejs"
+   ]
+  },
+  {
+   "name": "Django",
+   "aliases": [],
+   "related": [
+    "Backend Development",
+    "Python"
+   ]
+  },
+  {
+   "name": "Flask",
+   "aliases": [],
+   "related": [
+    "Backend Development",
+    "Python"
+   ]
+  },
+  {
+   "name": "FastAPI",
+   "aliases": [
+    "fast api"
+   ],
+   "related": [
+    "Backend Development",
+    "Python",
+    "REST APIs"
+   ]
+  },
+  {
+   "name": "Spring Boot",
+   "aliases": [
+    "springboot",
+    "spring"
+   ],
+   "related": [
+    "Backend Development",
+    "Java"
+   ],
+   "ambiguous": [
+    "spring"
+   ],
+   "context": [
+    "boot",
+    "framework",
+    "hibernate",
+    "java",
+    "jpa",
+    "microservices"
+   ]
+  },
+  {
+   "name": ".NET",
+   "aliases": [
+    "dotnet",
+    "asp.net",
+    "dot net"
+   ],
+   "related": [
+    "Backend Development",
+    "C#"
+   ]
+  },
+  {
+   "name": "REST APIs",
+   "aliases": [
+    "rest",
+    "restful",
+    "rest api",
+    "restful apis",
+    "rest apis"
+   ],
+   "related": [
+    "Backend Development"
+   ],
+   "ambiguous": [
+    "rest"
+   ],
+   "context": [
+    "api",
+    "apis",
+    "endpoint",
+    "endpoints",
+    "http",
+    "json",
+    "service",
+    "services"
+   ]
+  },
+  {
+   "name": "GraphQL",
+   "aliases": [],
+   "related": [
+    "Backend Development"
+   ]
+  },
+  {
+   "name": "gRPC",
+   "aliases": [],
+   "related": [
+    "Backend Development"
+   ]
+  },
+  {
+   "name": "Microservices",
+   "aliases": [
+    "micro-services",
+    "microservice architecture"
+   ],
+   "related": [
+    "Backend Development",
+    "System Design"
+   ]
+  },
+  {
+   "name": "Backend Development",
+   "aliases": [
+    "backend",
+    "back-end",
+    "back end development",
+    "server-side development"
+   ],
+   "related": []
+  },
+  {
+   "name": "Frontend Development",
+   "aliases": [
+    "frontend",
+    "front-end",
+    "front end development"
+   ],
+   "related": [
+    "Web Development"
+   ]
+  },
+  {
+   "name": "Web Development",
+   "aliases": [
+    "web dev"
+   ],
+   "related": []
+  },
+  {
+   "name": "System Design",
+   "aliases": [
+    "systems design",
+    "software architecture"
+   ],
+   "related": []
+  },
+  {
+   "name": "Android",
+   "aliases": [
+    "android development"
+   ],
+   "related": [
+    "Mobile Development"
+   ]
+  },
+  {
+   "name": "Jetpack Compose",
+   "aliases": [
+    "compose"
+   ],
+   "related": [
+    "Android"
+   ],
+   "ambiguous": [
+    "compose"
+   ],
+   "context": [
+    "android",
+    "kotlin",
+    "jetpack"
+   ]
+  },
+  {
+   "name": "iOS",
+   "aliases": [
+    "ios development"
+   ],
+   "related": [
+    "Mobile Development"
+   ]
+  },
+  {
+   "name": "Flutter",
+   "aliases": [],
+   "related": [
+    "Mobile Development"
+   ]
+  },
+  {
+   "name": "React Native",
+   "aliases": [],
+   "related": [
+    "Mobile Development",
+    "React"
+   ]
+  },
+  {
+   "name": "Docker",
+   "aliases": [
+    "containerization",
+    "dockerfile"
+   ],
+   "related": [
+    "DevOps"
+   ]
+  },
+  {
+   "name": "Kubernetes",
+   "aliases": [
+    "k8s"
+   ],
+   "related": [
+    "DevOps",
+    "Docker"
+   ]
+  },
+  {
+   "name": "Terraform",
+   "aliases": [],
+   "related": [
+    "DevOps",
+    "Infrastructure as Code"
+   ]
+  },
+  {
+   "name": "Ansible",
+   "aliases": [],
+   "related": [
+    "DevOps",
+    "Infrastructure as Code"
+   ]
+  },
+  {
+   "name": "Jenkins",
+   "aliases": [],
+   "related": [
+    "CI/CD",
+    "DevOps"
+   ]
+  },
+  {
+   "name": "GitHub Actions",
+   "aliases": [],
+   "related": [
+    "CI/CD",
+    "DevOps"
+   ]
+  },
+  {
+   "name": "CI/CD",
+   "aliases": [
+    "ci cd",
+    "continuous integration",
+    "continuous delivery",
+    "continuous deployment"
+   ],
+   "related": [
+    "DevOps"
+   ]
+  },
+  {
+   "name": "DevOps",
+   "aliases": [],
+   "related": []
+  },
+  {
+   "name": "Git",
+   "aliases": [
+    "github",
+    "gitlab",
+    "version control"
+   ],
+   "related": []
+  },
+  {
+   "name": "Linux",
+   "aliases": [
+    "unix",
+    "ubuntu"
+   ],
+   "related": []
+  },
+  {
+   "name": "Bash",
+   "aliases": [
+    "shell scripting",
+    "shell script"
+   ],
+   "related": [
+    "Linux"
+   ]
+  },
+  {
+   "name": "AWS",
+   "aliases": [
+    "amazon web services",
+    "ec2",
+    "s3",
+    "aws lambda"
+   ],
+   "related": [
+    "Cloud Computing"
+   ]
+  },
+  {
+   "name": "Azure",
+   "aliases": [
+    "microsoft azure"
+   ],
+   "related": [
+    "Cloud Computing"
+   ]
+  },
+  {
+   "name": "Google Cloud",
+   "aliases": [
+    "gcp",
+    "google cloud platform"
+   ],
+   "related": [
+    "Cloud Computing"
+   ]
+  },
+  {
+   "name": "Cloud Computing",
+   "aliases": [
+    "cloud"
+   ],
+   "related": [],
+   "ambiguous": [
+    "cloud"
+   ],
+   "context": [
+    "aws",
+    "azure",
+    "computing",
+    "deployment",
+    "gcp",
+    "infrastructure",
+    "saas"
+   ]
+  },
+  {
+   "name": "Firebase",
+   "aliases": [],
+   "related": [
+    "Cloud Computing",
+    "Mobile Development"
+   ]
+  },
+  {
+   "name": "Kafka",
+   "aliases": [
+    "apache kafka"
+   ],
+   "related": [
+    "Big Data",
+    "Streaming"
+   ]
+  },
+  {
+   "name": "Spark",
+   "aliases": [
+    "apache spark",
+    "pyspark"
+   ],
+   "related": [
+    "Big Data"
+   ],
+   "ambiguous": [
+    "spark"
+   ],
+   "context": [
+    "apache",
+    "big data",
+    "databricks",
+    "hadoop",
+    "pyspark",
+    "rdd",
+    "scala"
+   ]
+  },
+  {
+   "name": "Hadoop",
+   "aliases": [],
+   "related": [
+    "Big Data"
+   ]
+  },
+  {
+   "name": "Airflow",
+   "aliases": [
+    "apache airflow"
+   ],
+   "related": [
+    "Data Engineering"
+   ]
+  },
+  {
+   "name": "Snowflake",
+   "aliases": [],
+   "related": [
+    "Data Engineering",
+    "Databases"
+   ]
+  },
+  {
+   "name": "Databricks",
+   "aliases": [],
+   "related": [
+    "Big Data",
+    "Data Engineering"
+   ]
+  },
+  {
+   "name": "Data Engineering",
+   "aliases": [
+    "etl",
+    "data pipelines",
+    "elt"
+   ],
+   "related": []
+  },
+  {
+   "name": "Big Data",
+   "aliases": [],
+   "related": []
+  },
+  {
+   "name": "Tableau",
+   "aliases": [],
+   "related": [
+    "Data Visualization"
+   ]
+  },
+  {
+   "name": "Power BI",
+   "aliases": [
+    "powerbi"
+   ],
+   "related": [
+    "Data Visualization"
+   ]
+  },
+  {
+   "name": "Excel",
+   "aliases": [
+    "ms excel",
+    "microsoft excel",
+    "advanced excel"
+   ],
+   "related": [
+    "Data Analysis"
+   ],
+   "ambiguous": [
+    "excel"
+   ],
+   "context": [
+    "formulas",
+    "macros",
+    "microsoft",
+    "pivot",
+    "sheets",
+    "spreadsheet",
+    "spreadsheets",
+    "vlookup"
+   ]
+  },
+  {
+   "name": "Data Visualization",
+   "aliases": [
+    "data viz"
+   ],
+   "related": [
+    "Data Analysis"
+   ]
+  },
+  {
+   "name": "Data Analysis",
+   "aliases": [
+    "data analytics",
+    "analytics"
+   ],
+   "related": []
+  },
+  {
+   "name": "Statistics",
+   "aliases": [
+    "statistical analysis"
+   ],
+   "related": [
+    "Data Analysis"
+   ]
+  },
+  {
+   "name": "Pandas",
+   "aliases": [],
+   "related": [
+    "Data Analysis",
+    "Python"
+   ]
+  },
+  {
+   "name": "NumPy",
+   "aliases": [
+    "numpy"
+   ],
+   "related": [
+    "Python",
+    "Data Analysis"
+   ]
+  },
+  {
+   "name": "scikit-learn",
+   "aliases": [
+    "sklearn",
+    "scikit learn"
+   ],
+   "related": [
+    "Machine Learning",
+    "Python"
+   ]
+  },
+  {
+   "name": "Machine Learning",
+   "aliases": [
+    "ml"
+   ],
+   "related": [
+    "Artificial Intelligence"
+   ]
+  },
+  {
+   "name": "Deep Learning",
+   "aliases": [
+    "dl",
+    "neural networks"
+   ],
+   "related": [
+    "Machine Learning",
+    "Artificial Intelligence"
+   ],
+   "ambiguous": [
+    "dl"
+   ],
+   "context": [
+    "learning",
+    "neural",
+    "pytorch",
+    "tensorflow",
+    "keras",
+    "model"
+   ]
+  },
+  {
+   "name": "Artificial Intelligence",
+   "aliases": [
+    "ai"
+   ],
+   "related": []
+  },
+  {
+   "name": "TensorFlow",
+   "aliases": [
+    "tensor flow",
+    "tf2"
+   ],
+   "related": [
+    "Deep Learning",
+    "Machine Learning"
+   ]
+  },
+  {
+   "name": "PyTorch",
+   "aliases": [
+    "torch"
+   ],
+   "related": [
+    "Deep Learning",
+    "Machine Learning"
+   ],
+   "ambiguous": [
+    "torch"
+   ],
+   "context": [
+    "cuda",
+    "deep",
+    "model",
+    "pytorch",
+    "tensor"
+   ]
+  },
+  {
+   "name": "Keras",
+   "aliases": [],
+   "related": [
+    "Deep Learning"
+   ]
+  },
+  {
+   "name": "XGBoost",
+   "aliases": [
+    "lightgbm",
+    "catboost",
+    "gradient boosting"
+   ],
+   "related": [
+    "Machine Learning"
+   ]
+  },
+  {
+   "name": "Natural Language Processing",
+   "aliases": [
+    "nlp"
+   ],
+   "related": [
+    "Machine Learning",
+    "Artificial Intelligence"
+   ]
+  },
+  {
+   "name": "Computer Vision",
+   "aliases": [
+    "cv"
+   ],
+   "related": [
+    "Machine Learning",
+    "Artificial Intelligence"
+   ],
+   "ambiguous": [
+    "cv"
+   ],
+   "context": [
+    "opencv",
+    "image",
+    "images",
+    "vision",
+    "yolo",
+    "detection",
+    "segmentation",
+    "cnn"
+   ]
+  },
+  {
+   "name": "OpenCV",
+   "aliases": [
+    "open cv"
+   ],
+   "related": [
+    "Computer Vision"
+   ]
+  },
+  {
+   "name": "YOLO",
+   "aliases": [
+    "yolov5",
+    "yolov8",
+    "yolo v8"
+   ],
+   "related": [
+    "Object Detection",
+    "Computer Vision"
+   ]
+  },
+  {
+   "name": "Object Detection",
+   "aliases": [],
+   "related": [
+    "Computer Vision"
+   ]
+  },
+  {
+   "name": "Image Segmentation",
+   "aliases": [
+    "segmentation"
+   ],
+   "related": [
+    "Computer Vision"
+   ],
+   "ambiguous": [
+    "segmentation"
+   ],
+   "context": [
+    "image",
+    "images",
+    "mask",
+    "pixel",
+    "unet",
+    "vision"
+   ]
+  },
+  {
+   "name": "Speech Recognition",
+   "aliases": [
+    "asr",
+    "speech-to-text",
+    "speech to text"
+   ],
+   "related": [
+    "Artificial Intelligence"
+   ]
+  },
+  {
+   "name": "Whisper",
+   "aliases": [
+    "openai whisper"
+   ],
+   "related": [
+    "Speech Recognition"
+   ]
+  },
+  {
+   "name": "Large Language Models",
+   "aliases": [
+    "llm",
+    "llms",
+    "large language model"
+   ],
+   "related": [
+    "Natural Language Processing",
+    "Generative AI"
+   ]
+  },
+  {
+   "name": "Generative AI",
+   "aliases": [
+    "genai",
+    "gen ai",
+    "generative artificial intelligence"
+   ],
+   "related": [
+    "Artificial Intelligence"
+   ]
+  },
+  {
+   "name": "Prompt Engineering",
+   "aliases": [],
+   "related": [
+    "Large Language Models"
+   ]
+  },
+  {
+   "name": "RAG",
+   "aliases": [
+    "retrieval augmented generation",
+    "retrieval-augmented generation"
+   ],
+   "related": [
+    "Large Language Models"
+   ]
+  },
+  {
+   "name": "LangChain",
+   "aliases": [],
+   "related": [
+    "Large Language Models"
+   ]
+  },
+  {
+   "name": "Hugging Face",
+   "aliases": [
+    "huggingface",
+    "transformers library"
+   ],
+   "related": [
+    "Natural Language Processing",
+    "Deep Learning"
+   ]
+  },
+  {
+   "name": "Transformers",
+   "aliases": [
+    "transformer models"
+   ],
+   "related": [
+    "Deep Learning",
+    "Natural Language Processing"
+   ]
+  },
+  {
+   "name": "MLOps",
+   "aliases": [
+    "ml ops",
+    "mlflow"
+   ],
+   "related": [
+    "Machine Learning",
+    "DevOps"
+   ]
+  },
+  {
+   "name": "Model Deployment",
+   "aliases": [
+    "model serving"
+   ],
+   "related": [
+    "MLOps"
+   ]
+  },
+  {
+   "name": "Selenium",
+   "aliases": [],
+   "related": [
+    "Testing"
+   ]
+  },
+  {
+   "name": "Unit Testing",
+   "aliases": [
+    "junit",
+    "pytest",
+    "unit tests"
+   ],
+   "related": [
+    "Testing"
+   ]
+  },
+  {
+   "name": "Testing",
+   "aliases": [
+    "qa",
+    "quality assurance",
+    "software testing"
+   ],
+   "related": [],
+   "ambiguous": [
+    "qa",
+    "testing"
+   ],
+   "context": [
+    "automation",
+    "junit",
+    "pytest",
+    "selenium",
+    "software",
+    "test",
+    "tests"
+   ]
+  },
+  {
+   "name": "Jira",
+   "aliases": [],
+   "related": [
+    "Agile"
+   ]
+  },
+  {
+   "name": "Confluence",
+   "aliases": [],
+   "related": []
+  },
+  {
+   "name": "Figma",
+   "aliases": [],
+   "related": [
+    "UI/UX Design"
+   ]
+  },
+  {
+   "name": "UI/UX Design",
+   "aliases": [
+    "ux",
+    "ui design",
+    "ux design",
+    "user experience"
+   ],
+   "related": []
+  },
+  {
+   "name": "Agile",
+   "aliases": [
+    "agile methodology"
+   ],
+   "related": []
+  },
+  {
+   "name": "Scrum",
+   "aliases": [],
+   "related": [
+    "Agile"
+   ]
+  },
+  {
+   "name": "Kanban",
+   "aliases": [],
+   "related": [
+    "Agile"
+   ]
+  },
+  {
+   "name": "Project Management",
+   "aliases": [
+    "pmp"
+   ],
+   "related": []
+  },
+  {
+   "name": "Product Management",
+   "aliases": [],
+   "related": []
+  },
+  {
+   "name": "Stakeholder Management",
+   "aliases": [],
+   "related": []
+  },
+  {
+   "name": "Leadership",
+   "aliases": [
+    "team leadership",
+    "team lead",
+    "people management"
+   ],
+   "related": []
+  },
+  {
+   "name": "Communication",
+   "aliases": [
+    "communication skills"
+   ],
+   "related": []
+  },
+  {
+   "name": "Problem Solving",
+   "aliases": [
+    "problem-solving"
+   ],
+   "related": []
+  },
+  {
+   "name": "Sales",
+   "aliases": [],
+   "related": []
+  },
+  {
+   "name": "Marketing",
+   "aliases": [
+    "digital marketing"
+   ],
+   "related": []
+  },
+  {
+   "name": "SEO",
+   "aliases": [
+    "search engine optimization"
+   ],
+   "related": [
+    "Marketing"
+   ]
+  },
+  {
+   "name": "Customer Service",
+   "aliases": [
+    "customer support"
+   ],
+   "related": []
+  },
+  {
+   "name": "Accounting",
+   "aliases": [],
+   "related": []
+  },
+  {
+   "name": "Financial Analysis",
+   "aliases": [
+    "financial modelling",
+    "financial modeling"
+   ],
+   "related": []
+  },
+  {
+   "name": "SAP",
+   "aliases": [],
+   "related": [
+    "ERP"
+   ]
+  },
+  {
+   "name": "Salesforce",
+   "aliases": [
+    "sfdc"
+   ],
+   "related": [
+    "CRM"
+   ]
+  },
+  {
+   "name": "Networking",
+   "aliases": [
+    "computer networks",
+    "tcp/ip"
+   ],
+   "related": []
+  },
+  {
+   "name": "Cybersecurity",
+   "aliases": [
+    "cyber security",
+    "information security",
+    "infosec"
+   ],
+   "related": []
+  },
+  {
+   "name": "Penetration Testing",
+   "aliases": [
+    "pentesting",
+    "pen testing"
+   ],
+   "related": [
+    "Cybersecurity"
+   ]
+  }
+ ]
+}

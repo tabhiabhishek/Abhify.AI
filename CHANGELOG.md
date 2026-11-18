@@ -3,9 +3,220 @@
 All notable changes to Abhify.AI. Format: [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 The database schema version is listed separately, because not every release changes it.
 
-## [2.0.0-dev.6]: invite-only device membership, unreleased (branch `feature/m2-knowledge-packaging`, not built)
+## [2.0.0-dev.8]: premium redesign and chat model choice, in progress (not built)
 
-Database schema: **v5** (additive: `members` and `invitations` tables; v4 databases upgrade automatically with a backup taken first). No installer has been built for this version; the latest installer is still 2.0.0-dev.5. Details: `docs/MEMBERSHIP_AND_REGISTRATION.md`.
+Database schema: unchanged (**v5**). No new dependencies. Design: `docs/PREMIUM_REDESIGN_SPEC.md`.
+
+### Internal 6.2: Real-Time Intelligence Engine (2026-11-18; version unchanged, SHELL_REV `ui62.1`)
+- **`backend/realtime.py`:** works out which current information a question needs (news, web, weather, fx, projects, tasks, system) and retrieves it **before** the model runs, so it no longer depends on a small model choosing the `web_search` tool. It dates and validates the evidence and cites it as [W#]/[L#] for whichever model is selected (the model never changes).
+- **Connectors:**
+  - Google News; web search via DuckDuckGo (existing), or Brave/Tavily with `BRAVE_API_KEY` / `TAVILY_API_KEY` from the environment;
+  - Open-Meteo weather and Frankfurter (ECB) rates, both **off by default**;
+  - projects, tasks, and read-only system status.
+- **Safety and behaviour:**
+  - Freshness states (live/recent/historical/cached/unavailable); a per-category cache; a timeout, one retry and a rate limit.
+  - Retrieved text is untrusted: turns containing it run without tools. Guests get external sources only.
+- **API:** `GET /realtime/status`, `PUT /realtime/settings`, `POST /realtime/lookup`. `/chat` and `/chat/stream` return `live` (the stream sends `{"type":"live"}` events before tokens) and accept `refresh_live`.
+- **Web:** live indicator, source chips with details and original links, Refresh, and a Settings → Live information section. A model's "[W4](#)" renders as the citation.
+- **Fixed:** `news_center.feed()` reported a recent cached copy as not cached.
+- **Tests:** 533 passed, 2 skipped.
+
+### Internal 6.1: web/desktop audit fixes (2026-11-18; version unchanged, SHELL_REV `ui61.1`)
+- **Fixed:**
+  - An endless request loop when the backend stopped with Home open.
+  - Stop vanishing during streaming.
+  - Empty answers from tool-bound models: one retry with the same model, without tools.
+  - Project "Continue" loading the chat twice.
+  - Esc and focus in dialogs.
+  - Direct links and refresh (`/home`, `/assistant`, `/study`, `/more`, `?tab=`).
+  - Overflow at 360 px.
+  - Offline states in Task Runner and System.
+- **New in the Assistant:** Retry and Regenerate (`regenerate: true`), copy message and copy code, built-in code highlighting, headings and tables, source chips, follow-ups, and a context indicator.
+- **Interaction modes** (Quick, Deep, Research, Coding, Learning, Planning, Creative) ported from Android. They never change the model.
+- **Motion tokens** aligned with Android (120/220/340 ms).
+- **Packaging:** `news_sources.json` is now included (the dev.8 package returned 500 on `/news/categories`).
+- **Tests:** 460 passed, 2 skipped. Details: `docs/ABHIFY_6_1_WEB_DESKTOP_REPORT.md`.
+
+### Internal 5.6/6.0: desktop insights, agent, premium UI, companion (2026-11-18)
+- **Grouped search:** `/search` gains filters (`types`, `days`, `project`, `sort`) and grouped results.
+- **Read-only project overview:** `/projects/{id}/overview`.
+- **Desktop Agent 2.0:** `/agent/tools`, `/agent/plan`, `/agent/apply` (needs approval, verified), `/agent/undo`, and a counts-only audit log.
+- **Briefings:** morning, evening and weekly. Skills gain a learning path and revision plan. Local evaluation at `/eval/retrieval`. All routes are PC-only.
+- **Web redesign (Neural Futuristic):** one design system shared with Android's tokens; five destinations (sidebar on desktop, bottom bar on phones); Home dashboard; editorial News; fixes for the Settings sheet scroll, the palette at 390 px, the active News category and the hard-coded "Abhi" greeting. The service worker shell revision `ui56.1` makes installed browsers pick it up.
+- **News images:** a duplicate story keeps its own image (`news_center.merge`), with JS-harness regression tests.
+- **Friendly AI on the desktop:** `companion_ai.py` adds a charter, follow-up retrieval and an earlier-turn summary to the chat. Backend tests: 443 passed, 2 skipped.
+
+### Internal 5.5: desktop Today and Skills (2026-11-18)
+- `GET /plan`: today's plan from projects' recorded issues and next actions, most recently updated projects first. No due dates are invented, because desktop projects have none.
+- `GET /skills` (`min_answers` 3–20): MCQ skill levels, accuracy, trend after 10 answers, and the next topic to practise.
+- Both routes are PC-only and never cached by the service worker. The web shows Today in the Home briefing and Skills in Study. Backend tests: 409 passed, 2 skipped.
+
+### Next internal build: desktop parity and Personal AI Brain (2026-11-18)
+- **Web: five destinations**, Home · Assistant · Study · News · More.
+  - Study holds Discover and opens the existing Question Bank and MCQs pages; More groups every existing page.
+- **Backend `brain.py`:**
+  - `GET /discover` (live MIT OCW + OpenStax, provider links; cost only as the source states);
+  - `GET /briefing` (records only);
+  - `GET /search` (conversations, memories only when memory is on, projects, AI tasks, knowledge files, saved news).
+
+  All are `local_only`, never cached by the service worker, and documented in the README.
+- **Web:** News English/Hindi/Both selector, Home briefing, universal search in the Ctrl+K palette. Browser check 11/11.
+- **Android:** internal build `build/internal/Abhify-5.4-dev.1.apk` (see [docs/ABHIFY_NEXT_BUILD_REPORT.md](docs/ABHIFY_NEXT_BUILD_REPORT.md)).
+
+### Android 5.4 Personal Voice Companion (2026-11-18)
+- Android only (`build/Abhify-5.4.apk`): hands-free voice conversation, voice commands through a typed App Action Registry, Voice & Conversation settings, Conversation data controls. The desktop backend is unchanged. See [docs/ABHIFY_PERSONAL_VOICE_ASSISTANT.md](docs/ABHIFY_PERSONAL_VOICE_ASSISTANT.md).
+
+### Android 5.3 and shared news catalog (2026-11-18)
+- Android 5.3 (`build/Abhify-5.3.apk`): five destinations, grouped More, neural core states, Home command center, Study Discover, News in English/Hindi/Both. See [docs/ABHIFY_5_2_IMPLEMENTATION_REPORT.md](docs/ABHIFY_5_2_IMPLEMENTATION_REPORT.md).
+- Desktop backend:
+  - `news_sources.json` (shared) gains Hindi feeds marked `"lang": "hi"`, Hindi labels and Hindi search terms.
+  - `news_center.plan` now picks feeds by the `language` preference (`en`, `hi` or `both`), so the English desktop feed is unchanged.
+  - Hindi results are cached under their own keys.
+  - The web UI language selector is the next step.
+- Audit: [docs/ABHIFY_5_2_PRODUCT_AUDIT.md](docs/ABHIFY_5_2_PRODUCT_AUDIT.md). Design: [docs/ABHIFY_NEURAL_DESIGN_SYSTEM.md](docs/ABHIFY_NEURAL_DESIGN_SYSTEM.md).
+
+### Android 5.1 Personal Intelligence (2026-11-17)
+- Android 5.1 (`build/Abhify-5.1.apk`): chat focus with adaptive answers, response preferences, project status with continuation summaries, Continue working and suggestions on Home, routing explanation, more precise memory. See [docs/ABHIFY_5_1_IMPLEMENTATION_REPORT.md](docs/ABHIFY_5_1_IMPLEMENTATION_REPORT.md).
+- **Desktop parity:**
+  - `backend/intelligence.py`: the same focus rules as Android; on the shared labelled set it scores 57/60 with the same misses.
+  - `/chat` and `/chat/stream` take an optional `focus` (auto by default; when it isn't chosen the call is unchanged) and return a `focus` label.
+  - Web: a focus selector next to the model chip, and the label under answers.
+  - Projects: `PATCH /projects/{id}` takes `status`; project chats use the brief; the project page shows "Where you left off" and the status editor.
+  - Answer style: `PUT /preferences` takes `answer_detail`, `answer_depth`, `answer_style`, `answer_language` (same choices as Android; defaults change nothing); Settings → Answer style on the web.
+  - Home: `GET /suggestions` and a "Continue working" + suggestions section (project you last updated, unfinished AI task, open issues, a failed task); dismiss with ✕.
+  - Checked live with Ollama (llama3.2) and in headless Edge (12/12) on an isolated data folder.
+
+### Backup coverage and command palette (2026-11-17)
+- **Backup:** `data/tasks.json`, `data/projects.json` and `data/career_mcq.json` are included in local backups and restored with them.
+- **Command palette:** also finds projects and AI tasks by name (loaded locally when the palette opens).
+- Android Local RAG, Knowledge Center and controlled learning: see [docs/CHANGELOG.md](docs/CHANGELOG.md) and [docs/ABHIFY_LOCAL_RAG.md](docs/ABHIFY_LOCAL_RAG.md).
+
+### Career milestone (2026-11-10)
+- **Career MCQ practice:**
+  - **Endpoints:** `POST /career/mcq`, `POST /career/mcq/answer`, `GET /career/mcq/stats`.
+  - **Sources:** a resume or document from the knowledge folder, any topic, or both.
+  - **Batches on demand,** with schema-constrained output on the chosen model.
+  - **Validation and deduplication:** validated question by question; duplicates filtered across batches; a new angle each batch.
+  - **Labels:** answers labelled AI-generated (never "verified").
+  - **Progress:** in `career_mcq.json`.
+- **MCQs tab:**
+  - **Answering:** a tap answers, with the right option and explanation; Review mode.
+  - **Batches:** "Generate more" and "Refresh unanswered" keep progress.
+- **Question Bank:**
+  - **Refresh:** keeps filters.
+  - **Generated and curated:** generated questions are added to the curated ones instead of replacing them.
+  - **Renamed tabs:** Question Bank and MCQs.
+- **News:**
+  - **In-app reader:** `GET /news/article/{id}` reads the story's own text from the publisher's page (public https only, redirects checked) and summarises exactly that story.
+  - **Cards:** open the reader instead of the website.
+  - **Read more:** the first shows the full text, the second opens the original.
+  - **Refresh:** single-flight, a stale-response guard, the previous stories kept on failure, a status line.
+- **Pull-to-refresh** on News, Question Bank and MCQs (touch screens), without reloading the page.
+- Details: `docs/ABHIFY_CAREER_*.md`, `docs/ABHIFY_REFRESH_BEHAVIOR.md`, `docs/ABHIFY_NEWS_IN_APP_READING.md`.
+
+### Stability milestone (2026-11-09)
+- **Fixed: Quiz from document.**
+  - The quiz step now uses Ollama's schema-constrained output on the same chosen model.
+  - The parser reads malformed small-model JSON item by item, so a single unquoted string no longer rejects the whole quiz.
+  - Quiz settings (3/5/10 questions, difficulty), a running score, and answers recorded in quiz progress.
+- **Study plan:** objectives, topic order, sessions, revision, practice and a progress checklist. Study plans and quizzes need a minimum source length. Task results can be exported as Markdown.
+- **Streamed chat:** `POST /chat/stream` shows the answer while it is written, with Stop. Warm answers now show first words in 0.1–0.4 s instead of after the whole answer.
+- **Voice warm-up:** `POST /chat/warm` loads the chosen chat model (and Whisper in Private voice mode) when the microphone starts. Cold voice question: first words 14.3 s after speaking (was 29.2 s).
+- **News Listen:** the browser's speech synthesis reads the briefing on screen. Pause, resume, previous/next item, stop, replay and speed. No new AI request. Voice answers are read in full (no 600-character cut).
+- **Projects:**
+  - `projects.json` (no database change), `/projects` API;
+  - instructions, archive/restore, export, document associations (references);
+  - project chat retrieving only from the project's documents;
+  - Task Runner project source.
+  - Delete needs confirmation and keeps everything else.
+- **Settings:** sections for AI & models, System & your data, General, Voice & audio, Application. Performance and System & data left the sidebar (still in the launcher and palette). Pages opened from Settings no longer stack.
+- **`start.bat`:**
+  - opens the app if it is already running;
+  - starts Ollama if needed;
+  - opens the browser only when the backend answers;
+  - `start.bat stop`.
+- Details: `docs/ABHIFY_MASTER_ENHANCEMENT_REPORT.md`.
+
+### Added
+- **Choose the AI model in chat.** A model chip above the chat box lists the chat models really installed in Ollama on this computer (`GET /models`, from Ollama's `/api/tags`; embedding models left out). The choice belongs to the conversation (kept in this browser), is sent with each message (`POST /chat` takes an optional `model`) and is checked by the backend: a model that isn't installed is refused with a clear message (`400`), never silently replaced. Each new answer shows the model that wrote it.
+- **Default chat model** in Settings (`PUT /models/default`, saved in `settings.json`; the embedding model is unchanged). If `LLM_MODEL` is set in the environment, the setting is shown as locked. Paired phones keep using the computer's default model (model choice is PC only).
+- **Light, dark and system themes** (header button; applied before the first paint, no flash).
+- **Sidebar on wide screens** (icon rail from 600 px, full sidebar from 1024 px, collapsible): Learn sections, Knowledge folder, Memory & history, System & data, Settings. Phones keep the tab bar.
+- **A short logo reveal on the first load of a session** (no delay; nothing waits for it; off with reduced motion).
+- **Home** (new start page):
+  - an "Ask Abhify.AI" box that starts a new chat;
+  - cards built from real data: continue the last conversation, quiz score, cached AI headlines, knowledge-folder size, AI status and default model, interview practice.
+- **Full pages on wide screens:**
+  - Memory & history, System & data (with companion access) and Knowledge folder open in the main area beside the sidebar, one at a time, with the sidebar showing which is open.
+  - Phones keep the bottom sheets. The element IDs are unchanged.
+- **Switching chat models frees memory:** when chat moves to another model, the previous chat model is released in Ollama straight away (`keep_alive: 0`), so two chat models don't sit in GPU memory together. The embedding model is never touched.
+
+- **"Aurora" visual identity** (shared with Android 4.6):
+  - a deep-indigo night or a warm lavender-white, lit by a static aurora background;
+  - a colour per feature on the sidebar, tabs and Home cards;
+  - the **AI orb** in the Home hero and the chat welcome, showing the real state (ready, listening, thinking, AI unavailable; still with reduced motion);
+  - orb avatars on answers;
+  - colour-coded starter prompts;
+  - the deep aurora on your messages;
+  - page glides and press feedback.
+  - Design system: `docs/AURORA_DESIGN_SYSTEM.md`.
+- **AI Action Center:** Summarize, Explain simply, Key points, Translate…, Quiz me and Flashcards under every new answer. Each is a follow-up through the normal chat (same chosen model and checks).
+- **Performance page** (sidebar, and System & data → Performance; `GET /system/performance`, PC only), from real measurements only:
+  - CPU and RAM (psutil);
+  - NVIDIA GPU use and VRAM (nvidia-smi);
+  - the models Ollama has loaded, with their VRAM and unload time;
+  - the last answer's speed.
+  - It samples every 3 s only while the page is open.
+- **Each answer shows its speed** (tokens/s, with token count and total time in the tooltip), taken from Ollama's own response metadata; nothing is shown when Ollama doesn't report it.
+
+- **News Center** (`docs/NEWS_CENTER.md`; `GET /news/categories`, `GET /news/feed`, `GET /news/search`, `POST /news/ai`, `PUT /news/prefs`):
+  - 15 categories from publisher RSS feeds and Google News (same catalog as Android), images, Read more to the original story;
+  - search with dates, offline copy;
+  - source manager: city, edition, language, topics, publisher priority and hiding;
+  - an AI briefing / summary / explanation on the local model with numbered sources.
+  - News AI runs with no tools, history or memory, and never writes personal memory (tested).
+  - The classic AI-summarized `/news` view stays as the fallback.
+- **Unified workspace** (`docs/UNIFIED_AURORA_WORKSPACE.md`):
+  - the **Abhify brand opens a navigation launcher** with every destination (Workspace / AI System / Application), including direct **AI Models**, **Performance**, **System** and **Settings**;
+  - it works in the expanded sidebar, the collapsed sidebar, the rail and on phones (header logo);
+  - Esc, outside click and the keyboard work; opening it makes no request and loads no model.
+  - Also: home quick actions; new Aurora tokens (sidebar surface, cyan focus ring, restrained glow); new command-palette entries.
+- **AI Task Runner** (`docs/AI_TASK_RUNNER.md`; `/tasks…`, PC only): multi-step workflows (Document summary, Study plan, Quiz with source-checked quotes, News briefing, Custom) on knowledge-index documents, current News stories or pasted text.
+  - Execution: one model call at a time on the chosen installed Ollama model (validated, never swapped) with the one-model-in-memory release; progress, cancel, retry from a step, restart-safe history in `<data>/data/tasks.json`.
+  - Entry points: sidebar, Home and the command palette.
+  - Results are never written to memory or chat history; Save to Knowledge requires `confirm=true`.
+  - Opt-in live Ollama test: `ABHIFY_LIVE_OLLAMA=1`.
+- **Command palette (Ctrl+K / ⌘K):** pages, commands, models, news categories, news search, ask the AI, and past conversations by title.
+- **Customize Home:** show, hide and reorder the cards (this browser).
+- **Action Center:** adds Checklist and Rewrite clearly.
+- News briefings and the quiz/interview generators now go through the same "one chat model in memory" release as chat (found in the live browser test: a briefing left a second model loaded).
+
+### Changed
+- After a backend restart, the first switch away from the default chat model now releases the default, so two chat models never stay in GPU memory together (found and re-tested against live Ollama).
+- New design tokens shared with the Android app; the pink accent and the glow backgrounds of dev.7 are retired. Opaque cards with hairlines instead of glass blur; chat answers read as text, your messages keep the brand gradient.
+- Navigation and header icons (including Install) are official Material outlined icons (Apache-2.0) instead of emoji.
+
+## [2.0.0-dev.7]: on-device AI on phones ("Abhify Lite"), in progress (not built)
+
+Database schema: unchanged (**v5**). The PC app is unchanged; this release only adds an optional mode to the web app. Details: `docs/ON_DEVICE_AI.md`.
+
+### Added
+- **The AI on each person's own phone, no PC needed.** Settings → *Where the AI runs* → **This device** runs a small model in the browser on the phone's GPU (WebLLM 0.2.85 over WebGPU): Qwen 2.5 1.5B on phones that report 6 GB+ of memory, Llama 3.2 1B otherwise (and on iPhones). The default stays *My computer*.
+  - One-time model download (~869 MB or ~695 MB) only after a confirmation that shows the size, memory use and source; a storage check runs first. Then it works offline.
+  - Chats and "remember that …" memories are stored in the browser's IndexedDB on the phone; nothing typed leaves the phone.
+  - Honest statuses (*not supported here* with the reason, *not set up*, download %, *AI ready · runs on this device*); *Remove on-device AI model* and *Delete on-device chats* in Settings.
+- WebLLM and its two model libraries are vendored in `frontend/vendor/webllm/` with pinned SHA-256 hashes (`VENDORED.md`); no code is fetched from third-party hosts. Loaded only in this mode.
+- `test_ondevice.py` (+ a Node harness): hashes, model choice, prompts, consent, no network in the chat path, PC mode unchanged.
+
+### Changed
+- `test_pwa.py`'s secret scan skips the hash-pinned `frontend/vendor/` (its embedded WebAssembly is random base64 that can look like a key).
+
+### Not done
+- Real-phone tests (Android, iPhone): NOT TESTED. Hosting the PWA for other people: not set up (needs the owner's decision).
+
+## [2.0.0-dev.6]: invite-only device membership, unreleased (branch `feature/m2-knowledge-packaging`)
+
+Database schema: **v5** (additive: `members` and `invitations` tables; v4 databases upgrade automatically with a backup taken first). Installer built from commit `a9325d2` (unsigned, not published). Details: `docs/MEMBERSHIP_AND_REGISTRATION.md`.
 
 ### Added
 - **Per-device membership.** Every paired phone has its own revocable credential (only a SHA-256 hash is stored); "last seen" and expiry are tracked.

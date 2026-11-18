@@ -84,7 +84,7 @@ def test_offline_fallback_content_present():
 
 def test_no_secrets_in_frontend():
     for f in FRONT.rglob("*"):
-        if f.suffix in {".js", ".html", ".json", ".css"}:
+        if f.suffix in {".js", ".html", ".json", ".css"} and "vendor" not in f.relative_to(FRONT).parts:   # vendored: hash-pinned (test_ondevice)
             text = f.read_text(encoding="utf-8", errors="ignore")
             assert not re.search(r"sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|BEGIN [A-Z ]*PRIVATE KEY", text), f
 

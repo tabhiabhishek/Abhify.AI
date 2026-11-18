@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#030C1D</color>
+    <!-- 4.5 brand navy (Brand.Bg1, styles.css bg token, dark mode) -->
+    <color name="brand_navy">#171827</color>
+    <!-- 4.5 theme-aware launch background: light here, navy in values-night -->
+    <color name="splash_bg">#F7F7FC</color>
+</resources>

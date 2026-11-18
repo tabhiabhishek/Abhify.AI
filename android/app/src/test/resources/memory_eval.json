@@ -1,0 +1,32 @@
+{
+  "note": "5.1 memory-retrieval evaluation for MemoryKit.relevant. expected = must be found; acceptable = may also be found without counting as noise; empty expected = no memory may be added.",
+  "memories": [
+    [1, "Professional profile", "Works as a backend developer at Infosys"],
+    [2, "Preferences", "Prefers short answers with bullet points"],
+    [3, "Learning goals", "Is learning PyTorch for deep learning"],
+    [4, "Career goals", "Wants to become an ML engineer within a year"],
+    [5, "Active projects", "Building Abhify, an Android AI assistant in Kotlin"],
+    [6, "Personal facts", "Lives in Pune"],
+    [7, "Personal facts", "Allergic to peanuts"],
+    [8, "Technical skills", "Uses FastAPI for backend services"],
+    [9, "Learning goals", "Has a German exam in March"],
+    [10, "Preferences", "Prefers dark mode in every app"],
+    [11, "Important decisions", "Decided to use SQLite instead of Room for Abhify"],
+    [12, "Professional profile", "Notice period is 60 days"]
+  ],
+  "queries": [
+    {"q": "Suggest a dinner recipe without peanuts", "expected": [7], "acceptable": []},
+    {"q": "How should I prepare for ML engineer interviews?", "expected": [4], "acceptable": [1, 12]},
+    {"q": "Help me debug my FastAPI backend", "expected": [8], "acceptable": [1]},
+    {"q": "What's the next step for the Abhify Android app?", "expected": [5], "acceptable": [11]},
+    {"q": "Explain PyTorch tensors", "expected": [3], "acceptable": []},
+    {"q": "Weekend plans in Pune?", "expected": [6], "acceptable": []},
+    {"q": "Create a study plan for my German exam", "expected": [9], "acceptable": [3]},
+    {"q": "What is my notice period?", "expected": [12], "acceptable": [1, 4]},
+    {"q": "Should Abhify use Room or SQLite?", "expected": [11], "acceptable": [5]},
+    {"q": "What is the capital of France?", "expected": [], "acceptable": []},
+    {"q": "Tell me a joke", "expected": [], "acceptable": []},
+    {"q": "Translate hello to Spanish", "expected": [], "acceptable": []},
+    {"q": "How many legs does a spider have?", "expected": [], "acceptable": []}
+  ]
+}

@@ -229,6 +229,23 @@ def list_sources() -> list[str]:
     return sorted({m.get("source", "unknown") for m in metas if m})
 
 
+def document_text(source: str, limit: int = 12_000) -> str | None:
+    """The indexed text of one document (by its display name), chunks in order; None if it isn't indexed (Task Runner)."""
+    if count() == 0:
+        return None
+    got = get_vectorstore()._collection.get(where={"source": source}, include=["documents", "metadatas"])
+    if not got["ids"]:
+        return None
+    parts = sorted(zip(got["ids"], got["documents"], got["metadatas"]),
+                   key=lambda x: ((x[2] or {}).get("page", 0), int(x[0].rsplit("-", 1)[-1]) if x[0].rsplit("-", 1)[-1].isdigit() else 0))
+    out, total = [], 0
+    for _, text, _ in parts:
+        if total >= limit:
+            break
+        out.append(text); total += len(text)
+    return "\n".join(out)[:limit]
+
+
 # --------------------------------------------------------------------------- rebuild for a new embedding model
 REBUILD: dict[str, Any] = {"status": "idle"}
 

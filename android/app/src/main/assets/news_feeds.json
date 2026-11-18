@@ -1,0 +1,14 @@
+{
+  "format": "abhify-news-feeds-1",
+  "note": "Public RSS/Atom feeds, fetched only when the News tab is opened or refreshed. Checked 2026-10-26.",
+  "feeds": [
+    {"name": "OpenAI", "url": "https://openai.com/news/rss.xml"},
+    {"name": "Google AI", "url": "https://blog.google/technology/ai/rss/"},
+    {"name": "Google DeepMind", "url": "https://deepmind.google/blog/rss.xml"},
+    {"name": "Hugging Face", "url": "https://huggingface.co/blog/feed.xml"},
+    {"name": "MIT News", "url": "https://news.mit.edu/rss/topic/artificial-intelligence2"},
+    {"name": "The Verge", "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"},
+    {"name": "TechCrunch", "url": "https://techcrunch.com/category/artificial-intelligence/feed/"},
+    {"name": "MarkTechPost", "url": "https://www.marktechpost.com/feed/"}
+  ]
+}

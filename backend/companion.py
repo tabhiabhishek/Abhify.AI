@@ -49,11 +49,12 @@ API_PREFIXES: set[str] = set()          # filled by main.py from the real route 
 
 # What a paired phone may use (allow-list; everything else is local-only).
 REMOTE_ROUTES = {
-    "/chat", "/news", "/generate-question", "/generate-mcq", "/transcribe", "/voice",
+    "/chat", "/news", "/news/categories", "/news/feed", "/news/search", "/news/ai", "/generate-question", "/generate-mcq", "/transcribe", "/voice",
     "/knowledge", "/knowledge/upload", "/knowledge/status", "/knowledge/files",
     "/progress", "/memory", "/preferences", "/conversations",
+    "/chat/stream", "/chat/warm",          # stability milestone: the same chat, streamed / its model loaded ahead (owner devices only)
 }
-REMOTE_PREFIXES = ("/progress/", "/memory/", "/conversations/")
+REMOTE_PREFIXES = ("/progress/", "/memory/", "/conversations/", "/news/article/")
 # What a *member* device (someone else's phone) may use: nothing that reads or writes the owner's
 # data. /chat and /voice run as a "guest" chat for members (agent.run_agent(guest=True)).
 MEMBER_ROUTES = {"/chat", "/news", "/generate-question", "/generate-mcq", "/transcribe", "/voice"}

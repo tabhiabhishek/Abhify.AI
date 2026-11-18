@@ -1,0 +1,202 @@
+{
+ "count": 398,
+ "results": [
+  {
+   "title": "Machine Learning for Healthcare",
+   "url": "https://ocw.mit.edu/courses/6-s897-machine-learning-for-healthcare-spring-2019/",
+   "free": true,
+   "certification": false,
+   "prices": [],
+   "offered_by": {
+    "code": "ocw",
+    "name": "MIT OpenCourseWare",
+    "display_facet": true,
+    "channel_url": "https://learn.mit.edu/c/unit/ocw"
+   },
+   "runs": [
+    {
+     "level": [
+      {
+       "code": "graduate",
+       "name": "Graduate"
+      }
+     ]
+    }
+   ],
+   "topics": [
+    {
+     "parent": 698,
+     "name": "AI",
+     "icon": "RiRobot2Line",
+     "id": 699,
+     "channel_url": "https://learn.mit.edu/c/topic/ai"
+    },
+    {
+     "parent": 698,
+     "name": "Computer Science",
+     "icon": "RiRobot2Line",
+     "id": 710,
+     "channel_url": "https://learn.mit.edu/c/topic/computer-science"
+    },
+    {
+     "parent": null,
+     "name": "Data Science, Analytics & Computer Technology",
+     "icon": "RiRobot2Line",
+     "id": 698,
+     "channel_url": "https://learn.mit.edu/c/topic/data-science-analytics-computer-technology"
+    },
+    {
+     "parent": null,
+     "name": "Engineering",
+     "icon": "RiRobot2Line",
+     "id": 747,
+     "channel_url": "https://learn.mit.edu/c/topic/engineering"
+    },
+    {
+     "parent": null,
+     "name": "Health & Medicine",
+     "icon": "RiStethoscopeLine",
+     "id": 774,
+     "channel_url": "https://learn.mit.edu/c/topic/health-medicine"
+    },
+    {
+     "parent": 774,
+     "name": "Imaging",
+     "icon": "RiStethoscopeLine",
+     "id": 778,
+     "channel_url": "https://learn.mit.edu/c/topic/imaging"
+    },
+    {
+     "parent": 698,
+     "name": "Machine Learning",
+     "icon": "RiRobot2Line",
+     "id": 708,
+     "channel_url": "https://learn.mit.edu/c/topic/machine-learning"
+    },
+    {
+     "parent": 774,
+     "name": "Public Health",
+     "icon": "RiStethoscopeLine",
+     "id": 782,
+     "channel_url": "https://learn.mit.edu/c/topic/public-health"
+    },
+    {
+     "parent": 698,
+     "name": "User Experience",
+     "icon": "RiRobot2Line",
+     "id": 704,
+     "channel_url": "https://learn.mit.edu/c/topic/user-experience"
+    }
+   ],
+   "languages": null
+  },
+  {
+   "title": "Artificial Intelligence",
+   "url": "https://ocw.mit.edu/courses/6-034-artificial-intelligence-fall-2010/",
+   "free": true,
+   "certification": false,
+   "prices": [],
+   "offered_by": {
+    "code": "ocw",
+    "name": "MIT OpenCourseWare",
+    "display_facet": true,
+    "channel_url": "https://learn.mit.edu/c/unit/ocw"
+   },
+   "runs": [
+    {
+     "level": [
+      {
+       "code": "undergraduate",
+       "name": "Undergraduate"
+      }
+     ]
+    }
+   ],
+   "topics": [
+    {
+     "parent": 698,
+     "name": "AI",
+     "icon": "RiRobot2Line",
+     "id": 699,
+     "channel_url": "https://learn.mit.edu/c/topic/ai"
+    },
+    {
+     "parent": 698,
+     "name": "Algorithms and Data Structures",
+     "icon": "RiRobot2Line",
+     "id": 702,
+     "channel_url": "https://learn.mit.edu/c/topic/algorithms-and-data-structures"
+    },
+    {
+     "parent": 698,
+     "name": "Computer Science",
+     "icon": "RiRobot2Line",
+     "id": 710,
+     "channel_url": "https://learn.mit.edu/c/topic/computer-science"
+    },
+    {
+     "parent": null,
+     "name": "Data Science, Analytics & Computer Technology",
+     "icon": "RiRobot2Line",
+     "id": 698,
+     "channel_url": "https://learn.mit.edu/c/topic/data-science-analytics-computer-technology"
+    },
+    {
+     "parent": null,
+     "name": "Engineering",
+     "icon": "RiRobot2Line",
+     "id": 747,
+     "channel_url": "https://learn.mit.edu/c/topic/engineering"
+    },
+    {
+     "parent": 698,
+     "name": "Machine Learning",
+     "icon": "RiRobot2Line",
+     "id": 708,
+     "channel_url": "https://learn.mit.edu/c/topic/machine-learning"
+    }
+   ],
+   "languages": null
+  },
+  {
+   "title": "Matrix Calculus for Machine Learning and Beyond",
+   "url": "https://ocw.mit.edu/courses/18-s096-matrix-calculus-for-machine-learning-and-beyond-january-iap-2023/",
+   "free": true,
+   "certification": false,
+   "prices": [],
+   "offered_by": {
+    "code": "ocw",
+    "name": "MIT OpenCourseWare",
+    "display_facet": true,
+    "channel_url": "https://learn.mit.edu/c/unit/ocw"
+   },
+   "runs": [
+    {
+     "level": [
+      {
+       "code": "undergraduate",
+       "name": "Undergraduate"
+      }
+     ]
+    }
+   ],
+   "topics": [
+    {
+     "parent": 731,
+     "name": "Mathematics",
+     "icon": "RiTestTubeLine",
+     "id": 737,
+     "channel_url": "https://learn.mit.edu/c/topic/mathematics"
+    },
+    {
+     "parent": null,
+     "name": "Science & Math",
+     "icon": "RiTestTubeLine",
+     "id": 731,
+     "channel_url": "https://learn.mit.edu/c/topic/science-math"
+    }
+   ],
+   "languages": null
+  }
+ ]
+}

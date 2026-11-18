@@ -37,6 +37,11 @@ Setup & system (all local machine only; companion.REMOTE_ROUTES lists what a pai
                                   update manager (updates.py); install and model updates need confirm=true
   POST /system/shutdown           stop the app (desktop launcher only)
 
+Live information (Real-Time Intelligence Engine, realtime.py; all local machine only)
+  GET  /realtime/status           connector states (news, web, weather, fx, projects, tasks, system) and settings; never keys
+  PUT  /realtime/settings         enabled, news, web_provider (ddgs|brave|tavily|none), weather, fx, place
+  POST /realtime/lookup           {q, refresh}: the same `live` structure /chat returns, without calling the model
+
 Knowledge folder (M2)
   GET  /knowledge/status          watcher + index status     GET /knowledge/files  per-file status
   local only: PUT /knowledge/folder, POST /knowledge/watcher/{start,stop,pause,resume},
@@ -63,9 +68,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -78,6 +83,10 @@ import local_file_service as lfs
 import log_redaction
 import membership
 import memory_service as mem
+import career_mcq
+import news_center
+import projects
+import task_runner
 import setup_manager
 import updates
 import system_service as system
@@ -195,6 +204,18 @@ def _public_docs(request: Request, docs: list[dict]) -> list[dict]:
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     thread_id: str | None = Field(None, max_length=64, description="Conversation id; omit to start a new one")
+    model: str | None = Field(None, max_length=200, description="Installed Ollama chat model for this turn; omit for the default")
+    project_id: str | None = Field(None, max_length=40, description="Project whose context (instructions, documents) this chat uses")
+    focus: str = Field("auto", pattern="^(auto|general|coding|learning|career|research|quick|deep|planning|creative)$",
+                       description="Answer focus / interaction mode; auto detects coding, learning, career or research per message (same rules "
+                                   "as Android). A chosen mode (quick, deep, planning, creative, ...) also sets the history window, context "
+                                   "rules and sampling options; it never changes the model")
+    regenerate: bool = Field(False, description="Answer the thread's last question again; the new answer replaces the previous one in history")
+    refresh_live: bool = Field(False, description="Fetch live information again instead of using the live cache (Refresh on an answer)")
+
+
+class DefaultModelRequest(BaseModel):
+    model: str = Field(..., min_length=1, max_length=200)
 
 
 class QuestionRequest(BaseModel):
@@ -237,6 +258,11 @@ class PrefsIn(BaseModel):
     memory_enabled: bool | None = None
     save_history: bool | None = None
     history_retention_days: int | None = Field(None, ge=0, le=3650)
+    answer_detail: Literal["auto", "concise", "detailed"] | None = None
+    answer_depth: Literal["auto", "beginner", "intermediate", "expert"] | None = None
+    answer_style: Literal["auto", "direct", "steps", "examples"] | None = None
+    # letters, spaces and hyphens only, so the field can't carry instructions into the prompt
+    answer_language: str | None = Field(None, max_length=30, pattern=r"^(?:|[^\W\d_][^\W\d_ -]*(?:[ -][^\W\d_]+)*)$")
 
 
 class ProfileIn(BaseModel):
@@ -288,12 +314,160 @@ async def health(request: Request):
 @app.post("/chat")
 async def chat(req: ChatRequest, request: Request):
     guest = companion.role_of(request) == "member"           # members never touch the owner's data
+    model = None
+    if req.model and not guest:                               # dev.8: the chat's model choice, checked, never swapped
+        try:
+            model = await system.resolve_chat_model(req.model.strip())
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except ConnectionError as e:
+            raise _unavailable(e)
+    await system.note_chat_model(model or system.active_models()["llm"])   # release the previous chat model
+    extra = {**({"project_id": req.project_id} if req.project_id and not guest else {}),
+             **({"focus": req.focus} if req.focus != "auto" and not guest else {}),         # default: the call is unchanged
+             **({"regenerate": True} if req.regenerate and req.thread_id and not guest else {}),
+             **({"refresh_live": True} if req.refresh_live else {})}                                # default: the call is unchanged
     try:
-        result = await (run_agent(req.message.strip(), None, guest=True) if guest
-                        else run_agent(req.message.strip(), req.thread_id))
+        result = await (run_agent(req.message.strip(), None, guest=True, **({"refresh_live": True} if req.refresh_live else {})) if guest
+                        else run_agent(req.message.strip(), req.thread_id, model=model, **extra) if model
+                        else run_agent(req.message.strip(), req.thread_id, **extra))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        import insights
+        insights.note_provider_failure("chat", e)                 # 5.6: a count only (no content)
         raise _unavailable(e)
     return {**result, "thread_id": result["conversation_id"]}
+
+
+@app.post("/chat/stream")
+async def chat_stream(req: ChatRequest, request: Request):
+    """The same chat as /chat, streamed as newline-delimited JSON: {"type":"token","text"} … then {"type":"done", …}.
+    The answer appears while it is written instead of after it. Errors arrive as {"type":"error","message"}."""
+    if companion.role_of(request) == "member":
+        raise HTTPException(status_code=403, detail="Guests use /chat.")
+    model = None
+    if req.model:
+        try:
+            model = await system.resolve_chat_model(req.model.strip())
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except ConnectionError as e:
+            raise _unavailable(e)
+    if req.project_id and not projects.get(req.project_id):
+        raise HTTPException(status_code=400, detail="That project doesn't exist any more.")
+    await system.note_chat_model(model or system.active_models()["llm"])
+    from agent import stream_agent
+
+    async def events():
+        import json as _json
+        try:
+            async for ev in stream_agent(req.message.strip(), req.thread_id, model=model, project_id=req.project_id,
+                                         **({"focus": req.focus} if req.focus != "auto" else {}),    # default: the call is unchanged
+                                         **({"regenerate": True} if req.regenerate and req.thread_id else {}),
+                                         **({"refresh_live": True} if req.refresh_live else {})):
+                if ev["type"] == "done":
+                    ev["thread_id"] = ev["conversation_id"]
+                yield _json.dumps(ev, ensure_ascii=False) + "\n"
+        except Exception as e:                                              # noqa: BLE001 - reported to the page, not hidden
+            log.warning("Streamed chat failed: %s", type(e).__name__)
+            import insights
+            insights.note_provider_failure("chat_stream", e)            # 5.6: a count only (no content)
+            yield _json.dumps({"type": "error", "message": str(_unavailable(e).detail)}) + "\n"
+    return StreamingResponse(events(), media_type="application/x-ndjson", headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+
+
+class WarmIn(BaseModel):
+    model: str | None = Field(None, max_length=200)
+    whisper: bool = False
+
+
+@app.post("/chat/warm")
+async def chat_warm(req: WarmIn, request: Request):
+    """Called when the microphone starts: loads the chat model that will answer (the chosen one, never another) and, for
+    Private voice mode, Whisper, while the user is still speaking. Generates nothing and changes no setting."""
+    if companion.role_of(request) == "member":
+        return {"warmed": False}
+    model = req.model
+    if model:
+        try:
+            model = await system.resolve_chat_model(model.strip())
+        except (ValueError, ConnectionError):
+            return {"warmed": False}
+    model = model or system.active_models()["llm"]
+    await system.note_chat_model(model)                                    # the one-chat-model rule still holds
+    tasks = [system.preload_model(model)]
+    if req.whisper:
+        from transcribe import _load
+        tasks.append(asyncio.to_thread(_load))
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    return {"warmed": not isinstance(results[0], Exception), "model": model}
+
+
+# --------------------------------------------------------------------------- live information (Real-Time Intelligence Engine)
+class RealtimeSettingsIn(BaseModel):
+    enabled: bool | None = None
+    news: bool | None = None
+    web_provider: Literal["ddgs", "brave", "tavily", "none"] | None = None
+    weather: bool | None = None
+    fx: bool | None = None
+    place: str | None = Field(None, max_length=80)
+
+
+class RealtimeLookupIn(BaseModel):
+    q: str = Field(..., min_length=1, max_length=1000)
+    refresh: bool = False
+    focus: str = Field("auto", pattern="^(auto|general|coding|learning|career|research|quick|deep|planning|creative)$")
+
+
+@app.get("/realtime/status", dependencies=[Depends(local_only)])
+async def realtime_status():
+    """Each live connector's state (ready / off / needs_key / offline / error) and why, and the settings. Never a key."""
+    import realtime
+    return await realtime.status()
+
+
+@app.put("/realtime/settings", dependencies=[Depends(local_only)])
+async def realtime_settings(req: RealtimeSettingsIn):
+    import realtime
+    try:
+        realtime.save_settings(req.model_dump(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return await realtime.status()
+
+
+@app.post("/realtime/lookup", dependencies=[Depends(local_only)])
+async def realtime_lookup(req: RealtimeLookupIn):
+    """What a chat question would retrieve (resolve + connectors), without calling the model: {needed, state, sources, notes}."""
+    import realtime
+    return realtime.public(await realtime.lookup(req.q.strip(), req.focus, refresh=req.refresh))
+
+
+# --------------------------------------------------------------------------- performance (dev.8)
+@app.get("/system/performance", dependencies=[Depends(local_only)])
+async def system_performance():
+    """One real sample: CPU, RAM, NVIDIA GPU/VRAM, models loaded in Ollama, speed of the last answer."""
+    return await system.performance()
+
+
+# --------------------------------------------------------------------------- chat models (dev.8)
+@app.get("/models", dependencies=[Depends(local_only)])
+async def list_chat_models():
+    """Chat models installed in Ollama and the default for new chats (for the chat's model picker)."""
+    return await system.chat_models()
+
+
+@app.put("/models/default", dependencies=[Depends(local_only)])
+async def set_default_model(req: DefaultModelRequest):
+    try:
+        return await system.set_default_chat_model(req.model.strip())
+    except PermissionError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ConnectionError as e:
+        raise _unavailable(e)
 
 
 # --------------------------------------------------------------------------- content
@@ -306,11 +480,505 @@ async def news(limit: int = 8, refresh: bool = False):
     return {"items": items, "generated": True, "updated_at": generators.news_cache_time()}
 
 
+# --------------------------------------------------------------------------- AI Task Runner (dev.8)
+class TaskCreate(BaseModel):
+    template: Literal["summary", "study", "quiz", "news", "custom"]
+    request: str = Field("", max_length=1000)
+    source: dict
+    model: str | None = Field(None, max_length=200)
+    options: dict | None = None                 # quiz: {"count": 3|5|10, "difficulty": "mixed"|"easy"|"hard"}
+    project_id: str | None = Field(None, max_length=40)
+
+
+class TaskSave(BaseModel):
+    step: str = Field(..., max_length=30)
+    confirm: bool = False
+
+
+@app.get("/tasks/templates", dependencies=[Depends(local_only)])
+def task_templates():
+    return {"templates": [{"id": k, "title": v["title"], "sources": v["sources"], "steps": [t for _, t, _ in v["steps"]]}
+                          for k, v in task_runner.TEMPLATES.items()]}
+
+
+@app.get("/tasks/sources", dependencies=[Depends(local_only)])
+async def task_sources():
+    docs = await asyncio.to_thread(knowledge.list_sources)
+    cats = [{"id": c["id"], "label": c["label"]} for c in news_center.catalog()["categories"]]
+    prj = [{"id": p["id"], "name": p["name"], "documents": len(p["documents"])} for p in projects.list_projects(include_archived=False)]
+    return {"documents": docs, "news_categories": cats, "projects": prj}
+
+
+# --------------------------------------------------------------------------- career MCQ practice (career milestone)
+class CareerMcqIn(BaseModel):
+    mode: Literal["document", "topic", "mixed"] = "topic"
+    topic: str = Field("", max_length=120)
+    document: str | None = Field(None, max_length=300)
+    level: str = Field("junior", max_length=20)
+    difficulty: str = Field("medium", max_length=10)
+    count: int = 3
+    model: str | None = Field(None, max_length=200)
+    avoid: list[str] = Field(default_factory=list, max_length=40)
+
+
+class CareerAnswerIn(BaseModel):
+    key: str = Field(..., max_length=40)
+    topic: str = Field("", max_length=80)
+    difficulty: str = Field("medium", max_length=10)
+    scope: str = Field("", max_length=120)
+    correct: bool
+
+
+@app.post("/career/mcq", dependencies=[Depends(local_only)])
+async def career_mcq_batch(req: CareerMcqIn):
+    """One validated batch of personalised MCQs (resume/document, topic or both). Ask again for more: nothing repeats."""
+    model = None
+    if req.model:
+        try:
+            model = await system.resolve_chat_model(req.model)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except ConnectionError as e:
+            raise _unavailable(e)
+    try:
+        return await career_mcq.generate(req.mode, req.topic, req.document, req.level, req.difficulty, req.count, model, [a[:200] for a in req.avoid])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise _unavailable(e)
+
+
+@app.post("/career/mcq/answer", dependencies=[Depends(local_only)])
+def career_mcq_answer(req: CareerAnswerIn):
+    return career_mcq.record_answer(req.key, req.topic, req.difficulty, req.scope, req.correct)
+
+
+@app.get("/career/mcq/stats", dependencies=[Depends(local_only)])
+def career_mcq_stats(scope: str | None = None):
+    return career_mcq.stats(scope)
+
+
+# --------------------------------------------------------------------------- projects (stability milestone)
+class ProjectIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+    instructions: str = Field("", max_length=1500)
+
+
+class ProjectStatusIn(BaseModel):
+    objective: str = Field("", max_length=400)
+    stack: str = Field("", max_length=400)
+    current: str = Field("", max_length=400)
+    milestones: list[str] = Field(default_factory=list, max_length=12)
+    issues: list[str] = Field(default_factory=list, max_length=12)
+    next: list[str] = Field(default_factory=list, max_length=12)
+    decisions: list[str] = Field(default_factory=list, max_length=12)
+
+
+class ProjectPatch(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=80)
+    instructions: str | None = Field(None, max_length=1500)
+    use_memory: bool | None = None
+    status: ProjectStatusIn | None = None
+
+
+class ProjectDocs(BaseModel):
+    names: list[str] = Field(..., min_length=1, max_length=50)
+
+
+class ArchiveIn(BaseModel):
+    archived: bool = True
+
+
+def _project(pid: str) -> dict:
+    p = projects.get(pid)
+    if not p:
+        raise HTTPException(404, "Project not found.")
+    return p
+
+
+@app.get("/projects", dependencies=[Depends(local_only)])
+def project_list(archived: bool = True):
+    return {"projects": projects.list_projects(include_archived=archived)}
+
+
+@app.post("/projects", dependencies=[Depends(local_only)])
+def project_create(req: ProjectIn):
+    try:
+        return projects.create(req.name, req.instructions)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/discover", dependencies=[Depends(local_only)])
+async def discover_courses(q: str = Query("", max_length=80), free_only: bool = False):
+    """Next build: Study → Discover (live MIT OCW, OpenStax, Wikibooks + provider search links; cost only as the source states)."""
+    import brain
+    return await brain.discover(q, free_only)
+
+
+@app.get("/briefing", dependencies=[Depends(local_only)])
+def personal_briefing(kind: Literal["now", "morning", "evening", "weekly"] = "now"):
+    """Next build: the personal briefing from local records only (projects, failed AI tasks, MCQ practice, last saved news).
+    5.6: kind=morning (today's plan + briefing), evening (what changed today), weekly (last 7 days); default unchanged."""
+    import brain
+    import career_mcq
+    import insights
+    p = news_center.prefs()
+    args = (projects.list_projects(), task_runner.load_all(), career_mcq.load()["attempts"], news_center.cached(news_center.cache_key("foryou", p)))
+    if kind == "now":
+        return brain.briefing(*args)
+    return insights.briefing(kind, *args, conversations=mem.list_conversations(limit=500) if kind == "weekly" else None)
+
+
+@app.get("/plan", dependencies=[Depends(local_only)])
+def daily_plan():
+    """5.5: today's plan from projects' recorded issues and next actions (no invented deadlines)."""
+    import brain
+    return brain.plan(projects.list_projects())
+
+
+@app.get("/skills", dependencies=[Depends(local_only)])
+def skill_map(min_answers: int = Query(5, ge=3, le=20)):
+    """5.5: skill levels from MCQ answers (none below min_answers), trend from the last 10 answers."""
+    import brain
+    import career_mcq
+    return brain.skills(career_mcq.load()["attempts"], min_answers)
+
+
+@app.get("/search", dependencies=[Depends(local_only)])
+def universal_search(q: str = Query("", max_length=80), types: str | None = Query(None, max_length=120),
+                     days: int | None = Query(None, ge=1, le=3650), project: str | None = Query(None, max_length=40),
+                     sort: Literal["relevance", "recent"] = "relevance"):
+    """Next build: one local search (conversations, memories only when memory is on, projects, AI tasks, knowledge files, saved news).
+    5.6 (Universal Search 2.0): optional filters types (comma list), days, project, sort; results also grouped by type with counts."""
+    import knowledge
+    import insights
+    import career_mcq
+    q = q.strip()
+    if len(q) < 2:
+        return {"results": [], "groups": [], "total": 0}
+    with db.connect() as c:
+        hits = [dict(r) for r in c.execute(
+            "SELECT m.conversation_id, m.content, m.created_at, c.title FROM messages m JOIN conversations c ON c.id = m.conversation_id "
+            "WHERE m.content LIKE ? ESCAPE '\\' ORDER BY m.created_at DESC LIMIT 20",
+            ("%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%",))]
+    mems = mem.list_memories() if db.get_prefs().get("memory_enabled", True) else None
+    news_files = sorted((news_center.lfs.cache_dir() / "news").glob("cat-*.json"))
+    articles = [a for f in news_files for a in (news_center.cached(f.stem) or {}).get("articles", [])]
+    return insights.universal_search(q, conversations=mem.list_conversations(limit=500), messages_hits=hits, memories=mems,
+                                     projects=projects.list_projects(), tasks=task_runner.load_all(), knowledge_files=knowledge.list_sources(),
+                                     news_articles=articles, mcq_attempts=career_mcq.load()["attempts"], types=insights.parse_types(types),
+                                     days=days, project=project, sort=sort)
+
+
+@app.get("/suggestions", dependencies=[Depends(local_only)])
+def home_suggestions():
+    """5.2 Home: "continue working" and suggestions from your projects and AI tasks (records only, computed on request)."""
+    import intelligence
+    return intelligence.companion(projects.list_projects(), task_runner.load_all())
+
+
+@app.get("/projects/{pid}", dependencies=[Depends(local_only)])
+async def project_get(pid: str):
+    return await asyncio.to_thread(projects.overview, _project(pid))
+
+
+@app.patch("/projects/{pid}", dependencies=[Depends(local_only)])
+def project_update(pid: str, req: ProjectPatch):
+    _project(pid)
+    try:
+        return projects.update(pid, req.name, req.instructions, req.use_memory, req.status.model_dump() if req.status else None)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/projects/{pid}/archive", dependencies=[Depends(local_only)])
+def project_archive(pid: str, req: ArchiveIn):
+    _project(pid)
+    return projects.set_archived(pid, req.archived)
+
+
+@app.delete("/projects/{pid}", dependencies=[Depends(local_only)])
+def project_delete(pid: str, confirm: bool = False):
+    """Removes the project record only; documents, knowledge, chats and task history are kept. Needs confirm=true."""
+    _project(pid)
+    if not confirm:
+        raise HTTPException(400, "Deleting a project needs your confirmation (confirm=true). Its documents and chats are kept.")
+    return {"deleted": projects.delete(pid)}
+
+
+@app.post("/projects/{pid}/documents", dependencies=[Depends(local_only)])
+async def project_add_documents(pid: str, req: ProjectDocs):
+    _project(pid)
+    try:
+        return await asyncio.to_thread(projects.add_documents, pid, req.names)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/projects/{pid}/documents", dependencies=[Depends(local_only)])
+def project_remove_document(pid: str, name: str):
+    """Removes the association only; the document stays in your knowledge index."""
+    _project(pid)
+    return projects.remove_document(pid, name)
+
+
+@app.get("/projects/{pid}/export", dependencies=[Depends(local_only)])
+async def project_export(pid: str):
+    from fastapi.responses import PlainTextResponse
+    p = _project(pid)
+    md = await asyncio.to_thread(projects.export_markdown, p)
+    safe = "".join(ch for ch in p["name"] if ch.isalnum() or ch in " -_").strip()[:50] or "project"
+    return PlainTextResponse(md, media_type="text/markdown", headers={"Content-Disposition": f'attachment; filename="{safe}.md"'})
+
+
+@app.get("/projects/{pid}/overview", dependencies=[Depends(local_only)])
+async def project_status_overview(pid: str):
+    """5.6: read-only Status overview (recorded status and its age, milestones, blockers, decisions, next actions,
+    documents, recent activity, next possible actions from recorded next/issues). Nothing is edited or invented."""
+    import insights
+    p = _project(pid)
+    known = await asyncio.to_thread(knowledge.list_sources)
+    return insights.project_overview(p, mem.list_conversations(limit=1000), task_runner.load_all(), known)
+
+
+# --------------------------------------------------------------------------- Desktop Agent 2.0 (5.6)
+class AgentPlanIn(BaseModel):
+    project_id: str = Field(..., min_length=1, max_length=40)
+    workflow: Literal["status", "priorities", "docs", "unfinished", "duplicates"]
+
+
+class AgentApplyIn(BaseModel):
+    project_id: str = Field(..., min_length=1, max_length=40)
+    run_id: str = Field(..., min_length=1, max_length=40)
+    item_ids: list[str] = Field(..., min_length=1, max_length=20)
+    approved: bool = False
+
+
+class AgentUndoIn(BaseModel):
+    run_id: str = Field(..., min_length=1, max_length=40)
+
+
+@app.get("/agent/tools", dependencies=[Depends(local_only)])
+def agent_tools():
+    """The agent's typed tool registry (READ / REVERSIBLE / SENSITIVE) and its workflows."""
+    import insights
+    return {"tools": [{"name": k, "kind": v["kind"], "args": list(v["args"]), "about": v["about"]} for k, v in insights.TOOLS.items()],
+            "workflows": insights.WORKFLOWS}
+
+
+@app.post("/agent/plan", dependencies=[Depends(local_only)])
+async def agent_plan(req: AgentPlanIn):
+    """Read-only planning: sections with sources and proposals with ids. Nothing is changed."""
+    import insights
+    docs = await asyncio.to_thread(knowledge.list_sources)
+    try:
+        return insights.plan(req.project_id, req.workflow, task_runner.load_all(), docs)
+    except KeyError:
+        raise HTTPException(404, "Project not found.")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/agent/apply", dependencies=[Depends(local_only)])
+async def agent_apply(req: AgentApplyIn):
+    """Applies only the approved REVERSIBLE proposals of a plan (link a document, add a next action) and verifies each one."""
+    import insights
+    try:
+        return await asyncio.to_thread(insights.apply, req.project_id, req.run_id, req.item_ids, req.approved)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
+    except LookupError as e:
+        if isinstance(e, KeyError):
+            raise HTTPException(404, "Project not found.")
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/agent/undo", dependencies=[Depends(local_only)])
+async def agent_undo(req: AgentUndoIn):
+    """Reverts exactly what that run applied."""
+    import insights
+    try:
+        return await asyncio.to_thread(insights.undo, req.run_id)
+    except LookupError as e:
+        if isinstance(e, KeyError):
+            raise HTTPException(404, "Project not found.")
+        raise HTTPException(404, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/eval/retrieval", dependencies=[Depends(local_only)])
+def eval_retrieval(k: int = Query(3, ge=1, le=10)):
+    """5.6: local AI-quality check on a built-in synthetic set (no user data): precision@k of search and related documents,
+    duplicate detection accuracy, latency per call, and provider failure counts (counts only)."""
+    import eval_local
+    return eval_local.run(k)
+
+
+@app.get("/tasks", dependencies=[Depends(local_only)])
+def task_list():
+    return {"tasks": list(reversed(task_runner.load_all()))}
+
+
+@app.post("/tasks", dependencies=[Depends(local_only)])
+async def task_create(req: TaskCreate):
+    model = None
+    if req.model:
+        try:
+            model = await system.resolve_chat_model(req.model)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except ConnectionError as e:
+            raise _unavailable(e)
+    try:
+        return task_runner.create(req.template, req.request, req.source, model, req.options, req.project_id)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/tasks/{task_id}", dependencies=[Depends(local_only)])
+def task_get(task_id: str):
+    t = task_runner.get(task_id)
+    if not t:
+        raise HTTPException(404, "Task not found.")
+    return t
+
+
+@app.post("/tasks/{task_id}/run", dependencies=[Depends(local_only)])
+async def task_run(task_id: str):
+    try:
+        return task_runner.start(task_id)
+    except KeyError:
+        raise HTTPException(404, "Task not found.")
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+
+
+@app.post("/tasks/{task_id}/retry/{step_id}", dependencies=[Depends(local_only)])
+async def task_retry(task_id: str, step_id: str):
+    try:
+        return task_runner.retry_step(task_id, step_id)
+    except KeyError:
+        raise HTTPException(404, "Task not found.")
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/tasks/{task_id}/cancel", dependencies=[Depends(local_only)])
+async def task_cancel(task_id: str):
+    t = await task_runner.cancel(task_id)
+    if not t:
+        raise HTTPException(404, "Task not found.")
+    return t
+
+
+@app.delete("/tasks/{task_id}", dependencies=[Depends(local_only)])
+def task_delete(task_id: str):
+    return {"deleted": task_runner.delete(task_id)}
+
+
+@app.post("/tasks/{task_id}/save", dependencies=[Depends(local_only)])
+async def task_save(task_id: str, req: TaskSave):
+    """Saves one finished result to Knowledge. Requires confirm=true (an explicit choice); never personal memory."""
+    if not req.confirm:
+        raise HTTPException(400, "Saving to Knowledge needs your confirmation (confirm=true).")
+    try:
+        return await asyncio.to_thread(task_runner.save_to_knowledge, task_id, req.step)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+
+
+# --------------------------------------------------------------------------- News Center (dev.8)
+class NewsAiRequest(BaseModel):
+    mode: Literal["briefing", "summarize", "explain"] = "briefing"
+    category: str | None = Field(None, max_length=30)
+    query: str | None = Field(None, max_length=120)
+    article_id: str | None = Field(None, max_length=64)
+    model: str | None = Field(None, max_length=200)
+
+
+@app.get("/news/categories")
+def news_categories():
+    c = news_center.catalog()
+    return {"categories": [{"id": x["id"], "label": x["label"], "glyph": x.get("glyph", ""), "local": bool(x.get("local")),
+                            "publishers": [f["publisher"] for f in x.get("feeds", [])]} for x in c["categories"]],
+            "prefs": news_center.prefs()}
+
+
+@app.get("/news/article/{article_id}")
+async def news_article(article_id: str, model: str | None = None, summarize: bool = True):
+    """In-app reading of one story: its own text (when the publisher's page is readable) and a summary of exactly that
+    text on the local model. Opening a story never opens the publisher's site; that is the reader's second Read more."""
+    m = None
+    if model:
+        try:
+            m = await system.resolve_chat_model(model)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except ConnectionError as e:
+            raise _unavailable(e)
+    if summarize:
+        await system.note_chat_model(m or system.active_models()["llm"])
+    try:
+        return await news_center.read_article(article_id[:80], m, summarize)
+    except KeyError:
+        raise HTTPException(404, "That story isn't in the current list any more. Refresh News and open it again.")
+
+
+@app.get("/news/feed")
+async def news_feed(category: str = "foryou", refresh: bool = False):
+    return await news_center.feed(category[:30], refresh)
+
+
+@app.get("/news/search")
+async def news_search(q: str = ""):
+    return await news_center.search(q)
+
+
+@app.put("/news/prefs", dependencies=[Depends(local_only)])
+def news_prefs(p: dict):
+    return news_center.save_prefs(p)
+
+
+@app.post("/news/ai")
+async def news_ai(req: NewsAiRequest):
+    """Briefing / summary / explanation on the local model, from the stories already retrieved (no tools, history or memory)."""
+    src = (await news_center.search(req.query)) if req.query else (news_center.cached(f"cat-{req.category or 'foryou'}") or {})
+    articles = src.get("articles", [])
+    if req.article_id:
+        articles = [a for a in articles if a["id"] == req.article_id]
+        if not articles:
+            raise HTTPException(404, "That story isn't in the current list any more. Refresh News and try again.")
+    model = None
+    if req.model:
+        try:
+            model = await system.resolve_chat_model(req.model)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except ConnectionError as e:
+            raise _unavailable(e)
+    await system.note_chat_model(model or system.active_models()["llm"])   # News AI also keeps one chat model in memory
+    try:
+        return await news_center.ai(req.mode, articles, model)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise _unavailable(e)
+
+
 @app.post("/generate-question")
 async def generate_question(req: QuestionRequest):
     exclude = list(req.exclude)
     if req.user_id:
         exclude += await asyncio.to_thread(db.seen_items, req.user_id, "interview_view")
+    await system.note_chat_model(system.active_models()["llm"])   # one chat model in memory, whichever feature uses it
     try:
         return {"questions": await generators.generate_questions(req.category, req.difficulty, req.count, exclude)}
     except GenerationError as e:
@@ -322,6 +990,7 @@ async def generate_mcq(req: MCQRequest):
     exclude = list(req.exclude)
     if req.user_id:
         exclude += await asyncio.to_thread(db.seen_items, req.user_id, "mcq")
+    await system.note_chat_model(system.active_models()["llm"])
     try:
         return {"mcqs": await generators.generate_mcqs(req.category, req.count, exclude)}
     except GenerationError as e:
@@ -932,5 +1601,20 @@ def shutdown():
 companion.register_api_routes(r.path for r in app.routes if hasattr(r, "methods"))
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+# 6.1: direct links / refreshes of the app's own pages (/home, /assistant, /study, /more) get the app shell, which opens that
+# page. Not API routes (no JSON, not in the route table): only these exact names, everything else is served as before.
+PAGE_PATHS = {"home", "assistant", "study", "more"}
+
+
+class AppStatic(StaticFiles):
+    async def get_response(self, path: str, scope):
+        if path.strip("/\\") in PAGE_PATHS:
+            if scope.get("path", "").endswith("/"):           # /home/ -> /home (relative asset URLs would break under a slash)
+                from fastapi.responses import RedirectResponse
+                return RedirectResponse(scope["path"].rstrip("/"), status_code=308)
+            path = "index.html"
+        return await super().get_response(path, scope)
+
+
 if FRONTEND_DIR.is_dir():
-    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+    app.mount("/", AppStatic(directory=FRONTEND_DIR, html=True), name="frontend")

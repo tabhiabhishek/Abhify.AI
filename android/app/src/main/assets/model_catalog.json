@@ -1,0 +1,52 @@
+{
+  "format": "abhify-model-catalog-1",
+  "runtime": { "name": "llama.cpp", "version": "v0.7.0", "commit": "620d2225cc436ab0b001e3200e590e3b286ef9ab" },
+  "models": [
+    {
+      "id": "qwen2.5-1.5b-instruct-q4_k_m",
+      "name": "Qwen2.5 1.5B Instruct",
+      "parameters": "1.5B",
+      "version": "91cad51170dc346986eccefdc2dd33a9da36ead9",
+      "url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/91cad51170dc346986eccefdc2dd33a9da36ead9/qwen2.5-1.5b-instruct-q4_k_m.gguf",
+      "source": "huggingface.co/Qwen (the model's publisher)",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/blob/91cad51170dc346986eccefdc2dd33a9da36ead9/LICENSE",
+      "redistribution": "Apache-2.0 allows redistribution with the license and notices. The app downloads it from the publisher; it is not bundled.",
+      "format": "gguf",
+      "quantization": "Q4_K_M",
+      "sizeBytes": 1117320736,
+      "sha256": "6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e",
+      "minTotalRamMb": 5500,
+      "estimatedRuntimeMb": 1450,
+      "contextOptions": [1024, 2048, 4096],
+      "defaultContext": 2048,
+      "minSdk": 29,
+      "abis": ["arm64-v8a", "x86_64"],
+      "acceleration": { "vulkan": { "supported": true, "validated": false } },
+      "notes": "Better answers. For phones with 6 GB of RAM or more. Memory estimate pending real-phone measurement."
+    },
+    {
+      "id": "qwen2.5-0.5b-instruct-q4_k_m",
+      "name": "Qwen2.5 0.5B Instruct",
+      "parameters": "0.5B",
+      "version": "9217f5db79a29953eb74d5343926648285ec7e67",
+      "url": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/9217f5db79a29953eb74d5343926648285ec7e67/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "source": "huggingface.co/Qwen (the model's publisher)",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/blob/9217f5db79a29953eb74d5343926648285ec7e67/LICENSE",
+      "redistribution": "Apache-2.0 allows redistribution with the license and notices. The app downloads it from the publisher; it is not bundled.",
+      "format": "gguf",
+      "quantization": "Q4_K_M",
+      "sizeBytes": 491400032,
+      "sha256": "74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db",
+      "minTotalRamMb": 2700,
+      "estimatedRuntimeMb": 750,
+      "contextOptions": [1024, 2048, 4096],
+      "defaultContext": 2048,
+      "minSdk": 29,
+      "abis": ["arm64-v8a", "x86_64"],
+      "acceleration": { "vulkan": { "supported": true, "validated": false } },
+      "notes": "Faster and smaller, weaker answers. For phones with 3 to 4 GB of RAM. Memory estimate pending real-phone measurement."
+    }
+  ]
+}

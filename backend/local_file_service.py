@@ -246,7 +246,9 @@ def _sqlite_copy(src: Path, dst: Path) -> None:
 
 
 # --------------------------------------------------------------------------- backup / restore
-BACKUP_INCLUDE = ("config", "data/abhify.db", "data/chroma", "data/documents", "data/memory")
+BACKUP_INCLUDE = ("config", "data/abhify.db", "data/chroma", "data/documents", "data/memory",
+                  # JSON files of later features (no database change): AI tasks, projects, career practice
+                  "data/tasks.json", "data/projects.json", "data/career_mcq.json")
 
 
 def create_backup(label: str = "manual", dest_dir: Path | None = None, schema_version: int | None = None) -> Path:

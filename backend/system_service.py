@@ -228,6 +228,141 @@ def active_models() -> dict[str, str]:
             "embed": os.environ.get("EMBED_MODEL") or s["models"]["embed"]}
 
 
+# --------------------------------------------------------------------------- chat model choice (dev.8)
+_EMBED_HINTS = ("embed", "bge-", "bge:", "minilm", "e5-")
+
+
+def is_chat_model(tag: dict) -> bool:
+    """Ollama lists embedding models next to chat models; only chat models can answer in chat."""
+    name = tag.get("name", "").lower()
+    d = tag.get("details") or {}
+    families = [str(f).lower() for f in (d.get("families") or [])] + [str(d.get("family") or "").lower()]
+    return not any(h in name for h in _EMBED_HINTS) and not any("bert" in f for f in families)
+
+
+async def chat_models() -> dict[str, Any]:
+    """The chat models really installed in Ollama (from /api/tags; embedding models left out) and the default.
+    Nothing is invented: when Ollama is down the list is empty and `ollama` is False."""
+    active = active_models()["llm"]
+    locked = bool(os.environ.get("LLM_MODEL"))
+    url = get_settings().ollama_base_url
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            tags = (await client.get(f"{url}/api/tags")).json().get("models", [])
+    except Exception as e:
+        return {"ollama": False, "default": active, "default_installed": False, "locked": locked, "models": [],
+                "error": f"Ollama isn't reachable ({type(e).__name__}). Start Ollama and try again."}
+    names = [t["name"] for t in tags]
+    models = [{"name": t["name"], "size_gb": round(t.get("size", 0) / GB, 2),
+               "parameter_size": (t.get("details") or {}).get("parameter_size"),
+               "quantization": (t.get("details") or {}).get("quantization_level"),
+               "family": (t.get("details") or {}).get("family"),
+               "default": model_installed(active, [t["name"]])}
+              for t in tags if is_chat_model(t)]
+    return {"ollama": True, "default": active, "default_installed": model_installed(active, names), "locked": locked, "models": models}
+
+
+async def resolve_chat_model(name: str) -> str:
+    """Checks a model asked for in chat. Returns the name to use, or raises ValueError (not installed / not a chat
+    model) or ConnectionError (Ollama down). Never substitutes another model."""
+    info = await chat_models()
+    if not info["ollama"]:
+        raise ConnectionError(info.get("error") or "Ollama isn't reachable.")
+    for m in info["models"]:
+        if model_installed(name, [m["name"]]):
+            return m["name"]
+    raise ValueError(f"The model '{name}' is not installed in Ollama (or is not a chat model). "
+                     "Choose another model, or install it in Models & setup.")
+
+
+_last_chat_model: str | None = None
+_last_inference: dict[str, Any] | None = None
+
+
+def record_inference(meta: dict[str, Any] | None, model: str | None) -> dict[str, Any] | None:
+    """Speed of one answer, from Ollama's own response metadata (durations in nanoseconds). None when Ollama didn't
+    report counts (then nothing is shown: no estimate is ever made up)."""
+    global _last_inference
+    meta = meta or {}
+    count, dur = meta.get("eval_count"), meta.get("eval_duration")
+    if not count or not dur:
+        return None
+    stats = {"model": meta.get("model") or model, "output_tokens": count, "prompt_tokens": meta.get("prompt_eval_count"),
+             "tokens_per_second": round(count / (dur / 1e9), 1), "load_seconds": round((meta.get("load_duration") or 0) / 1e9, 2),
+             "prompt_seconds": round((meta.get("prompt_eval_duration") or 0) / 1e9, 2),          # load + prompt = time to the first token
+             "total_seconds": round((meta.get("total_duration") or 0) / 1e9, 2), "at": int(time.time())}
+    _last_inference = stats
+    return stats
+
+
+def _gpu_usage() -> list[dict[str, Any]]:
+    """NVIDIA utilisation and VRAM right now (nvidia-smi); empty when there is no NVIDIA GPU or driver tool."""
+    if not shutil.which("nvidia-smi"):
+        return []
+    out = _run(["nvidia-smi", "--query-gpu=name,utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"])
+    gpus = []
+    for line in (out or "").splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) == 4 and parts[1].isdigit():
+            gpus.append({"name": parts[0], "util_percent": int(parts[1]), "vram_used_gb": round(int(parts[2]) / 1024, 2),
+                         "vram_total_gb": round(int(parts[3]) / 1024, 2)})
+    return gpus
+
+
+async def performance() -> dict[str, Any]:
+    """One real sample of this computer and Ollama: CPU and RAM (psutil), NVIDIA GPU use and VRAM (nvidia-smi), the models
+    Ollama has loaded right now (/api/ps) and the speed of the last answer (Ollama's metadata). Sampled only when asked."""
+    import psutil
+    cpu = await asyncio.to_thread(psutil.cpu_percent, 0.3)
+    vm = psutil.virtual_memory()
+    gpus = await asyncio.to_thread(_gpu_usage)
+    loaded, reachable = [], False
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            ps = (await client.get(f"{get_settings().ollama_base_url}/api/ps")).json().get("models", [])
+        reachable = True
+        loaded = [{"name": m.get("name"), "size_gb": round(m.get("size", 0) / GB, 2), "vram_gb": round(m.get("size_vram", 0) / GB, 2),
+                   "unloads_at": m.get("expires_at"), "chat": is_chat_model(m)} for m in ps]
+    except Exception:                                        # noqa: BLE001 - reported as not reachable
+        pass
+    return {"cpu_percent": cpu, "ram_used_gb": round(vm.used / GB, 2), "ram_total_gb": round(vm.total / GB, 2), "ram_percent": vm.percent,
+            "gpus": gpus, "ollama": reachable, "loaded": loaded, "last_inference": _last_inference, "sampled_at": int(time.time())}
+
+
+async def note_chat_model(name: str) -> None:
+    """Ollama keeps a model in memory for 5 minutes after use, so switching chat models would leave two of them in
+    (GPU) memory. When chat moves to another model, the previous chat model is released right away (keep_alive 0).
+    Best effort: a failure only means Ollama frees it later. The embedding model is never touched."""
+    global _last_chat_model
+    # after a restart nothing was seen yet: the configured default is what earlier chats loaded
+    prev, _last_chat_model = (_last_chat_model or active_models()["llm"]), name
+    if not prev or model_installed(prev, [name]) or model_installed(name, [prev]):
+        return
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(f"{get_settings().ollama_base_url}/api/generate", json={"model": prev, "keep_alive": 0})
+    except Exception as e:                                   # noqa: BLE001 - best effort
+        log.info("Could not release %s: %s", prev, type(e).__name__)
+
+
+async def preload_model(name: str) -> None:
+    """Loads [name] into Ollama's memory without generating anything (a request with no prompt), so the next answer
+    doesn't wait for the load. Used when the microphone starts (stability milestone). Raises when Ollama fails."""
+    async with httpx.AsyncClient(timeout=120) as client:
+        r = await client.post(f"{get_settings().ollama_base_url}/api/generate", json={"model": name})
+        r.raise_for_status()
+
+
+async def set_default_chat_model(name: str) -> dict[str, Any]:
+    """Makes an installed chat model the default for new chats (settings.json). The embedding model is unchanged."""
+    if os.environ.get("LLM_MODEL"):
+        raise PermissionError("The chat model is set by the LLM_MODEL environment variable; change it there.")
+    real = await resolve_chat_model(name)
+    lfs.update_settings(models={"llm": real})
+    _reset_model_caches()
+    return await chat_models()
+
+
 def apply_profile(profile: str) -> dict[str, Any]:
     if profile not in PROFILES:
         raise ValueError(f"Unknown profile '{profile}'")

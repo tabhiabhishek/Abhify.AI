@@ -1,0 +1,402 @@
+{
+  "format": "abhify-news-sources-1",
+  "note": "Public RSS/Atom feeds from the publishers, and Google News RSS (topics, local and search). Fetched only when News is opened, refreshed or searched. All feeds checked 2026-11-09 (reachable; most include article images). No API keys are needed. Hindi: feeds marked \"lang\": \"hi\" (Amar Ujala, Live Hindustan, ABP Live, NDTV India, BBC Hindi) and Google News in Hindi; checked 2026-11-18 (valid RSS with Hindi items). Feeds without \"lang\" are English.",
+  "google": {
+    "top": "https://news.google.com/rss?hl={hl}&gl={gl}&ceid={gl}:{lang}",
+    "topic": "https://news.google.com/rss/headlines/section/topic/{topic}?hl={hl}&gl={gl}&ceid={gl}:{lang}",
+    "search": "https://news.google.com/rss/search?q={q}+when:7d&hl={hl}&gl={gl}&ceid={gl}:{lang}"
+  },
+  "categories": [
+    {
+      "id": "foryou",
+      "label": "For You",
+      "glyph": "✨",
+      "mix": true,
+      "labelHi": "आपके लिए"
+    },
+    {
+      "id": "local",
+      "label": "Local",
+      "glyph": "🧭",
+      "local": true,
+      "labelHi": "स्थानीय"
+    },
+    {
+      "id": "india",
+      "label": "India",
+      "glyph": "🏠",
+      "googleTopic": "NATION",
+      "feeds": [
+        {
+          "publisher": "The Hindu",
+          "url": "https://www.thehindu.com/news/national/feeder/default.rss"
+        },
+        {
+          "publisher": "The Indian Express",
+          "url": "https://indianexpress.com/section/india/feed/"
+        },
+        {
+          "publisher": "Times of India",
+          "url": "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms"
+        },
+        {
+          "publisher": "NDTV",
+          "url": "https://feeds.feedburner.com/ndtvnews-india-news"
+        },
+        {
+          "publisher": "Amar Ujala",
+          "url": "https://www.amarujala.com/rss/india-news.xml",
+          "lang": "hi"
+        },
+        {
+          "publisher": "Live Hindustan",
+          "url": "https://api.livehindustan.com/feeds/rss/national/rssfeed.xml",
+          "lang": "hi"
+        },
+        {
+          "publisher": "ABP Live",
+          "url": "https://www.abplive.com/news/india/feed",
+          "lang": "hi"
+        },
+        {
+          "publisher": "NDTV India",
+          "url": "https://feeds.feedburner.com/ndtvkhabar-latest",
+          "lang": "hi"
+        }
+      ],
+      "labelHi": "भारत"
+    },
+    {
+      "id": "world",
+      "label": "World",
+      "glyph": "🧭",
+      "googleTopic": "WORLD",
+      "feeds": [
+        {
+          "publisher": "BBC News",
+          "url": "https://feeds.bbci.co.uk/news/world/rss.xml"
+        },
+        {
+          "publisher": "The Guardian",
+          "url": "https://www.theguardian.com/world/rss"
+        },
+        {
+          "publisher": "Al Jazeera",
+          "url": "https://www.aljazeera.com/xml/rss/all.xml"
+        },
+        {
+          "publisher": "Amar Ujala",
+          "url": "https://www.amarujala.com/rss/world.xml",
+          "lang": "hi"
+        },
+        {
+          "publisher": "Live Hindustan",
+          "url": "https://api.livehindustan.com/feeds/rss/international/rssfeed.xml",
+          "lang": "hi"
+        },
+        {
+          "publisher": "ABP Live",
+          "url": "https://www.abplive.com/news/world/feed",
+          "lang": "hi"
+        },
+        {
+          "publisher": "BBC Hindi",
+          "url": "https://feeds.bbci.co.uk/hindi/rss.xml",
+          "lang": "hi"
+        }
+      ],
+      "labelHi": "दुनिया"
+    },
+    {
+      "id": "technology",
+      "label": "Technology",
+      "glyph": "🖥",
+      "googleTopic": "TECHNOLOGY",
+      "feeds": [
+        {
+          "publisher": "The Verge",
+          "url": "https://www.theverge.com/rss/index.xml"
+        },
+        {
+          "publisher": "Ars Technica",
+          "url": "https://feeds.arstechnica.com/arstechnica/index"
+        },
+        {
+          "publisher": "TechCrunch",
+          "url": "https://techcrunch.com/feed/"
+        },
+        {
+          "publisher": "Amar Ujala",
+          "url": "https://www.amarujala.com/rss/technology.xml",
+          "lang": "hi"
+        },
+        {
+          "publisher": "Live Hindustan",
+          "url": "https://api.livehindustan.com/feeds/rss/gadgets/rssfeed.xml",
+          "lang": "hi"
+        },
+        {
+          "publisher": "ABP Live",
+          "url": "https://www.abplive.com/technology/feed",
+          "lang": "hi"
+        }
+      ],
+      "labelHi": "टेक्नोलॉजी"
+    },
+    {
+      "id": "ai",
+      "label": "AI & ML",
+      "glyph": "🧩",
+      "feeds": [
+        {
+          "publisher": "OpenAI",
+          "url": "https://openai.com/news/rss.xml"
+        },
+        {
+          "publisher": "Google AI",
+          "url": "https://blog.google/technology/ai/rss/"
+        },
+        {
+          "publisher": "Google DeepMind",
+          "url": "https://deepmind.google/blog/rss.xml"
+        },
+        {
+          "publisher": "Hugging Face",
+          "url": "https://huggingface.co/blog/feed.xml"
+        },
+        {
+          "publisher": "MIT News",
+          "url": "https://news.mit.edu/rss/topic/artificial-intelligence2"
+        },
+        {
+          "publisher": "The Verge",
+          "url": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml"
+        },
+        {
+          "publisher": "TechCrunch",
+          "url": "https://techcrunch.com/category/artificial-intelligence/feed/"
+        },
+        {
+          "publisher": "MarkTechPost",
+          "url": "https://www.marktechpost.com/feed/"
+        }
+      ],
+      "labelHi": "एआई और एमएल",
+      "searchHi": "आर्टिफिशियल इंटेलिजेंस"
+    },
+    {
+      "id": "business",
+      "label": "Business",
+      "glyph": "📈",
+      "googleTopic": "BUSINESS",
+      "feeds": [
+        {
+          "publisher": "BBC News",
+          "url": "https://feeds.bbci.co.uk/news/business/rss.xml"
+        },
+        {
+          "publisher": "The Economic Times",
+          "url": "https://economictimes.indiatimes.com/rssfeedstopstories.cms"
+        },
+        {
+          "publisher": "Mint",
+          "url": "https://www.livemint.com/rss/markets"
+        },
+        {
+          "publisher": "Amar Ujala",
+          "url": "https://www.amarujala.com/rss/business.xml",
+          "lang": "hi"
+        },
+        {
+          "publisher": "Live Hindustan",
+          "url": "https://api.livehindustan.com/feeds/rss/business/rssfeed.xml",
+          "lang": "hi"
+        },
+        {
+          "publisher": "ABP Live",
+          "url": "https://www.abplive.com/business/feed",
+          "lang": "hi"
+        }
+      ],
+      "labelHi": "व्यापार"
+    },
+    {
+      "id": "sports",
+      "label": "Sports",
+      "glyph": "🚩",
+      "googleTopic": "SPORTS",
+      "feeds": [
+        {
+          "publisher": "BBC Sport",
+          "url": "https://feeds.bbci.co.uk/sport/rss.xml"
+        },
+        {
+          "publisher": "ESPNcricinfo",
+          "url": "https://www.espncricinfo.com/rss/content/story/feeds/0.xml"
+        },
+        {
+          "publisher": "Amar Ujala",
+          "url": "https://www.amarujala.com/rss/sports.xml",
+          "lang": "hi"
+        },
+        {
+          "publisher": "Live Hindustan",
+          "url": "https://api.livehindustan.com/feeds/rss/cricket/rssfeed.xml",
+          "lang": "hi"
+        },
+        {
+          "publisher": "ABP Live",
+          "url": "https://www.abplive.com/sports/feed",
+          "lang": "hi"
+        }
+      ],
+      "labelHi": "खेल"
+    },
+    {
+      "id": "science",
+      "label": "Science",
+      "glyph": "💡",
+      "googleTopic": "SCIENCE",
+      "feeds": [
+        {
+          "publisher": "BBC News",
+          "url": "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"
+        },
+        {
+          "publisher": "ScienceDaily",
+          "url": "https://www.sciencedaily.com/rss/all.xml"
+        },
+        {
+          "publisher": "NASA",
+          "url": "https://www.nasa.gov/news-release/feed/"
+        }
+      ],
+      "labelHi": "विज्ञान"
+    },
+    {
+      "id": "entertainment",
+      "label": "Entertainment",
+      "glyph": "▶",
+      "googleTopic": "ENTERTAINMENT",
+      "feeds": [
+        {
+          "publisher": "BBC News",
+          "url": "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml"
+        },
+        {
+          "publisher": "Variety",
+          "url": "https://variety.com/feed/"
+        },
+        {
+          "publisher": "Amar Ujala",
+          "url": "https://www.amarujala.com/rss/entertainment.xml",
+          "lang": "hi"
+        },
+        {
+          "publisher": "Live Hindustan",
+          "url": "https://api.livehindustan.com/feeds/rss/entertainment/rssfeed.xml",
+          "lang": "hi"
+        },
+        {
+          "publisher": "ABP Live",
+          "url": "https://www.abplive.com/entertainment/feed",
+          "lang": "hi"
+        }
+      ],
+      "labelHi": "मनोरंजन"
+    },
+    {
+      "id": "health",
+      "label": "Health",
+      "glyph": "🛡",
+      "googleTopic": "HEALTH",
+      "feeds": [
+        {
+          "publisher": "BBC News",
+          "url": "https://feeds.bbci.co.uk/news/health/rss.xml"
+        },
+        {
+          "publisher": "WHO",
+          "url": "https://www.who.int/rss-feeds/news-english.xml"
+        }
+      ],
+      "labelHi": "स्वास्थ्य"
+    },
+    {
+      "id": "education",
+      "label": "Education",
+      "glyph": "🎓",
+      "feeds": [
+        {
+          "publisher": "The Hindu",
+          "url": "https://www.thehindu.com/education/feeder/default.rss"
+        },
+        {
+          "publisher": "The Indian Express",
+          "url": "https://indianexpress.com/section/education/feed/"
+        }
+      ],
+      "labelHi": "शिक्षा",
+      "searchHi": "शिक्षा"
+    },
+    {
+      "id": "cyber",
+      "label": "Cybersecurity",
+      "glyph": "🔒",
+      "feeds": [
+        {
+          "publisher": "The Hacker News",
+          "url": "https://feeds.feedburner.com/TheHackersNews"
+        },
+        {
+          "publisher": "BleepingComputer",
+          "url": "https://www.bleepingcomputer.com/feed/"
+        },
+        {
+          "publisher": "Krebs on Security",
+          "url": "https://krebsonsecurity.com/feed/"
+        }
+      ],
+      "labelHi": "साइबर सुरक्षा",
+      "searchHi": "साइबर सुरक्षा"
+    },
+    {
+      "id": "startups",
+      "label": "Startups",
+      "glyph": "📈",
+      "feeds": [
+        {
+          "publisher": "Inc42",
+          "url": "https://inc42.com/feed/"
+        },
+        {
+          "publisher": "YourStory",
+          "url": "https://yourstory.com/feed"
+        },
+        {
+          "publisher": "TechCrunch",
+          "url": "https://techcrunch.com/category/startups/feed/"
+        }
+      ],
+      "labelHi": "स्टार्टअप",
+      "searchHi": "स्टार्टअप"
+    },
+    {
+      "id": "environment",
+      "label": "Environment",
+      "glyph": "♻",
+      "feeds": [
+        {
+          "publisher": "The Guardian",
+          "url": "https://www.theguardian.com/environment/rss"
+        },
+        {
+          "publisher": "BBC News",
+          "url": "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"
+        }
+      ],
+      "labelHi": "पर्यावरण",
+      "searchHi": "पर्यावरण"
+    }
+  ]
+}

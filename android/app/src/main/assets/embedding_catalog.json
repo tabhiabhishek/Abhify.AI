@@ -1,0 +1,29 @@
+{
+  "format": "abhify-model-catalog-1",
+  "runtime": { "name": "llama.cpp", "version": "v0.7.0", "commit": "620d2225" },
+  "models": [
+    {
+      "id": "bge-small-en-v1.5-q8_0",
+      "name": "bge-small-en-v1.5 (semantic search)",
+      "parameters": "33M",
+      "version": "f2068edd9b54f2a369549ccc71f70ed273a2a801",
+      "url": "https://huggingface.co/ggml-org/bge-small-en-v1.5-Q8_0-GGUF/resolve/f2068edd9b54f2a369549ccc71f70ed273a2a801/bge-small-en-v1.5-q8_0.gguf",
+      "source": "BAAI/bge-small-en-v1.5, GGUF by ggml-org (the llama.cpp project)",
+      "license": "MIT",
+      "licenseUrl": "https://huggingface.co/BAAI/bge-small-en-v1.5",
+      "redistribution": "Downloaded from the publisher when you tap Download; not bundled.",
+      "format": "gguf",
+      "quantization": "Q8_0",
+      "sizeBytes": 36685152,
+      "sha256": "f046db1dc724cf4f6f0a0c5917e922823b73eb1d27b8f9a9c2797f7866974804",
+      "minTotalRamMb": 3000,
+      "estimatedRuntimeMb": 120,
+      "contextOptions": [512],
+      "defaultContext": 512,
+      "minSdk": 29,
+      "abis": ["arm64-v8a", "x86_64"],
+      "acceleration": { "vulkan": { "supported": false, "validated": false } },
+      "notes": "English. 384 dimensions. Approved by the owner on 2026-11-17. Evaluated on the 31-query set (dev PC, same GGUF): hybrid Recall@5 0.981 vs keyword 0.870."
+    }
+  ]
+}

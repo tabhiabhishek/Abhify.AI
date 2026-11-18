@@ -58,6 +58,18 @@ def recent_messages(conversation_id: str, limit: int = 12) -> list[dict[str, Any
             for r in reversed(rows)]
 
 
+def drop_last_exchange(conversation_id: str, user_text: str) -> bool:
+    """6.1 Regenerate: remove the conversation's last question/answer pair, only when the last two saved messages are exactly
+    [user: user_text, assistant: ...]. Returns True when they were removed. Nothing else is touched."""
+    with db.connect() as c:
+        rows = c.execute("SELECT id, role, content FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 2",
+                         (conversation_id,)).fetchall()
+        if len(rows) != 2 or rows[0]["role"] != "assistant" or rows[1]["role"] != "user" or rows[1]["content"] != user_text:
+            return False
+        c.execute("DELETE FROM messages WHERE id IN (?, ?)", (rows[0]["id"], rows[1]["id"]))
+    return True
+
+
 def list_conversations(limit: int = 50) -> list[dict[str, Any]]:
     with db.connect() as c:
         return [dict(r) for r in c.execute(

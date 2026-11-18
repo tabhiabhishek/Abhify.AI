@@ -22,3 +22,20 @@ packaging/.cache/
 *.p12
 *.key
 *.pem
+
+# Secrets: real .env files are never committed (placeholders live in .env.example)
+.env
+.env.*
+!.env.example
+**/.env
+
+# Android app (4.x): build output, native intermediates (incl. downloaded llama.cpp sources), local SDK path, packages, keys
+android/.gradle/
+android/app/build/
+android/app/.cxx/
+android/**/build/
+android/local.properties
+*.apk
+*.aab
+*.jks
+*.keystore

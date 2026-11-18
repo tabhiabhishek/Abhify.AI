@@ -1,18 +1,19 @@
 # Abhify.AI on Android and iPhone
 
-**One fact shapes everything here:** Abhify.AI's AI (Ollama models, ChromaDB, Whisper, the Python backend) runs on a **computer**. There is no tested way to run that stack natively on Android or iOS, so this release ships **no APK and no iOS app**. On phones, Abhify.AI is a **Progressive Web App (PWA)** connected to your own computer.
+On phones, Abhify.AI is a **Progressive Web App (PWA)**; there is **no APK and no iOS app**. The full app (Ollama models, ChromaDB, Whisper, the Python backend) runs on a **computer**, and the phone connects to it (Mode B). Since 2.0.0-dev.7 the phone can also run a **small AI model on its own** with no computer at all (Mode C, *Abhify Lite*: [ON_DEVICE_AI.md](ON_DEVICE_AI.md)).
 
 ## The three modes
 
-| | Mode A: Windows computer | Mode B: phone connected to your computer | Mode C: phone on its own |
+| | Mode A: Windows computer | Mode B: phone connected to your computer | Mode C: phone on its own (Abhify Lite) |
 |---|---|---|---|
-| Where the AI runs | This PC | Your PC | Nowhere (no local AI on the phone) |
-| Chat, memory, documents | ✅ full | ✅ via your PC | ❌ |
+| Where the AI runs | This PC | Your PC | **This phone's GPU** (small model, in the browser) |
+| Chat, memory | ✅ full | ✅ via your PC | ✅ on the phone (one-time ~0.7–0.9 GB download, then offline) |
+| Search your documents | ✅ | ✅ via your PC | ❌ |
 | News, interview questions, quizzes | ✅ live | ✅ live | Saved copies and built-in samples only |
-| Your data lives on | This PC | Your PC (the phone sends questions and receives answers) | The phone's browser storage (caches only) |
-| Setup | Windows installer | Companion access + HTTPS (below) | Install the PWA from any HTTPS deployment |
+| Your data lives on | This PC | Your PC (the phone sends questions and receives answers) | The phone's browser storage |
+| Setup | Windows installer | Companion access + HTTPS (below) | Open the PWA over HTTPS → Settings → *This device* |
 
-The app never claims the AI runs on your phone. In Mode B the status bar shows exactly one of these (2.0.0-dev.3):
+The app never claims the AI runs on your phone unless you chose *This device* and the model is actually loaded. In Mode B the status bar shows exactly one of these (2.0.0-dev.3):
 
 | Status bar | Meaning | What to do |
 |---|---|---|
@@ -76,11 +77,13 @@ The installed app opens full-screen with the Abhify.AI icon. The access token st
 A web app **cannot scan the phone's folders**. Use **Chat → 📎 Add file** to pick a PDF, `.txt` or `.md` file. It's uploaded to your PC's knowledge base. The watched knowledge folder (M2) is a feature of the PC.
 
 ## Mode C: phone without your computer
-The installed PWA still opens offline (the app shell is cached) and shows:
+**With Abhify Lite (2.0.0-dev.7):** Settings → Where the AI runs → **This device**. After a one-time, confirmed model download, chat and memories work on the phone with no computer and no network. Requirements, sizes, privacy and limits: [ON_DEVICE_AI.md](ON_DEVICE_AI.md).
+
+In either mode, the installed PWA opens offline (the app shell is cached) and shows:
 - the last news it loaded, labelled with its age
 - saved interview questions and quizzes, or built-in samples
 
-Chat, memory and live content need Mode B. Quiz answers given offline are queued and synced the next time the phone reaches your PC.
+Document search and live content need Mode B. Quiz answers given offline are queued and synced the next time the phone reaches your PC.
 
 ## Deploying the PWA over HTTPS
 Two supported ways:
@@ -111,10 +114,10 @@ The phone app is a **PWA**: a web page with an offline cache. It **does not** co
 | Open the app from the home screen (cached app shell) | ✅ |
 | Saved news (with its age), saved interview questions and quizzes, built-in samples | ✅ |
 | Quiz answers (queued, sent when the PC is reachable again) | ✅ |
-| Chat, document search, memories, voice | ❌ needs the PC (the AI runs there) |
+| Chat, document search, memories, voice | ❌ needs the PC, **unless** Abhify Lite is set up: then chat and memories work on the phone (2.0.0-dev.7); document search and private voice still need the PC |
 | Access to phone folders or files without you picking them | ❌ never (browsers don't allow it, and Abhify.AI doesn't try) |
 
 Further limits:
 - **Storage:** browsers may clear PWA storage when space is low (especially on iPhone after weeks without use). If that happens, pair again.
-- **Fully offline AI on a phone** would need a native app with an on-device model runtime. It's not built, and not claimed.
+- **Fully offline AI on a phone:** available as Abhify Lite in the PWA since 2.0.0-dev.7 (small model; chat and memories only; [ON_DEVICE_AI.md](ON_DEVICE_AI.md)). Not yet tested on a real phone.
 - **Nothing moves between devices automatically.** Any future sync would be a separate, optional feature.

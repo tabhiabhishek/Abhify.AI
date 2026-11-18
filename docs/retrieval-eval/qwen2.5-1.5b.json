@@ -1,0 +1,4 @@
+{
+  "model": "abhify-qwen25-1.5b-eval (the phone model qwen2.5-1.5b-instruct-q4_k_m.gguf, imported into Ollama temporarily)",
+  "error": "HTTP 501 from Ollama 0.40.13: This server does not support embeddings. Start it with --embeddings. Not measured."
+}

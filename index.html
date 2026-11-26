@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- viewport-fit=cover lets us paint under the iPhone notch; safe-area padding keeps content clear of it -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Abhify.AI</title>
+  <meta name="description" content="Abhify.AI: your local-first AI/ML learning companion. Live tech news, AI-generated interview questions, quizzes, personal memory and a voice-controlled AI tutor, running on your own computer.">
+  <meta name="application-name" content="Abhify.AI">
+  <meta name="theme-color" content="#06070D">
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Abhify.AI">
+  <!-- 7.1.0-dev.2: "desktop" = served by the Windows app; the standalone Web build sets "web" (browser storage + on-device AI only) -->
+  <meta name="abhify-platform" content="web">
+
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    /* dev.8: apply the saved theme before the first paint (no flash), and mark the first load of this session for the
+       short logo reveal in styles.css (html.intro). Both are best effort: storage may be blocked. */
+    (function () {
+      try { var t = localStorage.getItem('abhify_theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+      try { if (!sessionStorage.getItem('abhify_intro')) { document.documentElement.classList.add('intro'); sessionStorage.setItem('abhify_intro', '1'); } } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <!-- 7.0 Synapse: gradients shared by every neural core on the page (the cores reference them with CSS fill: url(#…)) -->
+  <svg class="core-defs" width="0" height="0" aria-hidden="true" focusable="false"><defs>
+    <radialGradient id="synCore" cx="50%" cy="42%" r="55%"><stop offset="0" stop-color="#F1ECFF"/><stop offset=".4" stop-color="#9D7BFF"/><stop offset="1" stop-color="#1B1450"/></radialGradient>
+    <radialGradient id="synCoreLive" cx="50%" cy="42%" r="55%"><stop offset="0" stop-color="#E9FDFF"/><stop offset=".4" stop-color="#3DE0FF"/><stop offset="1" stop-color="#073646"/></radialGradient>
+    <radialGradient id="synCoreOff" cx="50%" cy="42%" r="55%"><stop offset="0" stop-color="#E4E6F2"/><stop offset=".45" stop-color="#8A92B8"/><stop offset="1" stop-color="#22253A"/></radialGradient>
+    <radialGradient id="synGlow" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#9D7BFF" stop-opacity=".45"/><stop offset="1" stop-color="#9D7BFF" stop-opacity="0"/></radialGradient>
+    <radialGradient id="synGlowLive" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#3DE0FF" stop-opacity=".4"/><stop offset="1" stop-color="#3DE0FF" stop-opacity="0"/></radialGradient>
+  </defs></svg>
+  <!-- ================= APP SHELL ================= -->
+  <div class="app" id="app">
+
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <button type="button" class="brand-btn" id="brandLauncherMobile" aria-haspopup="dialog" aria-expanded="false" aria-controls="launcher" aria-label="Open navigation">
+          <img class="logo brand-logo" src="brand/logo-mark-96.png" alt="" width="40" height="40" decoding="async"></button>
+        <div class="brand-text">
+          <h1>Abhify<span class="brand-ai">.AI</span></h1>
+          <p id="userName">Your local AI workspace</p>
+        </div>
+      </div>
+      <button type="button" class="search-trigger" id="searchTrigger" aria-label="Search or run a command (Ctrl+K)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg><span>Search chats, projects, news, or ask…</span><kbd>Ctrl K</kbd></button>
+      <div class="header-actions">
+        <span class="wake-chip hidden" id="wakeChip" role="status"><span class="rec-dot" aria-hidden="true"></span><span id="wakeChipText">Listening</span>
+          <button type="button" class="mini-btn" id="wakeChipPause" aria-label="Pause the wake phrase">Pause</button></span>
+        <span class="progress-pill" id="progressPill" title="MCQ score">0/0 · 🔥0</span>
+        <button class="icon-btn hidden" id="installBtn" aria-label="Install app" title="Install app"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M18,15v3H6v-3H4v3c0,1.1,0.9,2,2,2h12c1.1,0,2-0.9,2-2v-3H18z M17,11l-1.41-1.41L13,12.17V4h-2v8.17L8.41,9.59L7,11l5,5 L17,11z"/></svg></button>
+        <button class="icon-btn" id="themeBtn" aria-label="Theme: system" title="Theme: system"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69zm-2 5.79V18h-3.52L12 20.48 9.52 18H6v-3.52L3.52 12 6 9.52V6h3.52L12 3.52 14.48 6H18v3.52L20.48 12 18 14.48zM12 6.5v11c3.03 0 5.5-2.47 5.5-5.5S15.03 6.5 12 6.5z"/></svg></button>
+        <button class="icon-btn" id="settingsBtn" aria-label="Settings" title="Settings"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.43 12.98c.04-.32.07-.64.07-.98 0-.34-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.09-.16-.26-.25-.44-.25-.06 0-.12.01-.17.03l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.06-.02-.12-.03-.18-.03-.17 0-.34.09-.43.25l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98 0 .33.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.09.16.26.25.44.25.06 0 .12-.01.17-.03l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.06.02.12.03.18.03.17 0 .34-.09.43-.25l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zm-1.98-1.71c.04.31.05.52.05.73 0 .21-.02.43-.05.73l-.14 1.13.89.7 1.08.84-.7 1.21-1.27-.51-1.04-.42-.9.68c-.43.32-.84.56-1.25.73l-1.06.43-.16 1.13-.2 1.35h-1.4l-.19-1.35-.16-1.13-1.06-.43c-.43-.18-.83-.41-1.23-.71l-.91-.7-1.06.43-1.27.51-.7-1.21 1.08-.84.89-.7-.14-1.13c-.03-.31-.05-.54-.05-.74s.02-.43.05-.73l.14-1.13-.89-.7-1.08-.84.7-1.21 1.27.51 1.04.42.9-.68c.43-.32.84-.56 1.25-.73l1.06-.43.16-1.13.2-1.35h1.39l.19 1.35.16 1.13 1.06.43c.43.18.83.41 1.23.71l.91.7 1.06-.43 1.27-.51.7 1.21-1.07.85-.89.7.14 1.13zM12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg></button>
+      </div>
+    </header>
+
+    <!-- Offline banner -->
+    <div class="offline-banner hidden" id="offlineBanner" role="status">
+      <span id="offlineText">📴 <strong>Offline Mode</strong>: showing saved content. AI features return when the backend is reachable.</span>
+    </div>
+
+    <!-- Tabs -->
+    <!-- Navigation: bottom tab bar on phones; sidebar (rail at 600–1023 px) on wider screens -->
+    <nav class="tabs glass" aria-label="Main">
+      <!-- dev.8 brand launcher: the Abhify brand opens every destination (desktop sidebar; on phones the header logo) -->
+      <button type="button" class="side-brand" id="brandLauncher" aria-haspopup="dialog" aria-expanded="false" aria-controls="launcher" title="Go anywhere in Abhify.AI">
+        <img class="logo brand-logo" src="brand/logo-mark-96.png" alt="" width="40" height="40" decoding="async"><b>Abhify<span class="brand-ai">.AI</span></b>
+        <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"/></svg>
+      </button>
+      <span class="side-label">Navigate</span>
+      <div class="tab-group" role="tablist" aria-label="Sections">
+        <button class="tab active" role="tab" data-tab="home" data-acc="chat" aria-selected="true"><svg class="ico ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Home</span></button>
+        <button class="tab" role="tab" data-tab="chat" data-acc="chat" aria-selected="false"><svg class="ico ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4z"/></svg><span><span class="tab-pre">AI </span>Assistant</span></button>
+        <button class="tab" role="tab" data-tab="study" data-acc="study" aria-selected="false"><svg class="ico ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/></svg><span>Study</span></button>
+        <button class="tab" role="tab" data-tab="news" data-acc="docs" aria-selected="false"><svg class="ico ico-line" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/></svg><span>News</span></button>
+        <button class="tab" role="tab" data-tab="more" data-acc="system" aria-selected="false"><svg class="ico ico-line" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg><span>More</span></button>
+      </div>
+      <!-- 7.0 Synapse: the other sections, one click from the sidebar (desktop/tablet; phones reach them from More) -->
+      <span class="side-label side-only side-ws-label">Workspace</span>
+      <div class="side-group side-only" role="group" aria-label="Workspace"><button type="button" class="side-btn side-go side-only" data-go="tasks"><svg class="ico ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h11"/></svg><span>Tasks</span></button><button type="button" class="side-btn side-go side-only" data-go="projects"><svg class="ico ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span>Projects</span></button><button type="button" class="side-btn side-go side-only" data-go="documents"><svg class="ico ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z"/><path d="M8 7h6M8 11h6"/></svg><span>Knowledge</span></button><button type="button" class="side-btn side-go side-only" data-go="models"><svg class="ico ico-line" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg><span>Models</span></button><button type="button" class="side-btn side-go side-only" data-go="tools"><svg class="ico ico-line" viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/></svg><span>Tools</span></button><button type="button" class="side-btn side-go side-only" data-go="system"><svg class="ico ico-line" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span>System</span></button></div>
+      <div class="side-spacer side-only"></div>
+      <div class="side-model side-only" id="sideModel" role="status" aria-live="polite"><span class="eyebrow">Active model</span><span class="sm-name" id="sideModelName">…</span><span class="sm-state"><span class="dot" id="sideModelDot"></span><span id="sideModelText">Checking…</span></span></div>
+      <button type="button" class="side-btn side-only" data-open="settingsBtn" data-acc="system"><svg class="ico ico-line" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Settings</span></button>
+      <button type="button" class="side-btn side-only collapse-btn" id="sideCollapse" aria-pressed="false"><svg class="ico ico-line" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg><span>Collapse</span></button>
+    </nav>
+
+    <!-- Content -->
+    <main class="content" id="content">
+      <!-- pull-to-refresh indicator (News, Question Bank, MCQs): refreshes only that section, never the page -->
+      <div class="ptr hidden" id="ptr" role="status" aria-live="polite"><span class="ptr-spin" aria-hidden="true"></span><span id="ptrText">Pull to refresh</span></div>
+
+      <!-- HOME (5.6 Neural): an AI dashboard; every card reads existing data (no samples) -->
+      <section id="tab-home" class="panel active" role="tabpanel" aria-label="Home">
+        <div class="home-head">
+          <div><p class="eyebrow" id="homeDate"></p><h2 id="homeGreet">Hello</h2></div>
+          <div class="row-tight home-tools scroll-x"><button class="chip" id="openTasks" title="AI Task Runner"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22,5.18L10.59,16.6l-4.24-4.24l1.41-1.41l2.83,2.83l10-10L22,5.18z M19.79,10.22C19.92,10.79,20,11.39,20,12 c0,4.42-3.58,8-8,8s-8-3.58-8-8c0-4.42,3.58-8,8-8c1.58,0,3.04,0.46,4.28,1.25l1.44-1.44C16.1,2.67,14.13,2,12,2C6.48,2,2,6.48,2,12 c0,5.52,4.48,10,10,10s10-4.48,10-10c0-1.19-0.22-2.33-0.6-3.39L19.79,10.22z"/></svg>Tasks</button><button class="chip" id="openProjects" title="Projects"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2zm10 14H4V8h16v10zm-8-8h6v2h-6zm0 3h6v2h-6zM6 10h4v5H6z"/></svg>Projects</button><button class="chip" id="paletteBtn" title="Search and commands (Ctrl+K)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Search</button><button class="chip" id="homeCustomize">Customize</button></div>
+        </div>
+        <div class="hero" id="homeHero">
+          <div class="orb" id="homeOrb" data-state="idle" role="img" aria-label="Abhify.AI: ready"><svg class="core" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><circle class="core-glow" cx="60" cy="60" r="58"/><circle class="core-sphere" cx="60" cy="60" r="24"/><g class="core-r1"><ellipse cx="60" cy="60" rx="50" ry="18"/><circle cx="110" cy="60" r="3.5"/></g><g class="core-r2"><ellipse cx="60" cy="60" rx="18" ry="50"/><circle cx="60" cy="10" r="3"/></g></svg></div>
+          <div class="hero-main"><h3>Ask <span data-assistant-name>Abhify</span></h3><span class="hero-state" id="homeOrbState">Ready</span></div>
+          <div class="hero-ask">
+            <form id="homeAsk" class="home-ask">
+              <input id="homeAskText" autocomplete="off" placeholder="Ask anything about AI, interviews or your documents…" aria-label="Ask Abhify.AI">
+              <button type="submit" class="icon-btn" aria-label="Send"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.01 6.03l7.51 3.22-7.52-1 .01-2.22m7.5 8.72L4 17.97v-2.22l7.51-1M2.01 3L2 10l15 2-15 2 .01 7L23 12 2.01 3z"/></svg></button>
+            </form>
+            <div class="quick-actions home-actions scroll-x" role="group" aria-label="Quick AI actions">
+              <button class="chip qa" data-acc="chat" data-qa="chat"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H5.17L4 17.17V4m0-2c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2H4zm2 10h8v2H6v-2zm0-3h12v2H6V9zm0-3h12v2H6V6z"/></svg>Chat</button><button class="chip qa" data-acc="chat" data-qa="task"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22,5.18L10.59,16.6l-4.24-4.24l1.41-1.41l2.83,2.83l10-10L22,5.18z M19.79,10.22C19.92,10.79,20,11.39,20,12 c0,4.42-3.58,8-8,8s-8-3.58-8-8c0-4.42,3.58-8,8-8c1.58,0,3.04,0.46,4.28,1.25l1.44-1.44C16.1,2.67,14.13,2,12,2C6.48,2,2,6.48,2,12 c0,5.52,4.48,10,10,10s10-4.48,10-10c0-1.19-0.22-2.33-0.6-3.39L19.79,10.22z"/></svg>New AI task</button><button class="chip qa" data-acc="study" data-qa="study"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/></svg>Practise MCQs</button><button class="chip qa" data-acc="docs" data-qa="news"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H4V5h16v14zM6 7h5v6H6V7zm7 0h5v2h-5V7zm0 4h5v2h-5v-2zm-7 4h12v2H6v-2z"/></svg>Today's news</button>
+            </div>
+            <small id="homeModel">Starts a new chat.</small>
+          </div>
+        </div>
+        <div class="dash" id="homeDash">
+          <div class="b-card" id="homeContinue" data-acc="chat" data-thread="">
+            <div class="card-head"><span class="b-label"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg> Continue working</span><button type="button" class="link-btn" id="homeContinueAll">All chats</button></div>
+            <div id="homeRecent"><div class="skel-line"></div><div class="skel-line short"></div></div>
+          </div>
+          <div class="b-card" id="homeToday" data-acc="study">
+            <span class="b-label"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2zm-7 5h5v5h-5z"/></svg> Today</span>
+            <div id="planOut" class="small"><div class="skel-line"></div><div class="skel-line short"></div></div>
+          </div>
+          <div class="b-card" id="homeProjects" data-acc="chat">
+            <div class="card-head"><span class="b-label"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2zm10 14H4V8h16v10zm-8-8h6v2h-6zm0 3h6v2h-6zM6 10h4v5H6z"/></svg> Active projects</span><button type="button" class="link-btn" id="homeProjectsAll">Open</button></div>
+            <div id="homeProjectsList"><div class="skel-line"></div><div class="skel-line short"></div></div>
+          </div>
+          <div class="b-card" id="homeStatus" data-acc="docs">
+            <span class="b-label"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 9H9v6h6V9zm-2 4h-2v-2h2v2zm8-2V9h-2V7c0-1.1-.9-2-2-2h-2V3h-2v2h-2V3H9v2H7c-1.1 0-2 .9-2 2v2H3v2h2v2H3v2h2v2c0 1.1.9 2 2 2h2v2h2v-2h2v2h2v-2h2c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2zm-4 6H7V7h10v10z"/></svg> AI on this computer</span>
+            <b id="homeStatusText">Checking…</b>
+            <div class="status-grid" id="homeStatusGrid"></div>
+            <small class="muted" id="homeStatusModel"></small>
+          </div>
+          <div class="b-card" id="homeNewsCard" data-acc="docs">
+            <div class="card-head"><span class="b-label"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H4V5h16v14zM6 7h5v6H6V7zm7 0h5v2h-5V7zm0 4h5v2h-5v-2zm-7 4h12v2H6v-2z"/></svg> AI news</span><button type="button" class="link-btn" id="homeNewsMore">All news</button></div>
+            <ul class="b-list" id="homeNews"><li class="muted">Loading…</li></ul>
+          </div>
+          <button type="button" class="b-card b-link" id="homeQuiz" data-acc="study">
+            <span class="b-label"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22,5.18L10.59,16.6l-4.24-4.24l1.41-1.41l2.83,2.83l10-10L22,5.18z M19.79,10.22C19.92,10.79,20,11.39,20,12 c0,4.42-3.58,8-8,8s-8-3.58-8-8c0-4.42,3.58-8,8-8c1.58,0,3.04,0.46,4.28,1.25l1.44-1.44C16.1,2.67,14.13,2,12,2C6.48,2,2,6.48,2,12 c0,5.52,4.48,10,10,10s10-4.48,10-10c0-1.19-0.22-2.33-0.6-3.39L19.79,10.22z"/></svg> Quiz</span>
+            <b id="homeQuizScore">0 / 0</b>
+            <small class="muted" id="homeQuizMeta">Practise with a round of MCQs.</small>
+          </button>
+          <button type="button" class="b-card b-link personal" id="homeKnowledge" data-acc="docs">
+            <span class="b-label"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2zm10 14H4V8h16v10zm-8-8h6v2h-6zm0 3h6v2h-6zM6 10h4v5H6z"/></svg> Your documents</span>
+            <b id="homeKnowledgeCount">–</b>
+            <small class="muted">Knowledge folder on this computer</small>
+          </button>
+          <button type="button" class="b-card b-link" id="homeInterview" data-acc="chat">
+            <span class="b-label"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/></svg> Interview practice</span>
+            <b id="homeInterviewCount">Questions with answers</b>
+            <small class="muted">Generated on this computer</small>
+          </button>
+        </div>
+        <div class="home-lower">
+          <div class="home-companion" id="homeBriefing" aria-label="Your briefing">
+            <div class="orb brief-orb" id="briefOrb" data-state="idle" role="img" aria-label="Abhify.AI: ready"><svg class="core" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><circle class="core-glow" cx="60" cy="60" r="58"/><circle class="core-sphere" cx="60" cy="60" r="24"/><g class="core-r1"><ellipse cx="60" cy="60" rx="50" ry="18"/><circle cx="110" cy="60" r="3.5"/></g><g class="core-r2"><ellipse cx="60" cy="60" rx="18" ry="50"/><circle cx="60" cy="10" r="3"/></g></svg></div>
+            <div class="card-head"><h3 class="set-h">Your briefing</h3><span class="row-tight"><select id="briefingKind" class="select select-sm" aria-label="Briefing kind"><option value="now">Now</option><option value="morning">Morning</option><option value="evening">Evening</option><option value="weekly">Weekly</option></select><button class="mini-btn" id="briefingRefresh" aria-label="Refresh the briefing">↻</button></span></div>
+            <div id="briefingOut" class="small muted"><div class="skel-line"></div><div class="skel-line short"></div></div>
+          </div>
+          <div class="home-companion hidden" id="homeCompanion" aria-label="Recent activity and suggestions">
+            <div id="homeCompanionCont"></div>
+            <div id="homeCompanionSugg"></div>
+            <p class="muted small">From your projects and AI tasks on this computer. Dismiss a suggestion with ✕.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- NEWS CENTER (dev.8): categories, search, images, Read more to the publisher, AI briefing; never personal memory -->
+      <section id="tab-news" class="panel" role="tabpanel" data-acc="docs">
+        <div class="news-head">
+          <div><h2>News</h2><span class="muted small" id="newsMeta">Loading…</span></div>
+          <div class="row-tight">
+            <button class="chip" id="newsRefresh">↻ Refresh</button>
+            <button class="chip" id="newsSourcesBtn">Sources</button>
+          </div>
+          <div class="row-tight news-lang" role="group" aria-label="News language">
+            <button class="chip" data-news-lang="en">English</button><button class="chip" data-news-lang="hi">हिन्दी</button><button class="chip" data-news-lang="both">Both</button>
+          </div>
+        </div>
+        <form id="newsSearchForm" class="news-search" role="search">
+          <input id="newsQ" type="search" autocomplete="off" placeholder="Search news: a company, a publisher, a city…" aria-label="Search news">
+          <button class="btn btn-ghost" type="submit">Search</button>
+        </form>
+        <div class="chips scroll-x" id="newsCats" role="tablist" aria-label="News categories"></div>
+        <div class="brief-card" id="newsBrief">
+          <div class="orb" id="newsOrb" data-state="idle" role="img" aria-label="Abhify.AI: ready" style="--orb:40px"><svg class="core" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><circle class="core-glow" cx="60" cy="60" r="58"/><circle class="core-sphere" cx="60" cy="60" r="24"/><g class="core-r1"><ellipse cx="60" cy="60" rx="50" ry="18"/><circle cx="110" cy="60" r="3.5"/></g><g class="core-r2"><ellipse cx="60" cy="60" rx="18" ry="50"/><circle cx="60" cy="10" r="3"/></g></svg></div>
+          <div class="grow"><b>AI briefing</b><br><small class="muted">A short summary of the stories shown, with source links. Runs on this computer's AI.</small></div>
+          <button class="btn btn-primary btn-sm" id="newsBriefBtn">Create</button>
+        </div>
+        <div id="newsAi" class="news-ai hidden" aria-live="polite"></div>
+        <div id="newsList" class="news-grid"></div>
+        <p class="muted small" id="newsFoot"></p>
+      </section>
+
+      <!-- INTERVIEW -->
+      <section id="tab-interview" class="panel" role="tabpanel">
+        <div class="chips scroll-x" id="categoryChips"></div>
+        <div class="panel-bar">
+          <select id="difficulty" class="select" aria-label="Difficulty">
+            <option value="">Any level</option>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+          <button class="btn btn-primary btn-sm" id="genQuestions">✨ Generate</button>
+          <button class="btn btn-ghost btn-sm" id="qRefresh" title="Refresh the questions (your filters stay)">↻ Refresh</button>
+        </div>
+        <p class="small muted" id="qStatus" role="status" aria-live="polite"></p>
+        <div id="questionList" class="stack"></div>
+      </section>
+
+      <!-- MCQ -->
+      <section id="tab-mcq" class="panel" role="tabpanel">
+        <!-- Career MCQs: learning topics (built-in categories), your resume/document, any topic, or both; batches on demand -->
+        <div class="panel-bar mcq-setup">
+          <select id="mcqMode" class="select select-sm" aria-label="Practise from">
+            <option value="category">Learning topics</option><option value="document">My resume or document</option>
+            <option value="topic">Any topic</option><option value="mixed">Resume + topic</option></select>
+          <select id="mcqDoc" class="select select-sm hidden" aria-label="Resume or document"></select>
+          <input id="mcqTopic" class="input hidden" maxlength="120" placeholder="Topic, e.g. SQL joins" aria-label="Topic">
+          <select id="mcqLevel" class="select select-sm hidden" aria-label="Experience level"><option>fresher</option><option selected>junior</option><option>mid-level</option><option>senior</option></select>
+          <select id="mcqDiff" class="select select-sm hidden" aria-label="Difficulty"><option>easy</option><option selected>medium</option><option>hard</option></select>
+          <select id="mcqCount" class="select select-sm hidden" aria-label="Questions per batch"><option>3</option><option selected>5</option></select>
+          <button class="btn btn-primary btn-sm" id="mcqStart">Start</button>
+          <button class="btn btn-ghost btn-sm" id="mcqRefresh" title="New questions for the ones you haven't answered (progress stays)">↻ Refresh</button>
+          <label class="field check inline"><input type="checkbox" id="mcqReview"><span>Review mode</span></label>
+        </div>
+        <div class="chips scroll-x" id="mcqChips"></div>
+        <p class="small muted" id="mcqStatus" role="status" aria-live="polite"></p>
+        <div id="mcqBox"></div>
+      </section>
+
+      <!-- CHAT -->
+      <section id="tab-chat" class="panel panel-chat" role="tabpanel">
+        <div class="kb-bar">
+          <button class="link-btn kb-link" id="kbInfo" title="Open your knowledge folder settings">📚 –</button>
+          <span class="row-tight">
+            <button class="chip" id="chatHistoryBtn" aria-haspopup="listbox" aria-expanded="false" aria-controls="historyPop" title="Recent conversations"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg><span>History</span></button>
+            <button class="chip" id="chatAgentBtn" title="Run a multi-step AI task (agent)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22,5.18L10.59,16.6l-4.24-4.24l1.41-1.41l2.83,2.83l10-10L22,5.18z M19.79,10.22C19.92,10.79,20,11.39,20,12 c0,4.42-3.58,8-8,8s-8-3.58-8-8c0-4.42,3.58-8,8-8c1.58,0,3.04,0.46,4.28,1.25l1.44-1.44C16.1,2.67,14.13,2,12,2C6.48,2,2,6.48,2,12 c0,5.52,4.48,10,10,10s10-4.48,10-10c0-1.19-0.22-2.33-0.6-3.39L19.79,10.22z"/></svg><span>Agent</span></button>
+            <button class="chip" id="newChat" title="Start a new conversation">＋ New</button>
+            <label class="chip personal" for="kbFile" title="Add a PDF, .txt or .md file to your knowledge base" aria-label="Add a file to your knowledge base">📎 <span>Add file</span></label>
+          </span>
+          <input type="file" id="kbFile" accept=".pdf,.txt,.md" hidden>
+        </div>
+        <div id="chatLog" class="chat-log" aria-live="polite">
+          <div class="msg bot welcome">
+            <div class="chat-welcome">
+              <div class="orb" id="chatOrb" data-state="idle" role="img" aria-label="Abhify.AI: ready"><svg class="core" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><circle class="core-glow" cx="60" cy="60" r="58"/><circle class="core-sphere" cx="60" cy="60" r="24"/><g class="core-r1"><ellipse cx="60" cy="60" rx="50" ry="18"/><circle cx="110" cy="60" r="3.5"/></g><g class="core-r2"><ellipse cx="60" cy="60" rx="18" ry="50"/><circle cx="60" cy="10" r="3"/></g></svg></div>
+              <div class="bubble">Ask me anything about AI/ML. I'll use <b>your documents</b>, <b>your saved memories</b> or the <b>live web</b> when needed. Say <i>"remember that…"</i> to save something about you.</div>
+              <div class="starters">
+                <button type="button" class="starter" data-acc="chat" data-prompt="Explain gradient descent simply">Explain gradient descent simply</button>
+                <button type="button" class="starter" data-acc="study" data-prompt="What is overfitting and how do I avoid it?">What is overfitting and how do I avoid it?</button>
+                <button type="button" class="starter" data-acc="docs" data-prompt="How does attention work in transformers?">How does attention work in transformers?</button>
+                <button type="button" class="starter" data-acc="career" data-prompt="What's new in LLMs this week?">What's new in LLMs this week?</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- dev.8: the model that answers next (installed Ollama chat models; chosen per conversation) -->
+        <div class="model-bar" id="modelBar">
+          <button type="button" class="model-chip" id="modelChip" aria-haspopup="listbox" aria-expanded="false" aria-controls="modelPop">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 9H9v6h6V9zm-2 4h-2v-2h2v2zm8-2V9h-2V7c0-1.1-.9-2-2-2h-2V3h-2v2h-2V3H9v2H7c-1.1 0-2 .9-2 2v2H3v2h2v2H3v2h2v2c0 1.1.9 2 2 2h2v2h2v-2h2v2h2v-2h2c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2zm-4 6H7V7h10v10z"/></svg>
+            <span id="modelLabel">Default model</span>
+            <svg class="ico chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M16.59 8.59L12 13.17 7.41 8.59 6 10l6 6 6-6z"/></svg>
+          </button>
+          <div class="model-pop hidden" id="historyPop" role="listbox" aria-label="Recent conversations" tabindex="-1"></div>
+          <div class="model-pop hidden" id="modelPop" role="listbox" aria-label="Chat model" tabindex="-1"></div>
+          <!-- 6.1: focus + interaction modes (same profiles as Android Brain.profile); a mode never changes the model -->
+          <select id="focusSel" class="model-chip" aria-label="Chat mode: how the next answers are made" title="Chat mode: Auto detects coding, learning, career or research per message">
+            <optgroup label="Focus">
+            <option value="auto" title="Detects coding, learning, career or research questions and formats answers for them">✨ Auto</option><option value="general" title="Ordinary conversation, natural and concise">💬 General</option><option value="coding" title="Root cause, fix, verification; code review and tests">🧑‍💻 Coding</option>
+            <option value="learning" title="Explanation, example, practice questions">🎓 Learning</option><option value="career" title="Interview preparation and actionable career steps">💼 Career</option><option value="research" title="Looks in your documents, cites sources, states uncertainty">🔬 Research</option></optgroup>
+            <optgroup label="Modes">
+            <option value="quick" title="Short direct answers, minimal context, fastest">⚡ Quick answer</option><option value="deep" title="Breaks the problem down, checks alternatives and conclusions">🧠 Deep think</option>
+            <option value="planning" title="Practical plans with dependencies and trade-offs from your records">🗺 Planning</option><option value="creative" title="Imaginative writing and ideas, several options">🎨 Creative</option></optgroup></select>
+          <button type="button" class="model-chip project-chip hidden" id="projectChip" title="This chat uses the project's instructions and documents only. Click to leave the project.">
+            🗂 <span id="projectLabel"></span> <span aria-hidden="true">✕</span><span class="sr-only">Leave the project</span></button>
+        </div>
+        <div class="voice-review hidden" id="voiceReview" role="status"><span>🎙 Transcribed: check or edit it, then press Send. The answer will be read aloud.</span>
+          <button type="button" class="mini-btn" id="voiceReviewDiscard">Discard</button></div>
+        <form id="chatForm" class="chat-input">
+          <button type="button" class="icon-btn mic" id="chatMic" aria-label="Speak your question"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg></button>
+          <textarea id="chatText" rows="1" placeholder="Ask a question…" aria-label="Message" enterkeyhint="send"></textarea>
+          <button type="submit" class="icon-btn send" aria-label="Send"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button>
+        </form>
+      </section>
+      <!-- next build: Study (Discover + the existing Question Bank and MCQs pages) and More (grouped links to existing pages) -->
+      <section id="tab-study" class="panel" role="tabpanel" data-acc="study">
+        <div class="page-head"><div><h2>Study</h2><p class="muted small">Courses, practice and a plan for your next interview</p></div>
+          <div class="row-tight"><button class="chip" data-study-go="interview"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/></svg>Question Bank</button><button class="chip" data-study-go="mcq"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22,5.18L10.59,16.6l-4.24-4.24l1.41-1.41l2.83,2.83l10-10L22,5.18z M19.79,10.22C19.92,10.79,20,11.39,20,12 c0,4.42-3.58,8-8,8s-8-3.58-8-8c0-4.42,3.58-8,8-8c1.58,0,3.04,0.46,4.28,1.25l1.44-1.44C16.1,2.67,14.13,2,12,2C6.48,2,2,6.48,2,12 c0,5.52,4.48,10,10,10s10-4.48,10-10c0-1.19-0.22-2.33-0.6-3.39L19.79,10.22z"/></svg>MCQs</button></div></div>
+        <nav class="study-nav" role="tablist" aria-label="Study sections">
+          <button type="button" class="chip" role="tab" data-sv="today" aria-selected="true">Today</button>
+          <button type="button" class="chip" role="tab" data-sv="courses" aria-selected="false">Courses</button>
+          <button type="button" class="chip" role="tab" data-sv="plan" aria-selected="false">Interview plan</button>
+          <button type="button" class="chip" role="tab" data-sv="stories" aria-selected="false">STAR stories</button>
+          <button type="button" class="chip" role="tab" data-sv="mock" aria-selected="false">Mock interview</button>
+          <button type="button" class="chip" role="tab" data-sv="resume" aria-selected="false">Resume</button>
+          <button type="button" class="chip" role="tab" data-sv="discover" aria-selected="false">Discover</button>
+        </nav>
+        <p id="studyWhere" class="muted small study-where"></p>
+        <div id="sv-today" class="study-view"></div>
+        <div id="sv-courses" class="study-view hidden"></div>
+        <div id="sv-course" class="study-view hidden"></div>
+        <div id="sv-lesson" class="study-view hidden"></div>
+        <div id="sv-plan" class="study-view hidden"></div>
+        <div id="sv-stories" class="study-view hidden"></div>
+        <div id="sv-mock" class="study-view hidden"></div>
+        <div id="sv-resume" class="study-view hidden"></div>
+        <div id="sv-report" class="study-view hidden"></div>
+        <div id="sv-discover" class="study-view hidden">
+        <form id="discoverForm" class="news-search discover-form" role="search">
+          <input id="discoverQ" class="input" maxlength="80" placeholder="Any topic, e.g. Machine Learning" aria-label="Topic to discover">
+          <label class="field check small"><input type="checkbox" id="discoverFree"><span>Free only</span></label>
+          <button class="btn btn-primary btn-sm" type="submit">Search</button>
+        </form>
+        <p class="muted small">Live results from MIT OpenCourseWare and OpenStax (cost only as the source states it), then each provider's own search. Only your topic is sent.</p>
+        <div id="skillsOut" class="card hidden"></div>
+        <div id="discoverOut"></div>
+        </div>
+      </section>
+      <section id="tab-more" class="panel" role="tabpanel" data-acc="system">
+        <div class="page-head"><div><h2>More</h2><p class="muted small">Your knowledge, workspace, career practice and system: everything else in Abhify.AI</p></div></div>
+        <div id="moreGroups"></div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer glass">
+      <span class="status"><span class="dot" id="statusDot"></span><span id="statusText">Connecting…</span></span>
+      <!-- Voice button lives in the footer so it never covers content -->
+      <button class="voice-fab" id="voiceFab" aria-label="Voice command">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+      </button>
+      <span class="muted" id="clock"></span>
+    </footer>
+  </div>
+
+
+
+  <!-- Voice overlay -->
+  <div class="voice-overlay hidden" id="voiceOverlay" role="dialog" aria-label="Listening">
+    <div class="orb" id="voiceOrb" data-state="listening" role="img" aria-label="Abhify.AI: listening"><svg class="core" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><circle class="core-glow" cx="60" cy="60" r="58"/><circle class="core-sphere" cx="60" cy="60" r="24"/><g class="core-r1"><ellipse cx="60" cy="60" rx="50" ry="18"/><circle cx="110" cy="60" r="3.5"/></g><g class="core-r2"><ellipse cx="60" cy="60" rx="18" ry="50"/><circle cx="60" cy="10" r="3"/></g></svg></div>
+    <div id="voiceLive" class="voice-live">
+      <div class="wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <p id="voiceText" aria-live="polite">Listening…</p>
+      <p class="muted small rec-note"><span class="rec-dot" aria-hidden="true"></span> The microphone is on only while this is open.</p>
+      <p class="muted small hidden" id="voiceHandsFree">Hands-free conversation: I'll listen again after each answer. Stop ends it.</p>
+      <p class="muted small">Try: "news", "quiz", "next", "my progress", or ask any question</p>
+      <div class="row-tight"><button class="btn btn-primary" id="voiceStop">Stop</button><button class="btn btn-ghost" id="voiceCancelRec">Cancel</button></div>
+    </div>
+    <div id="voiceSetup" class="voice-setup hidden">
+      <h3>Voice input</h3>
+      <p id="voiceSetupText"></p>
+      <div class="row-tight wrap">
+        <button class="btn btn-primary" id="voiceDl">Download</button>
+        <button class="btn btn-ghost" id="voiceUseBrowser" title="Your audio is sent to Google or Microsoft">Use the browser's recognition (audio is sent online)</button>
+        <button class="btn btn-ghost" id="voiceSetupClose">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7.1: shown while an answer is read aloud (not News: it has its own player) -->
+  <div class="speak-chip hidden" id="speakChip" role="status"><span>🔊 Reading aloud</span><button type="button" class="mini-btn" id="speakStop" aria-label="Stop reading aloud">■ Stop</button></div>
+
+  <!-- Settings sheet -->
+  <div class="sheet-backdrop hidden" id="settingsSheet">
+    <div class="sheet glass" role="dialog" aria-label="Settings">
+      <h2>Settings</h2>
+      <!-- Settings is the one place for AI, models, performance and system configuration; each opens its existing page -->
+      <h3 class="set-h">AI &amp; models</h3>
+      <div class="row">
+        <button class="btn btn-ghost" data-settings-go="models">🔧 AI Models &amp; setup</button>
+        <button class="btn btn-ghost" data-settings-go="performance">📈 Performance</button>
+      </div>
+      <h3 class="set-h">Answer style</h3>
+      <div class="row answer-style">
+        <label class="field">Detail<select id="setDetail" class="select"><option value="auto">Auto</option><option value="concise">Concise</option><option value="detailed">Detailed</option></select></label>
+        <label class="field">Technical depth<select id="setDepth" class="select"><option value="auto">Auto</option><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="expert">Expert</option></select></label>
+        <label class="field">Explanation style<select id="setStyle" class="select"><option value="auto">Auto</option><option value="direct">Direct</option><option value="steps">Step by step</option><option value="examples">Examples first</option></select></label>
+      </div>
+      <label class="field">Preferred language <span class="muted small">(empty = the language you write in)</span>
+        <input id="setLanguage" maxlength="30" autocomplete="off" placeholder="e.g. Hindi"></label>
+      <p class="muted small">Added to every desktop answer. Auto adds nothing. The chat mode (Coding, Learning, Career, Research, Quick answer, Deep think, Planning, Creative) is chosen next to the model in chat; it never changes the model.</p>
+      <h3 class="set-h">AI providers</h3>
+      <p class="muted small">Ollama runs on this computer. Optionally add Google Gemini, Groq, OpenRouter or your own OpenAI-compatible server.</p>
+      <div class="row"><button type="button" class="btn btn-ghost" data-open-providers>AI providers…</button></div>
+      <h3 class="set-h">Live information</h3>
+      <p class="muted small hidden" id="liveSettingsOff">Live information is set up on the computer running Abhify.AI (Settings there).</p>
+      <div id="liveSettings" class="live-settings">
+        <label class="field check"><input type="checkbox" id="rtEnabled"><span>Look up current information before answering (news, releases, weather, exchange rates, your projects and tasks, this computer's status). Sources are shown under the answer.</span></label>
+        <label class="field">General web search
+          <select id="rtProvider" class="select">
+            <option value="ddgs">DuckDuckGo (default, no key)</option>
+            <option value="brave">Brave Search (needs BRAVE_API_KEY)</option>
+            <option value="tavily">Tavily (needs TAVILY_API_KEY)</option>
+            <option value="none">Off</option>
+          </select>
+          <small class="muted" id="rtProviderInfo"></small>
+        </label>
+        <label class="field check"><input type="checkbox" id="rtWeather"><span>Weather <small class="muted">· sends the place name to Open-Meteo (CC BY 4.0)</small></span></label>
+        <label class="field">Place for weather <span class="muted small">(a town or city; no device location is used)</span>
+          <input id="rtPlace" maxlength="80" autocomplete="off" placeholder="e.g. Pune"></label>
+        <label class="field check"><input type="checkbox" id="rtFx"><span>Exchange rates <small class="muted">· uses Frankfurter / ECB daily reference rates (published once per working day, not live prices)</small></span></label>
+        <ul class="rt-status" id="rtStatus" aria-live="polite" aria-label="Live sources"></ul>
+      </div>
+      <h3 class="set-h">System &amp; your data</h3>
+      <div class="row">
+        <button class="btn btn-ghost" id="openSystem">🖥️ System &amp; data</button>
+        <button class="btn btn-ghost personal" id="openMemory">🧠 Memory &amp; history</button>
+        <button class="btn btn-ghost personal" id="openKnowledge">📚 Knowledge folder</button>
+      </div>
+      <h3 class="set-h">General</h3>
+      <label class="field">Your name
+        <input id="setName" maxlength="24" autocomplete="nickname">
+      </label>
+      <label class="field">Where the AI runs
+        <select id="setEngine" class="select">
+          <option value="pc">My computer (the Abhify.AI app) · all features</option>
+          <option value="device">This device · Abhify Lite, no computer needed</option>
+        </select>
+        <small class="muted" id="deviceInfo"></small><div id="deviceFacts" aria-live="polite"></div>
+      </label>
+      <label class="field" id="defaultModelField">Default chat model <span class="muted small">(new chats on this computer)</span>
+        <select id="setModel" class="select"></select>
+        <small class="muted" id="setModelInfo"></small>
+      </label>
+      <div class="row hidden" id="deviceRow">
+        <button class="btn btn-ghost danger" id="deviceRemove">Remove on-device AI model</button>
+        <button class="btn btn-ghost danger" id="deviceClear">Delete on-device chats</button>
+      </div>
+      <label class="field">Backend URL
+        <input id="setApi" placeholder="http://localhost:8000" inputmode="url" autocomplete="off">
+        <small class="muted">On a phone: the address of your computer running Abhify.AI (see Companion access).</small>
+      </label>
+      <label class="field">Access token <span class="muted small">(phone / other device only)</span>
+        <input id="setToken" type="password" placeholder="Paste the token shown on your computer" autocomplete="off">
+        <small class="muted">Leave empty to use the server this app was loaded from.</small>
+      </label>
+      <h3 class="set-h" id="aiPersonalization">AI personalization</h3>
+      <p class="muted small">Stored on this installation only. Your other Abhify.AI apps keep their own name, voice and settings.</p>
+      <div class="pers" id="persIdentity">
+        <h4>Assistant identity</h4>
+        <div class="pers-preview"><img src="brand/logo-mark-96.png" alt="" width="44" height="44">
+          <div><b id="idPreviewName">Abhify</b><small class="muted">Your AI assistant in Abhify.AI · on this device</small></div>
+          <button type="button" class="btn btn-ghost btn-sm" id="idPreviewSpeak" aria-label="Hear the name">▶</button></div>
+        <div class="chips" id="idSuggest" aria-label="Suggested names"></div>
+        <label class="field">Name <input id="idName" maxlength="24" autocomplete="off" spellcheck="false" aria-describedby="idErr idWakeHint"></label>
+        <small class="err" id="idErr" role="alert"></small>
+        <small class="muted" id="idWakeHint"></small>
+        <div class="row-tight"><button type="button" class="btn btn-ghost btn-sm" id="idReset">Restore default</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="idCancel">Cancel</button>
+          <button type="button" class="btn btn-primary btn-sm" id="idSave">Save name</button></div>
+      </div>
+      <div class="pers" id="persVoice">
+        <h4>Voice &amp; speech</h4>
+        <div class="vcats" id="voiceCats" role="group" aria-label="Voice style"></div>
+        <small class="muted" id="voiceStyleNote"></small>
+        <small class="err hidden" id="voiceUnavailable">Read aloud isn't available in this browser (no speech voices).</small>
+        <label class="field">Language <select id="setTtsLang"></select></label>
+        <label class="field">Voice
+          <select id="setTtsVoice"></select>
+          <small class="muted">Only voices installed in this browser/system are listed. "Online voice" sends the text to its service; the others run on this device.</small>
+        </label>
+        <label class="field">Speed <span class="muted small" id="ttsRateVal">1.00×</span><input type="range" id="setTtsRate" min="0.75" max="1.5" step="0.05"></label>
+        <label class="field">Pitch <span class="muted small" id="ttsPitchVal">1.00</span><input type="range" id="setTtsPitch" min="0.3" max="1.7" step="0.05">
+          <small class="muted">Pitch and volume are adjustable with the Custom style. Pitch changes how high the voice sounds; it doesn't turn one voice into another.</small></label>
+        <label class="field">Volume <span class="muted small" id="ttsVolVal">100%</span><input type="range" id="setTtsVolume" min="0.2" max="1" step="0.05"></label>
+        <label class="field">Read answers aloud
+          <select id="setSpeak">
+            <option value="voice">Answers to spoken questions</option>
+            <option value="always">Every answer</option>
+            <option value="off">Never</option>
+          </select>
+        </label>
+        <div class="row-tight"><button type="button" class="btn btn-primary btn-sm" id="voiceTestTts">▶ Preview</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="voicePreviewStop">■ Stop</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="voiceReset">Restore defaults</button></div>
+      </div>
+      <div class="pers" id="wakeSettings">
+        <h4>Wake word</h4>
+        <p class="muted small hidden" id="wakeUnsupported"></p>
+        <div id="wakeBody">
+          <p class="small" id="wakeState">Checking…</p>
+          <label class="field check"><input type="checkbox" id="wakeEnabled"><span>Listen for <b id="wakePhrases">“Hey Abhify”</b> while an Abhify.AI window is open and visible</span></label>
+          <button type="button" class="btn btn-primary btn-sm hidden" id="wakeResume">Turn the wake phrase on again</button>
+          <label class="field check"><input type="checkbox" id="wakeUseName" checked><span>Use the assistant's name ("Hey …" / "Hello …")</span></label>
+          <label class="field check"><input type="checkbox" id="wakeNameOnly"><span>Also react to the name alone (more false activations)</span></label>
+          <label class="field">Custom wake phrase <input id="wakePhrase" maxlength="40" placeholder="e.g. Okay computer" autocomplete="off"></label>
+          <label class="field">Sensitivity <select id="wakeSens"><option value="low">Low (fewest false activations)</option><option value="medium">Medium</option><option value="high">High (reacts more easily)</option></select></label>
+          <small class="err" id="wakeWhy"></small>
+          <div class="row-tight"><button type="button" class="btn btn-ghost btn-sm" id="wakeTest">Test my wake phrase</button></div>
+          <p class="small" id="wakeTestOut" aria-live="polite"></p>
+          <p class="muted small">Privacy: off by default. Recognition runs offline with the Windows speech recognizer on this computer; no audio is sent anywhere or saved. It listens only while an Abhify.AI window is visible (Windows shows its microphone indicator), pauses after each activation, and after an app update it waits until you turn it on again. The microphone button always works as push-to-talk. Unusual names may not be recognised; use "Test my wake phrase".</p>
+        </div>
+      </div>
+      <h3 class="set-h">Voice &amp; audio</h3>
+      <div id="voiceSettings" class="voice-settings">
+        <label class="field">Speech recognition
+          <select id="setVoiceEngine">
+            <option value="local">On this computer (private: Whisper, works offline)</option>
+            <option value="browser">The browser's built-in recognition (audio is sent to Google or Microsoft)</option>
+          </select>
+          <small class="muted" id="voiceEngineStatus"></small>
+          <small class="muted hidden" id="voiceBrowserNote">Your voice recordings go to the browser maker's speech service. Choose "On this computer" to keep them here.</small>
+        </label>
+        <div class="row"><button type="button" class="btn btn-ghost hidden" id="voiceSetDl">Download</button></div>
+        <label class="field">Microphone
+          <select id="setMic"><option value="">System default microphone</option></select>
+          <small class="muted" id="micHint"></small>
+        </label>
+        <div class="mic-test"><button type="button" class="btn btn-ghost btn-sm" id="micTest">🎙 Test microphone</button>
+          <div class="mic-meter" aria-hidden="true"><span id="micTestBar"></span></div>
+          <small class="muted" id="micTestOut" role="status" aria-live="polite"></small></div>
+        <label class="field check">
+          <input type="checkbox" id="setHandsFree">
+          <span>Hands-free conversation: after an answer is read aloud, listen again (until you press Stop)</span>
+        </label>
+      </div>
+      <div class="row">
+        <button class="btn btn-ghost" id="testApi">Test connection</button>
+        <span class="muted small" id="testResult"></span>
+      </div>
+      <h3 class="set-h">Application</h3>
+      <div class="row">
+        <button class="btn btn-ghost danger" id="resetProgress">Reset local progress</button>
+      </div>
+      <div class="row end">
+        <button class="btn btn-ghost" id="closeSettings">Cancel</button>
+        <button class="btn btn-primary" id="saveSettings">Save</button>
+      </div>
+      <p class="muted small" id="installHint"></p>
+    </div>
+  </div>
+
+
+  <!-- First-run setup wizard -->
+  <div class="sheet-backdrop hidden" id="setupSheet">
+    <div class="sheet glass sheet-tall" role="dialog" aria-label="Setup">
+      <div class="sheet-head">
+        <img src="brand/logo-320.png" alt="Abhify.AI" width="72" height="72">
+        <div><h2>Welcome to Abhify.AI</h2><p class="muted small">Let's check this computer and pick AI models that fit it.</p></div>
+      </div>
+      <div id="setupBody"></div>
+      <div class="row end">
+        <button class="btn btn-ghost" id="setupSkip">Skip for now (limited mode)</button>
+        <button class="btn btn-primary" id="setupFinish" disabled>Finish setup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7.0 Model Library: the chat models installed in Ollama, downloads (only after you confirm), removal -->
+  <!-- 7.1 AI providers (cloud, optional) -->
+  <div class="sheet-backdrop as-page hidden" id="dataSyncSheet">
+    <div class="sheet glass sheet-tall" role="dialog" aria-labelledby="dataSyncTitle">
+      <div class="lib-head"><div><h2 id="dataSyncTitle">Data &amp; Sync</h2>
+        <p class="muted small">Optional, manual, end-to-end encrypted. This installation keeps its own AI models, database and settings.</p></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="dataSyncClose">Close</button></div>
+      <div id="dataSyncBody" class="list" aria-live="polite"></div>
+    </div>
+  </div>
+  <div class="sheet-backdrop as-page hidden" id="providersSheet">
+    <div class="sheet glass sheet-tall" role="dialog" aria-labelledby="providersTitle">
+      <div class="lib-head"><div><h2 id="providersTitle">AI providers</h2>
+        <p class="muted small">Local first: Ollama answers unless you pick a cloud model for a chat.</p></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="providersClose">Close</button></div>
+      <div id="providersBody" class="list prov-list" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <div class="sheet-backdrop as-page hidden" id="modelLibSheet">
+    <div class="sheet glass sheet-tall" role="dialog" aria-labelledby="modelLibTitle">
+      <div class="lib-head"><div><h2 id="modelLibTitle">Model Library</h2>
+        <p class="muted small" id="modelLibStatus">Models installed in Ollama on this computer.</p></div>
+        <button type="button" class="btn btn-ghost btn-sm" id="modelLibRefresh">Refresh</button></div>
+      <div id="modelLibList" class="list" aria-live="polite"></div>
+      <h3 class="set-h">Available to download</h3>
+      <p class="muted small">Checked against this computer's memory, GPU and free disk. Sizes and licences come from the Ollama registry. Nothing downloads without your confirmation.</p>
+      <div id="modelLibAvail" class="list" aria-live="polite"></div>
+      <h3 class="eyebrow-h">Download a model</h3>
+      <form class="row" id="modelLibPull">
+        <input id="modelLibName" class="input grow" maxlength="100" placeholder="e.g. llama3.2:3b, mistral:7b, phi4:14b" aria-label="Ollama model name" pattern="[A-Za-z0-9._:\-/]+">
+        <button class="btn btn-primary btn-sm" type="submit">Download…</button>
+      </form>
+      <p class="muted small">Names come from the Ollama library (ollama.com/library). Nothing downloads until you confirm; large models need several GB of disk.</p>
+      <div id="modelLibPulls" class="list" aria-live="polite"></div>
+      <div class="row end"><button class="btn btn-ghost" id="modelLibSetup">Run setup wizard</button><button class="btn btn-primary" data-close="modelLibSheet">Done</button></div>
+    </div>
+  </div>
+
+  <!-- Memory & history manager -->
+  <div class="sheet-backdrop as-page hidden" id="memorySheet">
+    <div class="sheet glass sheet-tall" role="dialog" aria-label="Memory">
+      <h2>🧠 Memory &amp; history</h2>
+      <p class="muted small">Stored only on this computer. Abhify.AI never saves memories by itself: add them here or say "remember that…" in chat.</p>
+      <label class="field check"><input type="checkbox" id="prefMemory"><span>Use long-term memory in answers</span></label>
+      <label class="field check"><input type="checkbox" id="prefHistory"><span>Save chat history</span></label>
+      <label class="field">Delete chat history older than
+        <select id="prefRetention" class="select">
+          <option value="0">Never (keep forever)</option><option value="7">7 days</option>
+          <option value="30">30 days</option><option value="90">90 days</option><option value="365">1 year</option>
+        </select>
+      </label>
+      <form class="row" id="memoryForm">
+        <input id="memoryText" class="input grow" maxlength="500" placeholder="e.g. I'm preparing for ML engineer interviews" aria-label="New memory">
+        <select id="memoryCat" class="select" aria-label="Category">
+          <option value="general">General</option><option value="goal">Goal</option><option value="preference">Preference</option>
+          <option value="weak_topic">Weak topic</option><option value="fact">Fact</option>
+        </select>
+        <button class="btn btn-primary btn-sm" type="submit">Add</button>
+      </form>
+      <div id="memoryList" class="list"></div>
+      <div class="row">
+        <button class="btn btn-ghost danger" id="clearHistory">Delete all chat history</button>
+        <button class="btn btn-ghost danger" id="clearMemories">Delete all memories</button>
+      </div>
+      <div class="row end"><button class="btn btn-primary" data-close="memorySheet">Done</button></div>
+    </div>
+  </div>
+
+  <!-- System & data -->
+  <div class="sheet-backdrop as-page hidden" id="systemSheet">
+    <div class="sheet glass sheet-tall" role="dialog" aria-label="System and data">
+      <h2>🖥️ System &amp; data</h2>
+      <div id="systemInfo" class="stats"></div>
+      <div class="row"><button class="btn btn-ghost" id="checkUpdates">⟳ Check for updates</button><span class="small muted" id="updateResult"></span></div>
+      <h3>📱 Companion access</h3>
+      <p class="muted small">Use Abhify.AI from your phone through this computer. Off by default. Your data stays on this computer; the phone only sends questions and receives answers.</p>
+      <div id="companionBox"></div>
+      <h3>Your data</h3>
+      <p class="muted small break" id="dataRoot">–</p>
+      <div class="row">
+        <button class="btn btn-ghost" id="backupNow">💾 Backup now</button>
+        <a class="btn btn-ghost link-as-btn" id="exportBackup" href="#" download>⬇ Export</a>
+        <label class="btn btn-ghost link-as-btn" for="restoreFile">♻ Restore…</label>
+        <input type="file" id="restoreFile" accept=".zip" hidden>
+      </div>
+      <div id="backupList" class="list small"></div>
+      <div class="row">
+        <button class="btn btn-ghost" id="moveData">📁 Move data folder…</button>
+        <button class="btn btn-ghost" id="rerunSetup">🔧 Models &amp; setup</button>
+        <button class="btn btn-ghost" id="openPerf">📈 Performance</button>
+      </div>
+      <div class="row end"><button class="btn btn-primary" data-close="systemSheet">Done</button></div>
+    </div>
+  </div>
+
+
+  <!-- Knowledge folder (M2) -->
+  <!-- Brand navigation launcher (dev.8): every implemented destination, grouped; opens nothing by itself -->
+  <div class="launcher hidden" id="launcher" role="dialog" aria-label="Go to" aria-modal="false">
+    <div class="launch-head"><div class="orb still" style="--orb:34px" aria-hidden="true"><svg class="core" viewBox="0 0 120 120" aria-hidden="true" focusable="false"><circle class="core-glow" cx="60" cy="60" r="58"/><circle class="core-sphere" cx="60" cy="60" r="24"/><g class="core-r1"><ellipse cx="60" cy="60" rx="50" ry="18"/><circle cx="110" cy="60" r="3.5"/></g><g class="core-r2"><ellipse cx="60" cy="60" rx="18" ry="50"/><circle cx="60" cy="10" r="3"/></g></svg></div>
+      <div><b>Abhify.AI</b><br><small class="muted" id="launchStatus"></small></div></div>
+    <div class="launch-group" role="group" aria-label="Workspace"><h4>Workspace</h4><div class="launch-grid"><button type="button" class="launch-item" data-go="home" data-acc="chat"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.69l5 4.5V18h-2v-6H9v6H7v-7.81l5-4.5M12 3L2 12h3v8h6v-6h2v6h6v-8h3L12 3z"/></svg><span>Home</span></button><button type="button" class="launch-item" data-go="chat" data-acc="chat"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H5.17L4 17.17V4m0-2c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2H4zm2 10h8v2H6v-2zm0-3h12v2H6V9zm0-3h12v2H6V6z"/></svg><span>Chat</span></button><button type="button" class="launch-item" data-go="tasks" data-acc="chat"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22,5.18L10.59,16.6l-4.24-4.24l1.41-1.41l2.83,2.83l10-10L22,5.18z M19.79,10.22C19.92,10.79,20,11.39,20,12 c0,4.42-3.58,8-8,8s-8-3.58-8-8c0-4.42,3.58-8,8-8c1.58,0,3.04,0.46,4.28,1.25l1.44-1.44C16.1,2.67,14.13,2,12,2C6.48,2,2,6.48,2,12 c0,5.52,4.48,10,10,10s10-4.48,10-10c0-1.19-0.22-2.33-0.6-3.39L19.79,10.22z"/></svg><span>AI Task Runner</span></button><button type="button" class="launch-item" data-go="projects" data-acc="know"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2zm10 14H4V8h16v10zm-8-8h6v2h-6zm0 3h6v2h-6zM6 10h4v5H6z"/></svg><span>Projects</span></button><button type="button" class="launch-item" data-go="interview" data-acc="career"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/></svg><span>Career: Question Bank</span></button><button type="button" class="launch-item" data-go="mcq" data-acc="study"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 18h2v-2h-2v2zm1-16C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm0-14c-2.21 0-4 1.79-4 4h2c0-1.1.9-2 2-2s2 .9 2 2c0 2-3 1.75-3 5h2c0-2.25 3-2.5 3-5 0-2.21-1.79-4-4-4z"/></svg><span>Career: MCQs</span></button><button type="button" class="launch-item" data-go="news" data-acc="docs"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21,5c-1.11-0.35-2.33-0.5-3.5-0.5c-1.95,0-4.05,0.4-5.5,1.5c-1.45-1.1-3.55-1.5-5.5-1.5S2.45,4.9,1,6v14.65 c0,0.25,0.25,0.5,0.5,0.5c0.1,0,0.15-0.05,0.25-0.05C3.1,20.45,5.05,20,6.5,20c1.95,0,4.05,0.4,5.5,1.5c1.35-0.85,3.8-1.5,5.5-1.5 c1.65,0,3.35,0.3,4.75,1.05c0.1,0.05,0.15,0.05,0.25,0.05c0.25,0,0.5-0.25,0.5-0.5V6C22.4,5.55,21.75,5.25,21,5z M21,18.5 c-1.1-0.35-2.3-0.5-3.5-0.5c-1.7,0-4.15,0.65-5.5,1.5V8c1.35-0.85,3.8-1.5,5.5-1.5c1.2,0,2.4,0.15,3.5,0.5V18.5z"/><path d="M17.5,10.5c0.88,0,1.73,0.09,2.5,0.26V9.24C19.21,9.09,18.36,9,17.5,9c-1.7,0-3.24,0.29-4.5,0.83v1.66 C14.13,10.85,15.7,10.5,17.5,10.5z"/><path d="M13,12.49v1.66c1.13-0.64,2.7-0.99,4.5-0.99c0.88,0,1.73,0.09,2.5,0.26V11.9c-0.79-0.15-1.64-0.24-2.5-0.24 C15.8,11.66,14.26,11.96,13,12.49z"/><path d="M17.5,14.33c-1.7,0-3.24,0.29-4.5,0.83v1.66c1.13-0.64,2.7-0.99,4.5-0.99c0.88,0,1.73,0.09,2.5,0.26v-1.52 C19.21,14.41,18.36,14.33,17.5,14.33z"/></svg><span>News</span></button><button type="button" class="launch-item" data-go="documents" data-acc="know"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg><span>Documents & Knowledge</span></button><button type="button" class="launch-item" data-go="memory" data-acc="memory"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.82,7.22l-1,0.4c-0.21-0.16-0.43-0.29-0.67-0.39L14,6.17C13.98,6.07,13.9,6,13.8,6h-1.6c-0.1,0-0.18,0.07-0.19,0.17 l-0.15,1.06c-0.24,0.1-0.47,0.23-0.67,0.39l-1-0.4c-0.09-0.03-0.2,0-0.24,0.09l-0.8,1.38c-0.05,0.09-0.03,0.2,0.05,0.26l0.85,0.66 C10.02,9.73,10,9.87,10,10c0,0.13,0.01,0.26,0.03,0.39l-0.84,0.66c-0.08,0.06-0.1,0.17-0.05,0.25l0.8,1.39 c0.05,0.09,0.15,0.12,0.25,0.09l0.99-0.4c0.21,0.16,0.43,0.29,0.68,0.39L12,13.83c0.02,0.1,0.1,0.17,0.2,0.17h1.6 c0.1,0,0.18-0.07,0.2-0.17l0.15-1.06c0.24-0.1,0.47-0.23,0.67-0.39l0.99,0.4c0.09,0.04,0.2,0,0.24-0.09l0.8-1.39 c0.05-0.09,0.03-0.19-0.05-0.25l-0.83-0.66C15.99,10.26,16,10.13,16,10c0-0.14-0.01-0.27-0.03-0.39l0.85-0.66 c0.08-0.06,0.1-0.17,0.05-0.26l-0.8-1.38C16.02,7.22,15.91,7.19,15.82,7.22z M13,11.43c-0.79,0-1.43-0.64-1.43-1.43 S12.21,8.57,13,8.57s1.43,0.64,1.43,1.43S13.79,11.43,13,11.43z"/><path d="M19.94,9.06c-0.43-3.27-3.23-5.86-6.53-6.05C13.27,3,13.14,3,13,3C9.47,3,6.57,5.61,6.08,9l-1.93,3.48 C3.74,13.14,4.22,14,5,14h1v2c0,1.1,0.9,2,2,2h1v3h7v-4.68C18.62,15.07,20.35,12.24,19.94,9.06z M14.89,14.63L14,15.05V19h-3v-3H8 v-4H6.7l1.33-2.33C8.21,7.06,10.35,5,13,5c2.76,0,5,2.24,5,5C18,12.09,16.71,13.88,14.89,14.63z"/></svg><span>Memory & history</span></button></div></div><div class="launch-group" role="group" aria-label="AI System"><h4>AI System</h4><div class="launch-grid"><button type="button" class="launch-item" data-go="models" data-acc="system"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 9H9v6h6V9zm-2 4h-2v-2h2v2zm8-2V9h-2V7c0-1.1-.9-2-2-2h-2V3h-2v2h-2V3H9v2H7c-1.1 0-2 .9-2 2v2H3v2h2v2H3v2h2v2c0 1.1.9 2 2 2h2v2h2v-2h2v2h2v-2h2c1.1 0 2-.9 2-2v-2h2v-2h-2v-2h2zm-4 6H7V7h10v10z"/></svg><span>AI Models</span></button><button type="button" class="launch-item" data-go="performance" data-acc="study"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6h-6z"/></svg><span>Performance</span></button><button type="button" class="launch-item" data-go="system" data-acc="system"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 15v4H5v-4h14m1-2H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1v-6c0-.55-.45-1-1-1zM7 18.5c-.82 0-1.5-.67-1.5-1.5s.68-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM19 5v4H5V5h14m1-2H4c-.55 0-1 .45-1 1v6c0 .55.45 1 1 1h16c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1zM7 8.5c-.82 0-1.5-.67-1.5-1.5S6.18 5.5 7 5.5s1.5.68 1.5 1.5S7.83 8.5 7 8.5z"/></svg><span>System & data</span></button></div></div><div class="launch-group" role="group" aria-label="Application"><h4>Application</h4><div class="launch-grid"><button type="button" class="launch-item" data-go="settings" data-acc="system"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M19.43 12.98c.04-.32.07-.64.07-.98 0-.34-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.09-.16-.26-.25-.44-.25-.06 0-.12.01-.17.03l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.06-.02-.12-.03-.18-.03-.17 0-.34.09-.43.25l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98 0 .33.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.09.16.26.25.44.25.06 0 .12-.01.17-.03l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.06.02.12.03.18.03.17 0 .34-.09.43-.25l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zm-1.98-1.71c.04.31.05.52.05.73 0 .21-.02.43-.05.73l-.14 1.13.89.7 1.08.84-.7 1.21-1.27-.51-1.04-.42-.9.68c-.43.32-.84.56-1.25.73l-1.06.43-.16 1.13-.2 1.35h-1.4l-.19-1.35-.16-1.13-1.06-.43c-.43-.18-.83-.41-1.23-.71l-.91-.7-1.06.43-1.27.51-.7-1.21 1.08-.84.89-.7-.14-1.13c-.03-.31-.05-.54-.05-.74s.02-.43.05-.73l.14-1.13-.89-.7-1.08-.84.7-1.21 1.27.51 1.04.42.9-.68c.43-.32.84-.56 1.25-.73l1.06-.43.16-1.13.2-1.35h1.39l.19 1.35.16 1.13 1.06.43c.43.18.83.41 1.23.71l.91.7 1.06-.43 1.27-.51.7 1.21-1.07.85-.89.7.14 1.13zM12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg><span>Settings</span></button></div></div>
+    <p class="muted small launch-hint">Esc to close · Ctrl+K for commands and search</p>
+  </div>
+
+  <!-- AI Task Runner (dev.8): multi-step workflows on documents, news or text -->
+  <div class="sheet-backdrop as-page hidden" id="tasksSheet">
+    <div class="sheet glass sheet-tall" role="dialog" aria-label="AI Task Runner">
+      <div class="task-top"><h2>AI Task Runner</h2><button class="btn btn-ghost btn-sm" id="tasksClose">Done</button></div>
+      <p class="muted small">Multi-step AI workflows on your documents, current news or text. Runs one step at a time on this computer's AI.
+        Results are never added to your memory; you choose what to save to Knowledge.</p>
+      <div id="taskNew">
+        <h3>New task</h3>
+        <div class="task-templates" id="taskTemplates" role="radiogroup" aria-label="Task template"></div>
+        <div id="taskForm" class="hidden">
+          <label class="field hidden" id="taskReqField">What should the task do?<input id="taskReq" maxlength="1000" placeholder="e.g. Compare the two approaches and list pros and cons"></label>
+          <div class="field" id="taskSrcField"><span>Source</span>
+            <div class="chips" id="taskSrcKinds" role="radiogroup" aria-label="Source type"></div>
+            <select id="taskDoc" class="select hidden" aria-label="Document"></select>
+            <select id="taskProject" class="select hidden" aria-label="Project"></select>
+            <div class="chips wrap hidden" id="taskNews" aria-label="News categories"></div>
+            <textarea id="taskText" class="input hidden" rows="5" maxlength="12000" placeholder="Paste text here"></textarea>
+          </div>
+          <div class="row hidden" id="taskQuizOpts">
+            <label class="field">Questions<select id="taskQCount" class="select"><option>3</option><option selected>5</option><option>10</option></select></label>
+            <label class="field">Difficulty<select id="taskQLevel" class="select"><option value="mixed">Mixed</option><option value="easy">Easy</option><option value="hard">Hard</option></select></label>
+          </div>
+          <label class="field">Model<select id="taskModel" class="select" aria-label="Model"></select></label>
+          <div class="row"><button class="btn btn-primary" id="taskStart">Start task</button><span class="small err" id="taskFormErr"></span></div>
+        </div>
+      </div>
+      <div id="taskView" class="hidden" aria-live="polite"></div>
+      <h3>Recent tasks</h3>
+      <div class="list" id="taskHistory"></div>
+    </div>
+  </div>
+
+  <!-- News reader (career milestone): one story inside the app; the original opens only from the reader's second Read more -->
+  <div class="sheet-backdrop as-page hidden" id="newsReaderSheet">
+    <div class="sheet glass sheet-tall" role="dialog" aria-label="News story"><div id="newsReader" aria-live="polite"></div></div>
+  </div>
+
+  <!-- Projects (stability milestone): documents, chats, AI tasks and study per project; references only, nothing copied -->
+  <div class="sheet-backdrop as-page hidden" id="projectsSheet">
+    <div class="sheet glass sheet-tall" role="dialog" aria-label="Projects">
+      <div class="task-top"><h2>🗂 Projects</h2><button class="btn btn-ghost btn-sm" id="projectsClose">Done</button></div>
+      <div id="projList">
+        <p class="muted small">A project keeps its own instructions and documents. Its chat and AI tasks use only them, never another project's.</p>
+        <form class="row" id="projNew"><input id="projName" class="input grow" maxlength="80" placeholder="New project name" aria-label="New project name">
+          <button class="btn btn-primary btn-sm" type="submit">Create</button></form>
+        <div class="proj-grid" id="projCards"></div>
+        <label class="field check"><input type="checkbox" id="projShowArchived"><span>Show archived projects</span></label>
+      </div>
+      <div id="projView" class="hidden" aria-live="polite"></div>
+    </div>
+  </div>
+
+  <!-- Command palette (dev.8): Ctrl+K / Cmd+K -->
+  <div class="sheet-backdrop palette-backdrop hidden" id="palette">
+    <div class="palette glass" role="dialog" aria-label="Command palette" aria-modal="true">
+      <input id="palQ" autocomplete="off" placeholder="Type a page, command, model, news topic or question…" aria-label="Command" role="combobox" aria-controls="palList" aria-expanded="true">
+      <div id="palFilters" class="pal-filters" role="group" aria-label="Search filters">
+        <span class="pal-fgroup" data-pfgroup="type"><button type="button" class="chip" data-pf="type" data-v="" aria-pressed="true">All</button><button type="button" class="chip" data-pf="type" data-v="conversation" aria-pressed="false">Chats</button><button type="button" class="chip" data-pf="type" data-v="project" aria-pressed="false">Projects</button><button type="button" class="chip" data-pf="type" data-v="task" aria-pressed="false">AI tasks</button><button type="button" class="chip" data-pf="type" data-v="document" aria-pressed="false">Documents</button><button type="button" class="chip" data-pf="type" data-v="news" aria-pressed="false">News</button><button type="button" class="chip" data-pf="type" data-v="study" aria-pressed="false">Study</button><button type="button" class="chip" data-pf="type" data-v="memory" aria-pressed="false">Memory</button></span>
+        <span class="pal-fgroup" data-pfgroup="days"><button type="button" class="chip" data-pf="days" data-v="" aria-pressed="true">Any time</button><button type="button" class="chip" data-pf="days" data-v="7" aria-pressed="false">7 days</button><button type="button" class="chip" data-pf="days" data-v="30" aria-pressed="false">30 days</button></span>
+        <span class="pal-fgroup" data-pfgroup="sort"><button type="button" class="chip" data-pf="sort" data-v="relevance" aria-pressed="true">Best match</button><button type="button" class="chip" data-pf="sort" data-v="recent" aria-pressed="false">Newest</button></span>
+      </div>
+      <ul id="palList" role="listbox" aria-label="Results"></ul>
+      <p class="muted small pal-hint">↑↓ to move · Enter to run · Esc to close</p>
+    </div>
+  </div>
+
+  <!-- Home layout (dev.8) -->
+  <div class="sheet-backdrop hidden" id="homeLayoutSheet">
+    <div class="sheet glass" role="dialog" aria-label="Customize Home">
+      <h2>Customize Home</h2>
+      <p class="muted small">Show, hide and reorder the cards. Saved in this browser; nothing is deleted.</p>
+      <div class="list" id="homeLayoutList"></div>
+      <div class="row end"><button class="btn btn-ghost" id="homeLayoutReset">Reset</button><button class="btn btn-primary" id="homeLayoutDone">Done</button></div>
+    </div>
+  </div>
+
+  <!-- News sources (dev.8) -->
+  <div class="sheet-backdrop hidden" id="newsSourcesSheet">
+    <div class="sheet glass sheet-tall" role="dialog" aria-label="News sources">
+      <h2>News sources</h2>
+      <p class="muted small">Only your city (as a search word) and the edition are sent to Google News. Publisher feeds are fetched directly. Nothing about you is shared.</p>
+      <label class="field">Your city for Local news<input id="nsCity" maxlength="60" placeholder="e.g. Pune"></label>
+      <label class="field">Edition<select id="nsRegion" class="select">
+        <option value="IN">India</option><option value="US">United States</option><option value="GB">United Kingdom</option><option value="AU">Australia</option>
+        <option value="CA">Canada</option><option value="SG">Singapore</option><option value="AE">UAE</option></select></label>
+      <label class="field">Language (Google News)<select id="nsLang" class="select"><option value="en">English</option><option value="hi">हिन्दी</option></select></label>
+      <h3>For You shows</h3><div class="chips wrap" id="nsForYou"></div>
+      <label class="field">Custom topics (comma-separated, in For You)<input id="nsTopics" maxlength="200" placeholder="e.g. electric vehicles, ISRO"></label>
+      <h3>Publishers</h3><p class="muted small">Click once to show first (★), again to hide (✕), again to reset.</p>
+      <div class="chips wrap" id="nsPubs"></div>
+      <div class="row end"><button class="btn btn-ghost" id="nsCancel">Cancel</button><button class="btn btn-primary" id="nsSave">Save</button></div>
+    </div>
+  </div>
+
+  <!-- Performance (dev.8): real samples of this computer and Ollama, every 3 s while open -->
+  <div class="sheet-backdrop as-page hidden" id="perfSheet">
+    <div class="sheet glass sheet-tall" role="dialog" aria-label="Performance">
+      <h2>📈 Performance</h2>
+      <p class="muted small">Measured on this computer: CPU and memory by the system, GPU by nvidia-smi, loaded models and answer speed by Ollama. Sampled every 3 seconds only while this page is open.</p>
+      <div class="perf-grid" id="perfStats" aria-live="polite"><div class="skeleton" style="height:96px"></div></div>
+      <h3>Models in memory</h3>
+      <div class="list" id="perfLoaded"></div>
+      <h3>Last answer</h3>
+      <div id="perfLast" class="muted small">No answer yet since the backend started.</div>
+      <div class="row end"><button class="btn btn-primary" id="perfClose">Done</button></div>
+    </div>
+  </div>
+
+  <div class="sheet-backdrop as-page hidden" id="knowledgeSheet">
+    <div class="sheet glass sheet-tall" role="dialog" aria-label="Knowledge folder">
+      <h2>📚 Knowledge folder</h2>
+      <p class="muted small">Put PDFs, notes (.txt / .md) and Python files in this folder; Abhify.AI indexes them on this computer so the chat can answer from them. Passwords, keys, .env files, databases and hidden folders are always skipped.</p>
+      <div class="row">
+        <span class="grow small break" id="kFolder">–</span>
+        <button class="btn btn-ghost btn-sm" id="kChange">Change…</button>
+        <button class="btn btn-ghost btn-sm" id="kOpenHelp" title="How it works">?</button>
+      </div>
+      <div id="kRebuild"></div>
+      <div class="stats" id="kStats"></div>
+      <p class="small" id="kNow"></p>
+      <div class="progress-line"><span id="kBar"></span></div>
+      <div class="row">
+        <button class="btn btn-primary btn-sm" id="kStartStop">Start watching</button>
+        <button class="btn btn-ghost btn-sm" id="kPause">Pause</button>
+        <button class="btn btn-ghost btn-sm" id="kRescan">Rescan</button>
+        <button class="btn btn-ghost btn-sm" id="kRetry">Retry failed</button>
+      </div>
+      <div class="row">
+        <select id="kFilter" class="select" aria-label="Filter files">
+          <option value="">All files</option><option value="indexed">Indexed</option><option value="pending">Pending</option>
+          <option value="failed">Failed</option><option value="skipped">Skipped</option>
+        </select>
+        <span class="muted small" id="kListInfo"></span>
+      </div>
+      <div id="kFiles" class="list small"></div>
+        <div id="kUploads"></div>
+      <div class="row end"><button class="btn btn-primary" data-close="knowledgeSheet">Done</button></div>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast" role="status"></div>
+
+  <script src="mock-data.js"></script>
+  <script src="app.js"></script>
+  <script src="study-ui.js"></script>
+</body>
+</html>

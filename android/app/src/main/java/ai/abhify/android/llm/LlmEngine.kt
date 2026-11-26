@@ -107,7 +107,7 @@ class LlmEngine(private val nativeLibDir: String) {
                 messages.map { it.role }.toTypedArray(),
                 messages.map { it.content.toByteArray(Charsets.UTF_8) }.toTypedArray(),
                 maxTokens, temperature, seed,
-            ) { bytes -> trySendBlocking(Event.Token(String(bytes, Charsets.UTF_8))).isSuccess }   // waits for buffer space; never drops text
+            ) { bytes -> runCatching { trySendBlocking(Event.Token(String(bytes, Charsets.UTF_8))).isSuccess }.getOrDefault(false) }   // waits for buffer space; never drops text; 7.1.0: never throws into native code
             val o = JSONObject(json)
             if (o.has("error") && o.optString("stopped") != "cancelled") send(Event.Failed(o.getString("error")))
             else send(Event.Finished(Stats(o.optInt("prompt_tokens"), o.optInt("generated_tokens"), o.optDouble("prompt_ms"),

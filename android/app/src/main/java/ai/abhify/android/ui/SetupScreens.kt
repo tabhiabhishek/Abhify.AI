@@ -79,7 +79,7 @@ private fun DeviceStep(vm: AppViewModel) {
     val mem = remember(d) { vm.g.memorySnapshot() }
     val lines = remember(d) {
         SetupPolicy.deviceReport(d.release, d.sdkInt, d.totalRamMb, mem, d.freeStorageMb, d.abis, ModelSelector.recommend(vm.g.catalog, d),
-            vm.activeModel()?.name, vm.online.value, ocrBundled = true)
+            vm.activeModel()?.name, vm.online.value, ocrBundled = true, device = d, executionMode = ModelSelector.executionMode(d, false))
     }
     SettingsGroup("Checked on this phone just now") {
         lines.forEach { l ->

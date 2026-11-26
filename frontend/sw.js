@@ -10,10 +10,10 @@
 
    Bump CACHE_VERSION whenever shell files change, so users get the update.
    ===================================================================== */
-const CACHE_VERSION = 'abhify-v2.0.0-dev.8';
-// 5.6 Neural UI: the shell changed within the same app version, so the cache name carries a shell revision too
+const CACHE_VERSION = 'abhify-v7.2.1';
+// 5.6 Neural UI (7.0: Synapse, fonts bundled): the shell changed within the same app version, so the cache name carries a shell revision too
 // (installed browsers drop the old cache and fetch the new shell). Bump SHELL_REV whenever shell files change.
-const SHELL_REV = 'ui62.1';
+const SHELL_REV = 'ui72.5';
 const CACHE_NAME = `${CACHE_VERSION}+${SHELL_REV}`;
 const SHELL = [
   './',
@@ -21,10 +21,21 @@ const SHELL = [
   './styles.css',
   './app.js',
   './ondevice.js',          // small; the vendored engine (vendor/webllm) is cached on first use only
+  './datasync-ui.js',       // 7.2 Data & Sync screen and the browser vault/sync engine (no network of their own)
+  './vault.js',
+  './sync-core.js',
+  './study-ui.js',          // 7.2 Study tab: courses, practice, interview plan, STAR stories
+  './study-core.js',
+  './study-local.js',       // Study without a backend (Web app / on-device): this browser's storage only
+  './study-tracks.json',
+  './skills-taxonomy.json',
   './mock-data.js',
   './manifest.json',
   './favicon.ico',
   './brand/logo-mark-96.png',
+  './fonts/Inter.ttf',        // 7.0 Synapse type: bundled so the shell renders offline (SIL OFL, fonts/OFL-*.txt)
+  './fonts/SpaceGrotesk.ttf',
+  './fonts/JetBrainsMono.ttf',
   './brand/logo-320.png',
   './icons/icon-192.png',
   './icons/icon-512.png',
@@ -33,7 +44,7 @@ const SHELL = [
 ];
 const API_PATHS = ['/health', '/ping', '/chat', '/news', '/generate-question', '/generate-mcq', '/transcribe', '/voice',
                    '/knowledge', '/progress', '/memory', '/preferences', '/conversations', '/system', '/setup',
-                   '/backup', '/companion', '/updates', '/models', '/tasks', '/projects', '/suggestions', '/discover', '/briefing', '/search', '/plan', '/skills', '/agent', '/eval', '/career', '/realtime', '/docs', '/redoc', '/openapi.json'];
+                   '/backup', '/companion', '/updates', '/models', '/tasks', '/projects', '/suggestions', '/discover', '/briefing', '/search', '/plan', '/skills', '/agent', '/eval', '/career', '/realtime', '/providers', '/identity', '/datasync', '/learn', '/docs', '/redoc', '/openapi.json'];
 
 self.addEventListener('install', (event) => {
   // cache: 'reload' bypasses the browser's HTTP cache, so a new service worker always stores the current app files

@@ -50,13 +50,15 @@ const CATEGORIES = [
   ['cv', 'Computer Vision'], ['llm', 'LLMs & RAG'], ['mlops', 'MLOps'], ['ai', 'AI Fundamentals'],
 ];
 
+/** 7.1.0-dev.2: which installation this is. 'web' = the standalone Web app (its own browser storage and on-device AI,
+ *  never a backend); 'desktop' = the page served by the Windows app on this computer. */
+const PLATFORM = document.querySelector('meta[name="abhify-platform"]')?.content === 'web' ? 'web' : 'desktop';
 const state = {
   apiBase: null,            // resolved backend URL ('' = same origin)
   online: false,
   userId: store.get(LS.user) || newId(),
   userName: ['there', 'Abhi'].includes(store.get(LS.name)) ? '' : (store.get(LS.name) || ''),   // 5.6: only a configured name
   threadId: store.get(LS.thread) || null,
-  usePrivateWhisper: store.get(LS.whisper) === '1',
   category: 'all',
   mcqCategory: 'all',
   questions: store.json(LS.questions, []),
@@ -66,7 +68,7 @@ const state = {
   ready: Promise.resolve(),   // resolves after the first backend connection check
   remote: !['localhost', '127.0.0.1', '[::1]', ''].includes(location.hostname),   // refined by /health
   everConnected: false,       // used to tell "connection lost" from "never connected"
-  engine: store.get(LS.engine) === 'device' ? 'device' : 'pc',   // where the AI runs: 'pc' (default) or 'device'
+  engine: PLATFORM === 'web' || store.get(LS.engine) === 'device' ? 'device' : 'pc',   // where the AI runs: 'pc' (default) or 'device'
   device: { support: null, downloaded: false, ready: false, loading: null, progress: null, error: null },
   // dev.8 chat model picker: what /models reports (installed Ollama chat models) and this chat's choice (null = default)
   models: { list: [], def: null, ollama: null, error: null, locked: false, loaded: false, loading: false, forbidden: false },
@@ -138,6 +140,7 @@ function md(text) {
     .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
     .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<i>$2</i>')
     .replace(/\[([WL]\d+)\]\((?!https?:\/\/)[^)\s]*\)/g, '[$1]')   // 6.2: a model's "[W4](#)" is just the citation (the real link is the chip)
+    .replace(/\[unsupported\]/g, '<span class="cite-unsupported" title="No retrieved source supports this statement (checked by Abhify.AI)">unsupported</span>')
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
     .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
   // headings, tables, lists + paragraphs
@@ -201,6 +204,7 @@ function timeAgo(ts) {
 /* ---------- 3. API CLIENT + OFFLINE DETECTION ---------- */
 /** Candidate backends: saved URL > same origin (if served by FastAPI) > localhost:8000. */
 function apiCandidates() {
+  if (PLATFORM === 'web') return [];                               // 7.1.0-dev.2: the standalone Web app never needs a backend
   const saved = (store.get(LS.api) || '').trim().replace(/\/+$/, '');
   if (saved) return [saved];
   const list = [];
@@ -368,7 +372,8 @@ async function loadNews(refresh = false) {
     renderNews(data.items, 'Live · AI-summarized');
   } catch (e) {
     if (cached?.items?.length) renderNews(cached.items, `Offline · saved ${timeAgo(cached.at)}`);
-    else renderNews(window.MOCK.news, 'Offline · sample stories');
+    else if (window.MOCK?.news?.length) renderNews(window.MOCK?.news, 'Offline · sample stories');
+    else { renderNews([], 'Offline · no saved stories yet'); $('#newsList').innerHTML = stateHtml('empty', 'No news saved on this device yet', 'News needs a connection the first time.'); }
     if (refresh && e.message !== 'offline') toast(`News unavailable: ${e.message}`);
   } finally { state.busy.news = false; btn.disabled = false; }
 }
@@ -632,7 +637,7 @@ function bindNews() {
   window.addEventListener('popstate', () => closeArticle(true));        // browser/phone Back closes the reader
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#newsReaderSheet').classList.contains('hidden')) closeArticle(); });
   $('#newsAi').addEventListener('change', (e) => { if (e.target.dataset.naud === 'rate') newsAudio('rate', e.target.value); });
-  reader.onchange = () => { renderNewsAudio(); updateOrb(); };
+  reader.onchange = () => { renderNewsAudio(); updateOrb(); onReaderChange(); };
   $('#newsSourcesBtn').addEventListener('click', () => (news.cats.length ? newsSources() : toast('News sources need the Abhify.AI app on your computer')));
   $('#nsCancel').addEventListener('click', () => closeSheet('newsSourcesSheet'));
   $('#nsSave').addEventListener('click', newsSaveSources);
@@ -676,7 +681,7 @@ function renderCategoryChips(containerSel, current, onPick) {
 /** The Question Bank: the questions written by the AI (newest first), then the curated ones. Generated questions are
  *  added to the bank, never instead of it. [state.qOrder] is the curated order (a refresh shuffles it). */
 function visibleQuestions() {
-  const curated = (state.qOrder || window.MOCK.questions).filter((c) => !state.questions.some((g) => g.question === c.question));
+  const curated = (state.qOrder || window.MOCK?.questions || []).filter((c) => !state.questions.some((g) => g.question === c.question));
   const pool = [...state.questions.map((q) => ({ ...q, ai: true })), ...curated];
   return state.category === 'all' ? pool : pool.filter((q) => q.category === state.category);
 }
@@ -685,7 +690,7 @@ let qRefreshing = false;
 function refreshQuestions() {
   if (qRefreshing) return Promise.resolve();
   qRefreshing = true; $('#qRefresh').disabled = true;
-  state.qOrder = [...window.MOCK.questions].sort(() => Math.random() - 0.5);
+  state.qOrder = [...(window.MOCK?.questions || [])].sort(() => Math.random() - 0.5);
   renderQuestions();
   $('#qStatus').textContent = `Refreshed · ${visibleQuestions().length} questions${state.category === 'all' ? '' : ' in this category'}.`;
   return new Promise((r) => setTimeout(() => { qRefreshing = false; $('#qRefresh').disabled = false; r(); }, 300));
@@ -848,7 +853,7 @@ async function startQuiz(how = 'new') {
         ? ' This document has been practised a lot: try "Resume + topic" or "Any topic" for more variety.' : '');
   } else if (how === 'new' && $('#mcqMode').value === 'category') {              // offline or AI down: saved or built-in questions
     const saved = store.json(LS.mcqs, []);
-    state.quiz = { items: saved.length ? saved : window.MOCK.mcqs, index: 0, answers: {}, selected: null };
+    state.quiz = { items: saved.length ? saved : (window.MOCK?.mcqs || []), index: 0, answers: {}, selected: null };
     $('#mcqStatus').textContent = `Using saved questions (${err === 'offline' ? 'offline' : err}).`;
   } else $('#mcqStatus').textContent = `⚠ ${err === 'offline' ? 'Personalised questions need the Abhify.AI app on this computer.' : err} Your questions and progress are unchanged.`;
   if (batch && $('#mcqMode').value === 'category') store.setJson(LS.mcqs, state.quiz.items.slice(-20));
@@ -982,10 +987,14 @@ async function sendChat(text, { speakAnswer = false, regenerate = false, reuse =
     cancelAnimationFrame(paint);
     if (!data) throw new Error(acc ? 'The answer was interrupted before it finished.' : 'No answer was received.');
     state.threadId = data.thread_id; store.set(LS.thread, data.thread_id);
-    rememberThreadModel();
-    bubble.innerHTML = botHtml(data.answer, data.tools_used, data.sources, data.model, data.stats, data.focus, data.context, data.live, text)
-      + msgTools(data.answer, { text, regen: !data.guest }) + followUps(data.answer, data.focus) + actionBar(data.answer);
-    if (speakAnswer) speak(data.answer);
+    if (data.model_command) applyModelCommand(data.model_command); else rememberThreadModel();   // 7.0: "switch the model to …"
+    if (data.model_notice) toast(data.model_notice, 7000);
+    // 7.0: the tag shows the model Ollama reports in its own response (served_by); the app's own replies carry no model tag
+    bubble.innerHTML = data.model_command
+      ? `<div class="app-reply" role="status">${md(data.answer)}</div>`             // 7.0: the app's own reply (no model, no answer tools)
+      : botHtml(data.answer, data.tools_used, data.sources, data.served_by || data.model, data.stats, data.focus, data.context, data.live, text)
+        + msgTools(data.answer, { text, regen: !data.guest }) + followUps(data.answer, data.focus) + actionBar(data.answer);
+    if (shouldSpeak(speakAnswer)) speak(data.answer);
   } catch (e) {
     cancelAnimationFrame(paint); paint = 0;                              // a pending paint must not overwrite the message below
     bubble.innerHTML = (e.name === 'AbortError'
@@ -1061,6 +1070,7 @@ function renderDevice() {
   $('#statusText').textContent = text;
   $('#offlineText').innerHTML = banner;
   $('#offlineBanner').classList.toggle('hidden', !banner);
+  renderSideModel();
 }
 
 async function checkDevice() {
@@ -1098,7 +1108,10 @@ async function setupDevice() {
     try {
       const od = await onDevice();
       await od.load(s.modelId, (p) => { d.progress = p; renderDevice(); });
-      d.ready = d.downloaded = true;
+      d.downloaded = true;
+      const test = await od.selfTest();                                    // 7.0.2: ready only after a real answer
+      if (!test.ok) throw new Error('The model loaded but did not answer the test. Try again, or remove it in Settings.');
+      d.ready = true; d.selfTest = test;
     } catch (e) { d.error = e.message || String(e); }
     d.loading = null; renderDevice();
     return d.ready;
@@ -1124,12 +1137,13 @@ async function deviceChat(text, { speakAnswer = false } = {}) {
     const fact = od.memoryCommand(text);
     if (fact) await od.local.addMemory(fact);
     const [history, memories] = await Promise.all([od.local.history(cid), od.local.memories()]);
-    const answer = await od.chat(od.buildMessages(text, history, memories, displayName()));
+    const answer = identityAnswer(text, state.assistantName)                // 7.1.0-dev.2: "what is your name?"
+      || await od.chat(od.buildMessages(text, history, memories, displayName(), state.assistantName));
     await od.local.addMessage(cid, 'user', text);
     await od.local.addMessage(cid, 'assistant', answer);
     typing.querySelector('.bubble').innerHTML = botHtml(answer)
       + (fact ? '<div class="sources">🧠 Saved to memory on this device</div>' : '');
-    if (speakAnswer) speak(answer);
+    if (shouldSpeak(speakAnswer)) speak(answer);
   } catch (e) {
     typing.querySelector('.bubble').innerHTML = `⚠️ ${esc(e.message)}`;
   } finally {
@@ -1152,8 +1166,11 @@ function renderDeviceSettings() {
   $('#deviceInfo').textContent = device
     ? 'Runs a small AI model on this device\'s graphics chip: a one-time download of about 700 to 870 MB, then it works offline. '
       + 'Chat and memories only; no document search, fresh news or new quiz generation. Your chats stay in this browser.'
-      + (s && !s.ok ? ` ⚠️ ${s.reason}` : '')
+      + (s && !s.ok ? ` ⚠️ ${s.reason}` : s?.ok ? ` Recommended for this device: ${s.label} (about ${s.downloadMB} MB).` : '')
     : 'The full app runs on your computer; this device connects to it.';
+  // 7.0.2: what the browser reports (verified / estimate / not reported); browsers can't see the real CPU, RAM or GPU model
+  const box = $('#deviceFacts');
+  if (box) box.innerHTML = device && s?.facts ? `<ul class="facts">${s.facts.map((f) => `<li><span class="muted">${esc(f.label)}:</span> ${esc(String(f.value))} <span class="fact-src ${esc(f.source)}">${esc({ verified: 'verified', estimate: 'estimate', unavailable: 'not reported' }[f.source] || f.source)}</span></li>`).join('')}</ul>` : '';
   $('#deviceRow').classList.toggle('hidden', !(device && (state.device.downloaded || state.device.ready)));
 }
 
@@ -1174,15 +1191,31 @@ async function clearDeviceChats() {
 }
 
 /* ---------- 8. VOICE ---------- */
+/* 7.1 voice pipeline. Speech recognition runs on this computer by default (Whisper, private); the browser's built-in
+   recognition (audio goes to Google or Microsoft) is used only when the user chooses it. Listening is always started by a
+   click, always visible (overlay, level meter, red mic), stops on Stop, on silence after speech, after 60 s, when the window
+   is hidden, or when the microphone disappears. The transcript is put in the message box to check, edit, send or discard;
+   only Hands-free conversation (off by default) sends it directly and listens again after the answer has been read. */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-const voice = { rec: null, mediaRec: null, chunks: [], listening: false, mode: 'command' };
+const CACHE_HINT = 'v7.2.1';                                      // 7.1.0: one reload per update
+const voice = { rec: null, mediaRec: null, chunks: [], listening: false, starting: false, mode: 'command', stream: null, ctx: null, meter: 0, maxTimer: 0,
+  status: null, statusAt: 0, poll: 0, conversation: false, pendingSpeak: false, discard: false };
+const VOICE_LS = { engine: 'abhify_voice_engine', mic: 'abhify_mic', speak: 'abhify_speak', ttsVoice: 'abhify_tts_voice', handsFree: 'abhify_handsfree',
+  srOk: 'abhify_sr_consent' };
+/** 7.1.1: the browser's own recognition sends audio to its maker's service; it is used only after the user agreed once here. */
+const srConsented = () => store.get(VOICE_LS.srOk) === '1';
+/** 7.1.1: is this computer's Abhify.AI (local Whisper) reachable? Independent of which AI answers (on-device AI still uses it). */
+const transcriberReachable = () => PLATFORM !== 'web' && state.apiBase !== null && state.online === true;
+state.voiceEngine = store.get(VOICE_LS.engine) === 'browser' ? 'browser' : 'local';
+state.speakMode = ['always', 'off'].includes(store.get(VOICE_LS.speak)) ? store.get(VOICE_LS.speak) : 'voice';
+state.handsFree = store.get(VOICE_LS.handsFree) === '1';
 
 /** Markdown into what is read aloud: one item per bullet/paragraph, each split at sentence ends into parts of at most
  *  [max] characters (long utterances stall in some browsers). Citations like [1], links and code are not read. */
 function speechChunks(markdown, max = 220) {
   const items = String(markdown || '').replace(/```[\s\S]*?```/g, ' (code example) ').split(/\n\s*\n|\n(?=\s*(?:[-*•]|\d+[.)])\s)/)
     .map((s) => s.replace(/\s*https?:\/\/\S+/g, '').replace(/\s*\bwww\.\S+/gi, '').replace(/\s*\[(\d+(?:\s*[,–-]\s*\d+)*)\]/g, '')
-      .replace(/\s*\[\s*[WL]\d+(?:\s*[,;–-]\s*[WL]?\d+)*\s*\]/gi, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+      .replace(/\s*\[\s*[WL]\d+(?:\s*[,;–-]\s*[WL]?\d+)*\s*\]/gi, '').replace(/\s*\[unsupported\]/gi, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
       .replace(/^\s*(?:[-*•]|\d+[.)]|#{1,6})\s*/gm, '').replace(/[*_`#>|]/g, '').replace(/\s+/g, ' ').trim())
     .filter((s) => /[\p{L}\p{N}]/u.test(s));
   const out = [];
@@ -1202,19 +1235,22 @@ function speechChunks(markdown, max = 220) {
 /** A read-aloud player over the browser's speech synthesis (injected so tests can use a fake engine).
  *  Plays parts in order; Pause remembers the part (browsers can't pause mid-sentence reliably), Resume restarts it.
  *  Every start cancels what was playing and bumps a generation number, so a late event from older speech can't
- *  advance or duplicate the new one. onchange(reader) after every state change. */
+ *  advance or duplicate the new one. onchange(reader) after every state change. 7.1: [voice] = the chosen system voice. */
 function makeReader(synth, Utterance) {
-  const r = { ok: Boolean(synth && Utterance), parts: [], i: 0, state: 'idle', rate: 1, lang: 'en-US', error: null, gen: 0, onchange: null, owner: null };
+  const r = { ok: Boolean(synth && Utterance), parts: [], i: 0, state: 'idle', rate: 1, lang: 'en-US', voice: null, error: null, gen: 0, onchange: null, owner: null };
   const emit = () => r.onchange?.(r);
   const next = (g) => {
     if (g !== r.gen) return;
     if (r.i >= r.parts.length) { r.state = 'ended'; r.i = 0; emit(); return; }
-    const u = new Utterance(r.parts[r.i].text); u.rate = r.rate; u.lang = r.lang;
+    const u = new Utterance(r.parts[r.i].text); u.rate = r.rate; u.pitch = r.pitch ?? 1; u.volume = r.volume ?? 1; u.lang = r.voice?.lang || r.lang;
+    if (r.voice) u.voice = r.voice;
     u.onend = () => { if (g === r.gen) { r.i++; next(g); } };
     u.onerror = (e) => {
       if (g !== r.gen || ['interrupted', 'canceled'].includes(e?.error)) return;
       const why = { 'not-allowed': 'The browser blocked read-aloud. Click Listen again.', 'synthesis-unavailable': 'No speech voice is available in this browser.',
-        'audio-busy': 'The audio output is busy. Try again.', 'network': 'This voice needs the internet. Choose another voice in your system settings.' };
+        'audio-busy': 'The audio output is busy. Try again.', 'network': 'This voice needs the internet. Choose another voice in Settings → Voice.',
+        'synthesis-failed': 'The speech engine couldn’t read this. Try again, or choose another voice.', 'audio-hardware': 'No audio output device is available.',
+        'voice-unavailable': 'The chosen voice isn’t available any more. Choose another voice in Settings → AI personalization.' };
       r.gen++; r.state = 'error'; r.error = why[e?.error] || e?.error || 'speech failed'; emit();
     };
     synth.speak(u); emit();
@@ -1240,102 +1276,929 @@ function makeReader(synth, Utterance) {
 
 const reader = makeReader(window.speechSynthesis, window.SpeechSynthesisUtterance);
 
-/** Reads text aloud (voice answers, voice commands): the whole text, in parts, through the shared reader. */
-function speak(text) {
+/** 7.1: the voice used for reading aloud. The saved choice if it still exists; otherwise a voice installed on this device
+ *  (localService: the text stays here) in the page's language, then any local voice, then the browser's default. */
+function pickVoice(voices, savedUri, lang = 'en') {
+  const list = Array.from(voices || []);
+  if (!list.length) return null;
+  const saved = savedUri && list.find((v) => v.voiceURI === savedUri);
+  if (saved) return saved;
+  const base = String(lang || 'en').toLowerCase().split('-')[0];
+  const local = list.filter((v) => v.localService);
+  return local.find((v) => v.lang?.toLowerCase().startsWith(base) && v.default) || local.find((v) => v.lang?.toLowerCase().startsWith(base))
+    || local[0] || list.find((v) => v.default) || list[0];
+}
+function applyTtsVoice() {
   if (!reader.ok) return;
-  reader.load(speechChunks(text), 'voice'); reader.play(0);
+  if (typeof state.voiceProfile !== 'undefined') return applyVoiceProfile();     // 7.1.0-dev.2: the voice profile decides
+  reader.voice = pickVoice(window.speechSynthesis.getVoices(), store.get(VOICE_LS.ttsVoice), navigator.language);
+}
+if (reader.ok) { applyTtsVoice(); window.speechSynthesis.addEventListener?.('voiceschanged', applyTtsVoice); }
+
+/** Reads text aloud (voice answers, voice commands): the whole text, in parts, through the shared reader. */
+function speak(text, owner = 'voice') {
+  if (!reader.ok) return;
+  reader.load(speechChunks(text), owner); reader.play(0);
+}
+
+/** 7.1: a microphone error → one sentence that says what to do (getUserMedia DOMException names). */
+function micErrorMessage(e) {
+  const n = e?.name || '';
+  if (typeof PLATFORM !== 'undefined' && PLATFORM === 'web') {          // 7.1.1: the Web app runs on any device: no Windows-specific advice
+    if (n === 'NotAllowedError' || n === 'SecurityError' || n === 'PermissionDeniedError')
+      return 'Microphone access is blocked. Allow the microphone for this site (the icon next to the address), and for the browser in your device\'s settings.';
+    if (n === 'NotFoundError' || n === 'DevicesNotFoundError' || n === 'OverconstrainedError') return 'No microphone was found on this device. Connect or enable one, then try again.';
+    if (n === 'NotReadableError' || n === 'TrackStartError' || n === 'AbortError') return 'The microphone is busy or turned off (another app may be using it). Close the other app and try again.';
+    if (n === 'insecure') return 'The microphone only works on a secure page (https).';
+  }
+  if (n === 'NotAllowedError' || n === 'SecurityError' || n === 'PermissionDeniedError')
+    return 'Microphone access is blocked. Allow it for this page (the icon at the left of the address bar), and in Windows Settings → Privacy & security → Microphone (“Let desktop apps access your microphone”).';
+  if (n === 'NotFoundError' || n === 'DevicesNotFoundError' || n === 'OverconstrainedError')
+    return 'No microphone was found. Connect one (or check that it is enabled in Windows Sound settings), then try again.';
+  if (n === 'NotReadableError' || n === 'TrackStartError' || n === 'AbortError')
+    return 'The microphone could not be started: another app may be using it, or it is disabled. Close the other app and try again.';
+  if (n === 'insecure') return 'The microphone only works on a secure page: open Abhify.AI at http://127.0.0.1 on this computer, or over https.';
+  return `The microphone could not be started (${n || 'unknown error'}).`;
+}
+/** 7.1: the browser recognition's error codes → what to do. */
+function srErrorMessage(code) {
+  return ({
+    'not-allowed': micErrorMessage({ name: 'NotAllowedError' }), 'service-not-allowed': 'This browser doesn\'t allow its speech service here. Choose “On this computer” in Settings → Voice.',
+    'audio-capture': micErrorMessage({ name: 'NotFoundError' }), 'network': 'The browser\'s speech service needs the internet and couldn\'t be reached. Choose “On this computer” in Settings → Voice to work offline.',
+    'language-not-supported': 'The browser\'s speech service doesn\'t support this language. Choose “On this computer” in Settings → Voice.',
+    'no-speech': 'No speech was heard. Check the microphone in Settings → Voice, or speak a little closer.',
+  })[code] || `Speech recognition failed (${code}).`;
+}
+
+/** 7.1: decides how this click can listen. engine 'local' | 'browser'; st = GET /voice/status (null = unknown, e.g. a phone
+ *  that may not read it); hasSR = the browser has built-in recognition; backend = the Abhify.AI app is reachable. */
+function voicePlan(engine, st, hasSR, backend, platform = 'desktop') {
+  if (platform === 'web') {                                            // 7.1.1: the standalone Web app has no computer to transcribe on
+    if (hasSR) return { use: 'browser' };
+    return { error: 'This browser has no speech recognition (Firefox and some others don\'t offer it). Type your question instead, or open the Web app in Chrome, Edge or Safari.' };
+  }
+  if (engine === 'browser') {
+    if (hasSR) return { use: 'browser' };
+    if (backend && (!st || st.ready)) return { use: 'local', note: 'This browser has no built-in speech recognition, so your computer transcribes instead.' };
+    return { error: 'This browser has no built-in speech recognition. Choose “On this computer” in Settings → Voice.' };
+  }
+  if (!backend) return hasSR ? { setup: 'nobackend' } : { error: 'Voice needs the Abhify.AI app on your computer (it isn\'t reachable now).' };
+  if (!st) return { use: 'local' };
+  if (!st.available) return { setup: 'unavailable' };
+  if (!st.ready) return { setup: 'download', mb: st.download_mb, downloading: st.download?.state === 'downloading', error: st.download?.state === 'error' ? st.download.error : null };
+  return { use: 'local' };
+}
+
+/** 7.1: voice-activity detection over microphone levels (0..1). Stops after [silenceMs] of quiet once speech was heard, after
+ *  [noSpeechMs] without any speech, or at [maxMs]. The quiet level is learnt in the first 400 ms (background noise). */
+/** 7.2.1: microphone levels (RMS of a 100 ms window). Below MIC_SILENT nothing reached the app at all (muted, blocked or the
+ *  wrong device); below MIC_QUIET it's real but very quiet sound (e.g. laptop microphone arrays with noise suppression), which
+ *  Whisper can still understand, so it is sent, never discarded. */
+const MIC_SILENT = 0.0005;
+const MIC_QUIET = 0.004;
+/** Pure: 'unknown' (the level meter never ran) | 'silent' | 'very-quiet' | 'quiet' | 'ok'. */
+function micVerdict(peak, meterRan = true) {
+  if (!meterRan) return 'unknown';
+  if (!(peak > MIC_SILENT)) return 'silent';
+  if (peak < MIC_QUIET) return 'very-quiet';
+  return peak < 0.04 ? 'quiet' : 'ok';
+}
+function micSilentMessage(label) {
+  return `No sound reached Abhify.AI from the microphone${label ? ` (“${label}”)` : ''}. Check: it isn't muted (some laptops have a microphone mute key); `
+    + 'Windows Settings → Privacy & security → Microphone → “Let desktop apps access your microphone” is on; or choose another microphone in Settings → Voice → Test microphone.';
+}
+
+function makeVad({ threshold = MIC_QUIET, silenceMs = 1600, noSpeechMs = 8000, maxMs = 60000 } = {}) {
+  let start = null, lastVoice = 0, noise = null, heard = false;
+  return {
+    feed(level, now) {
+      if (start === null) { start = now; lastVoice = now; }
+      if (!heard && now - start < 400) noise = noise === null ? level : noise * 0.8 + level * 0.2;
+      // the learnt floor is capped: someone who starts talking at once must not be learnt as "background noise"
+      const thr = Math.max(threshold, Math.min(noise || 0, 0.03) * 2.5);
+      if ((now - start >= 400 && level > thr) || level > 0.06) { heard = true; lastVoice = now; }
+      if (now - start >= maxMs) return 'stop:max';
+      if (heard && now - lastVoice >= silenceMs) return 'stop:silence';
+      if (!heard && now - start >= noSpeechMs) return 'stop:nospeech';
+      return heard ? 'speech' : 'waiting';
+    },
+    get heard() { return heard; },
+  };
+}
+
+async function voiceStatus(force = false) {
+  if (!force && voice.status && Date.now() - voice.statusAt < 20000) return voice.status;
+  try { voice.status = await api('/voice/status', { timeout: 8000 }); } catch { voice.status = null; }
+  voice.statusAt = Date.now();
+  return voice.status;
 }
 
 /** mode: 'command' (floating button) or 'dictate' (chat mic) */
 async function startListening(mode) {
   if (voice.listening) { stopListening(); return; }
+  if (voice.starting) return;                                        // 7.1.1: a second click while the first is still starting
+  if (reader.state === 'playing' && reader.owner !== 'news') reader.stop();          // talking over an answer interrupts it
   voice.mode = mode;
-  const useWhisper = state.usePrivateWhisper || !SR;
-  if (useWhisper && !state.online) { toast(SR ? 'Private voice mode needs the backend' : 'Voice needs the backend in this browser'); return; }
-  warmForVoice(useWhisper);                                         // the model loads while you speak
+  voice.starting = true;
+  let plan;
+  try {
+    const backend = transcriberReachable();
+    const st = state.voiceEngine === 'local' && backend ? await voiceStatus() : null;
+    plan = voicePlan(state.voiceEngine, st, Boolean(SR), backend, PLATFORM);
+  } finally { voice.starting = false; }
+  if (plan.error) { voice.conversation = false; toast(plan.error, 9000); return; }
+  if (plan.setup) { showVoiceSetup(plan); return; }
+  if (plan.use === 'browser' && !srConsented()) { showVoiceSetup({ setup: 'consent' }); return; }
+  if (plan.note) toast(plan.note, 6000);
+  if (state.handsFree) voice.conversation = true;
+  warmForVoice(plan.use === 'local');                                // the model loads while you speak
   showVoiceUI(true, 'Listening…');
-  if (!useWhisper) return startWebSpeech();
+  if (plan.use === 'browser') return startWebSpeech();
   return startRecorder();
 }
 
 function startWebSpeech() {
   voice.rec = new SR();
-  voice.rec.lang = 'en-US'; voice.rec.interimResults = true; voice.rec.maxAlternatives = 1;
-  let finalText = '';
+  voice.rec.lang = navigator.language || 'en-US'; voice.rec.interimResults = true; voice.rec.maxAlternatives = 1;
+  let finalText = '', failed = '';
   voice.rec.onresult = (e) => {
     const t = Array.from(e.results).map((r) => r[0].transcript).join('');
     $('#voiceText').textContent = t || 'Listening…';
     if (e.results[e.results.length - 1].isFinal) finalText = t;
   };
-  voice.rec.onerror = (e) => { if (e.error !== 'aborted' && e.error !== 'no-speech') toast(`Mic error: ${e.error}`); };
-  voice.rec.onend = () => { showVoiceUI(false); if (finalText) handleTranscript(finalText); };
+  voice.rec.onerror = (e) => { if (e.error !== 'aborted') failed = e.error; };
+  voice.rec.onend = () => {
+    voice.rec = null; showVoiceUI(false);
+    if (voice.discard) { voice.discard = false; return; }
+    if (finalText) return deliverTranscript(finalText);
+    voice.conversation = false;
+    toast(srErrorMessage(failed || 'no-speech'), 8000);
+  };
+  voice.rec.onstart = () => { $('#voiceText').textContent = 'Listening… speak now'; };
   voice.listening = true;
-  voice.rec.start();
+  clearTimeout(voice.maxTimer);
+  voice.maxTimer = setTimeout(stopListening, 60000);                   // same safety limit as the local recorder
+  try { voice.rec.start(); } catch (e) { voice.rec = null; voice.listening = false; showVoiceUI(false); voice.conversation = false; toast(srErrorMessage(e?.name === 'NotAllowedError' ? 'not-allowed' : 'audio-capture'), 8000); }
+}
+
+async function openMic() {
+  if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('insecure'), { name: window.isSecureContext ? 'NotFoundError' : 'insecure' });
+  const id = store.get(VOICE_LS.mic) || '';
+  const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 };
+  if (!id) return navigator.mediaDevices.getUserMedia({ audio });
+  try { return await navigator.mediaDevices.getUserMedia({ audio: { ...audio, deviceId: { exact: id } } }); }
+  catch (e) {
+    if (!['OverconstrainedError', 'NotFoundError'].includes(e?.name)) throw e;
+    toast('The selected microphone isn\'t connected; using the default microphone.', 6000);
+    return navigator.mediaDevices.getUserMedia({ audio });
+  }
+}
+
+function stopMeter() {
+  clearInterval(voice.meter); voice.meter = 0;
+  try { voice.ctx?.close(); } catch { /* already closed */ }
+  voice.ctx = null; $('#voiceOverlay').style.removeProperty('--lvl');
 }
 
 async function startRecorder() {
   let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-  catch { showVoiceUI(false); toast('Microphone permission denied'); return; }
-  voice.chunks = [];
-  voice.mediaRec = new MediaRecorder(stream);
+  try { stream = await openMic(); } catch (e) { showVoiceUI(false); voice.conversation = false; toast(micErrorMessage(e), 9000); return; }
+  if (!$('#voiceOverlay') || $('#voiceOverlay').classList.contains('hidden')) { stream.getTracks().forEach((t) => t.stop()); return; }   // cancelled meanwhile
+  voice.stream = stream; voice.chunks = []; voice.discard = false; voice.peak = 0;
+  voice.micLabel = stream.getAudioTracks()[0]?.label || '';
+  const type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm'].find((t) => window.MediaRecorder?.isTypeSupported?.(t)) || '';
+  voice.mediaRec = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
   voice.mediaRec.ondataavailable = (e) => e.data.size && voice.chunks.push(e.data);
+  const vad = makeVad();
+  stream.getAudioTracks().forEach((t) => { t.onended = () => { if (voice.listening) { toast('The microphone was disconnected.', 6000); stopListening(); } }; });
+  try {                                                                    // level meter + silence detection (best effort)
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    voice.ctx = new Ctx(); const an = voice.ctx.createAnalyser(); an.fftSize = 1024;
+    voice.ctx.resume?.().catch(() => {});                                 // 7.2.1: a suspended context would only read silence
+    voice.meterRan = false;
+    voice.ctx.createMediaStreamSource(stream).connect(an);
+    const buf = new Float32Array(an.fftSize);
+    voice.meter = setInterval(() => {
+      if (voice.ctx?.state !== 'running') return;                        // no level yet: never judge silence from a stopped meter
+      voice.meterRan = true;
+      an.getFloatTimeDomainData(buf);
+      let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+      const level = Math.sqrt(sum / buf.length);
+      voice.peak = Math.max(voice.peak || 0, level);
+      $('#voiceOverlay').style.setProperty('--lvl', Math.min(1, level * 12).toFixed(2));
+      const v = vad.feed(level, performance.now());
+      if (v === 'speech') $('#voiceText').textContent = 'Listening… (stops when you pause)';
+      if (v.startsWith('stop:')) {
+        // 7.2.1: only true silence is discarded; any real sound (even very quiet) goes to Whisper, which decides if it's speech
+        if (v === 'stop:nospeech' && micVerdict(voice.peak, voice.meterRan) === 'silent') {
+          voice.discard = true; voice.conversation = false; toast(micSilentMessage(voice.micLabel), 12000);
+        }
+        stopListening();
+      }
+    }, 100);
+  } catch { /* no Web Audio: Stop button and the 60 s limit still end it */ }
   voice.mediaRec.onstop = async () => {
-    stream.getTracks().forEach((t) => t.stop());
-    $('#voiceText').textContent = 'Transcribing with Whisper…';
-    const blob = new Blob(voice.chunks, { type: voice.mediaRec.mimeType || 'audio/webm' });
+    stream.getTracks().forEach((t) => t.stop()); voice.stream = null; stopMeter();
+    if (voice.discard) { voice.discard = false; showVoiceUI(false); return; }
+    $('#voiceText').textContent = 'Transcribing on this computer…';
+    const blob = new Blob(voice.chunks, { type: voice.mediaRec?.mimeType || 'audio/webm' });
     const form = new FormData(); form.append('file', blob, 'speech.webm');
     try {
       const r = await api('/transcribe', { method: 'POST', form, timeout: 120000 });
       showVoiceUI(false);
-      if (r.text) handleTranscript(r.text); else toast("Didn't catch that. Try again.");
-    } catch (e) { showVoiceUI(false); toast(`Transcription failed: ${e.message}`); }
+      if (r.text) deliverTranscript(r.text);
+      else {
+        voice.conversation = false;
+        // 7.2.1: say what happened: nothing reached the app, very quiet sound, or sound without recognisable speech
+        const verdict = micVerdict(voice.peak, voice.meterRan);
+        toast(verdict === 'silent' ? micSilentMessage(voice.micLabel)
+          : verdict === 'very-quiet' ? 'Your microphone is very quiet, so no speech was recognised. Speak closer, or raise its input level in Windows Settings → System → Sound → Input.'
+            : 'No speech was recognised. Speak a little closer to the microphone and try again.', 10000);
+      }
+    } catch (e) {
+      showVoiceUI(false); voice.conversation = false;
+      if (e.status === 409) { voice.status = null; showVoiceSetup(voicePlan('local', await voiceStatus(true), Boolean(SR), true)); return; }
+      toast(`Transcription failed: ${e.message}`, 8000);
+    }
   };
   voice.listening = true;
-  voice.mediaRec.start();
-  $('#voiceText').textContent = 'Recording… tap Stop when done';
+  voice.mediaRec.start(250);
+  $('#voiceText').textContent = 'Listening… speak now';
   clearTimeout(voice.maxTimer);
-  voice.maxTimer = setTimeout(stopListening, 15000);             // safety limit
+  voice.maxTimer = setTimeout(stopListening, 60000);             // safety limit (the VAD usually stops much earlier)
 }
 
-function stopListening() {
+/** 7.1.0: Settings → Voice → Test microphone: 5 s of live level from the chosen microphone, which device it is, and a plain
+ *  verdict. Nothing is recorded or sent anywhere; the microphone is released at the end. */
+async function testMicrophone() {
+  const out = $('#micTestOut'), bar = $('#micTestBar'), btn = $('#micTest');
+  if (voice.listening) { out.textContent = 'Stop listening first.'; return; }
+  let stream;
+  try { stream = await openMic(); } catch (e) { out.textContent = micErrorMessage(e); return; }
+  const label = stream.getAudioTracks()[0]?.label || 'the default microphone';
+  btn.disabled = true; out.textContent = `Listening to “${label}” for 5 seconds: say something…`;
+  let peak = 0, ctx, ran = false;                                   // 7.2.1: ran = the level meter really sampled
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext; ctx = new Ctx();
+    await ctx.resume?.().catch(() => {});
+    const an = ctx.createAnalyser(); an.fftSize = 1024; ctx.createMediaStreamSource(stream).connect(an);
+    const buf = new Float32Array(an.fftSize), t0 = performance.now();
+    await new Promise((done) => {
+      const tick = () => {
+        if (ctx.state === 'running') ran = true;
+        an.getFloatTimeDomainData(buf); let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+        const lvl = Math.sqrt(sum / buf.length); peak = Math.max(peak, lvl);
+        bar.style.width = `${Math.min(100, Math.round(lvl * 1200))}%`;
+        if (performance.now() - t0 < 5000) requestAnimationFrame(tick); else done();
+      };
+      tick();
+    });
+  } finally { stream.getTracks().forEach((t) => t.stop()); try { ctx?.close(); } catch { /* closed */ } bar.style.width = '0'; btn.disabled = false; }
+  const verdict = micVerdict(peak, ran || peak > 0), level = ` (level ${peak.toFixed(4)})`;
+  out.textContent = verdict === 'silent' ? micSilentMessage(label) + level
+    : verdict === 'unknown' ? `The level of “${label}” couldn't be measured in this browser; try speaking to Abhify to check it.`
+      : verdict === 'very-quiet' ? `“${label}” picks up sound, but very quietly${level}. Abhify will still try to understand you; for best results raise its input level in Windows Settings → System → Sound → Input.`
+        : verdict === 'quiet' ? `“${label}” works, but it's quiet${level}. Speak closer or raise its input volume in Windows sound settings.`
+          : `✓ “${label}” works and picks up your voice${level}.`;
+  renderVoiceSettings();                                               // device names appear once the microphone was allowed
+}
+
+/** Stop listening. The audio heard so far is transcribed (unless [discard]); the microphone is released immediately. */
+function stopListening(discard = false) {
   clearTimeout(voice.maxTimer);
   voice.listening = false;
-  if (voice.rec) { try { voice.rec.stop(); } catch { /* already stopped */ } voice.rec = null; }
+  if (discard) voice.discard = true;
+  if (voice.rec) { try { voice.rec.stop(); } catch { /* already stopped */ } }
   if (voice.mediaRec && voice.mediaRec.state === 'recording') voice.mediaRec.stop();
-  else showVoiceUI(false);
+  else { voice.stream?.getTracks().forEach((t) => t.stop()); voice.stream = null; stopMeter(); if (!voice.rec) showVoiceUI(false); }
 }
 
 function showVoiceUI(on, text) {
   $('#voiceOverlay').classList.toggle('hidden', !on);
+  $('#voiceSetup')?.classList.add('hidden'); $('#voiceLive')?.classList.remove('hidden');
   $('#voiceFab').classList.toggle('rec', on);
   $('#chatMic').classList.toggle('rec', on);
+  $('#voiceHandsFree')?.classList.toggle('hidden', !(on && voice.conversation));
   if (text) $('#voiceText').textContent = text;
   if (!on) voice.listening = false;
   updateOrb();
 }
 
-/** Voice commands navigate; anything else becomes a question for the AI. */
-function handleTranscript(raw) {
-  const t = raw.toLowerCase().trim();
-  if (voice.mode === 'dictate') return sendChat(raw, { speakAnswer: true });
-  const has = (...w) => w.some((x) => new RegExp(`\\b${x}\\b`).test(t));
-  if (t.split(/\s+/).length <= 4) {                              // short phrase: likely a command
-    if (has('news', 'headlines')) { switchTab('news'); return speak('Here are the latest AI headlines'); }
-    if (has('interview')) { switchTab('interview'); return speak('Opening interview questions'); }
-    if (has('quiz', 'mcq', 'test')) { switchTab('mcq'); return speak('Starting the quiz'); }
-    if (has('chat', 'assistant')) { switchTab('chat'); return speak('How can I help?'); }
-    if (has('next')) { if (current === 'mcq') { state.quiz.index++; state.quiz.selected = null; renderMCQ(); } return; }
-    if (has('previous', 'back')) { if (current === 'mcq' && state.quiz.index > 0) { state.quiz.index--; renderMCQ(); } return; }
-    if (has('progress', 'score')) {
-      const p = state.progress;
-      return speak(`You've answered ${p.mcq_correct} out of ${p.mcq_total} questions correctly, with a ${p.streak_days || 0} day streak.`);
-    }
-    if (has('help', 'commands')) return speak('Say news, interview, quiz, chat, next, previous, or my progress. Or just ask me any AI question.');
-    if (has('refresh')) { loadNews(true); return speak('Refreshing the news'); }
-  }
-  sendChat(raw, { speakAnswer: true });                          // free-form question
+/** 7.1: the overlay explains what local voice needs (and offers the browser's recognition, with its privacy note). */
+function showVoiceSetup(plan) {
+  if (!plan || plan.use) { if (plan?.use) startListening(voice.mode); return; }
+  const msg = {
+    download: plan.downloading ? `Downloading the speech model (about ${plan.mb || '?'} MB)… You can keep using Abhify.AI meanwhile.`
+      : `Voice input runs on this computer with the Whisper speech model, which isn't installed yet. It is a one-time download of about ${plan.mb || '?'} MB from Hugging Face; after that, voice works offline and your audio never leaves this computer.` + (plan.error ? ` Last attempt: ${plan.error}` : ''),
+    unavailable: 'This copy of Abhify.AI has no local speech engine.',
+    nobackend: 'The Abhify.AI app on your computer isn\'t reachable, so private (local) voice input isn\'t available now.',
+    consent: 'Speech recognition in this browser is done by the browser\'s maker: what you say is sent to their speech service (Google for Chrome, Microsoft for Edge, Apple for Safari) and returned as text. Abhify.AI itself doesn\'t record or upload your voice. Allow it for this browser?',
+  }[plan.setup];
+  $('#voiceSetupText').textContent = msg;
+  $('#voiceDl').classList.toggle('hidden', plan.setup !== 'download' || plan.downloading);
+  $('#voiceDl').textContent = `Download (${plan.mb || '?'} MB)`;
+  $('#voiceUseBrowser').classList.toggle('hidden', !SR);
+  $('#voiceUseBrowser').textContent = plan.setup === 'consent' ? 'Allow and listen' : 'Use the browser\'s recognition instead';
+  $('#voiceOverlay').classList.remove('hidden'); $('#voiceLive').classList.add('hidden'); $('#voiceSetup').classList.remove('hidden');
+  if (plan.downloading) pollVoiceDownload();
 }
+
+async function downloadVoiceModel() {
+  try { voice.status = await api('/voice/model/download', { method: 'POST', body: { confirm: true }, timeout: 15000 }); voice.statusAt = Date.now(); }
+  catch (e) { toast(`Download not started: ${e.message}`, 7000); return; }
+  showVoiceSetup(voicePlan('local', voice.status, Boolean(SR), true)); renderVoiceSettings();
+}
+function pollVoiceDownload() {
+  clearTimeout(voice.poll);
+  voice.poll = setTimeout(async () => {
+    const st = await voiceStatus(true); renderVoiceSettings();
+    const plan = voicePlan('local', st, Boolean(SR), true);
+    const open = !$('#voiceSetup').classList.contains('hidden') && !$('#voiceOverlay').classList.contains('hidden');
+    if (plan.use) { if (open) { closeVoiceOverlay(); toast('✅ The speech model is installed. Press the microphone to talk.'); } return; }
+    if (plan.downloading) { if (open) showVoiceSetup(plan); else pollVoiceDownload(); return; }
+    if (open) showVoiceSetup(plan); else if (plan.error) toast(plan.error, 7000);
+  }, 2000);
+}
+function closeVoiceOverlay() { $('#voiceOverlay').classList.add('hidden'); $('#voiceSetup').classList.add('hidden'); $('#voiceLive').classList.remove('hidden'); }
+
+/** 7.1: the browser's recognition only after the user chose it here (the note says where the audio goes). */
+function useBrowserVoice() {
+  store.set(VOICE_LS.srOk, '1');                                     // the user just read where the audio goes and agreed
+  if (PLATFORM !== 'web') { state.voiceEngine = 'browser'; store.set(VOICE_LS.engine, 'browser'); }
+  closeVoiceOverlay(); if (PLATFORM !== 'web') toast('Using the browser\'s speech recognition (audio is sent to its speech service). Change it in Settings → Voice.', 7000);
+  startListening(voice.mode);
+}
+
+/** Short voice commands (navigation, progress); true when [raw] was one. */
+function voiceCommand(raw) {
+  const t = raw.toLowerCase().trim();
+  const has = (...w) => w.some((x) => new RegExp(`\\b${x}\\b`).test(t));
+  if (t.split(/\s+/).length > 4) return false;
+  if (!/^(?:open|go to|show|start|read|what(?:'s| is) my|my|next|previous|back|refresh|help)\b/.test(t)) return false;   // 7.1.0: commands start with a command word; anything else is a question
+  if (has('news', 'headlines')) { switchTab('news'); speak('Here are the latest AI headlines'); return true; }
+  if (has('interview')) { switchTab('interview'); speak('Opening interview questions'); return true; }
+  if (has('quiz', 'mcq', 'test')) { switchTab('mcq'); speak('Starting the quiz'); return true; }
+  if (/^(?:open|go to|show)(?: the)? (?:chat|assistant)$/.test(t)) { switchTab('chat'); return true; }   // 7.1.0: only an explicit command, and no spoken "How can I help?"
+  if (has('next')) { if (current === 'mcq') { state.quiz.index++; state.quiz.selected = null; renderMCQ(); } return true; }
+  if (has('previous', 'back')) { if (current === 'mcq' && state.quiz.index > 0) { state.quiz.index--; renderMCQ(); } return true; }
+  if (has('progress', 'score')) {
+    const p = state.progress;
+    speak(`You've answered ${p.mcq_correct} out of ${p.mcq_total} questions correctly, with a ${p.streak_days || 0} day streak.`); return true;
+  }
+  if (has('help', 'commands')) { speak('Say news, interview, quiz, chat, next, previous, or my progress. Or just ask me any AI question.'); return true; }
+  if (has('refresh')) { loadNews(true); speak('Refreshing the news'); return true; }
+  return false;
+}
+
+/** 7.1: where a transcript goes. Hands-free conversation: sent at once. Otherwise: a command runs; anything else is put in the
+ *  message box to check, edit and send (or discard), and its answer is read aloud. */
+function deliverTranscript(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return;
+  if (voice.mode === 'command' && voiceCommand(text)) { voice.conversation = false; return; }
+  if (voice.conversation) return sendChat(text, { speakAnswer: true });
+  switchTab('chat');
+  const ta = $('#chatText');
+  ta.value = ta.value.trim() ? `${ta.value.trim()} ${text}` : text;
+  ta.dispatchEvent(new Event('input')); ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+  voice.pendingSpeak = true;
+  $('#voiceReview').classList.remove('hidden');
+}
+function clearVoiceReview(discard = false) {
+  voice.pendingSpeak = false; $('#voiceReview')?.classList.add('hidden');
+  if (discard) { const ta = $('#chatText'); ta.value = ''; ta.dispatchEvent(new Event('input')); ta.focus(); }
+}
+/** Kept for older callers: a transcript from anywhere. */
+function handleTranscript(raw) { deliverTranscript(raw); }
+
+/** 7.1: after the reader changes: the "Reading aloud · Stop" chip, and Hands-free conversation listens again when a spoken
+ *  answer has been read to the end. */
+function onReaderChange() {
+  const chip = $('#speakChip');
+  if (chip) chip.classList.toggle('hidden', !(reader.state === 'playing' && reader.owner !== 'news'));
+  $$('[data-listen]').forEach((b) => {
+    const on = reader.state === 'playing' && reader.owner === `msg:${b.closest('.msg-tools')?.dataset.ans}`;
+    b.classList.toggle('active', on); const l = b.querySelector('span'); if (l) l.textContent = on ? 'Stop' : 'Listen';
+  });
+  if (reader.state === 'error' && reader.owner !== 'news' && reader.error) toast(reader.error, 6000);
+  if (reader.state === 'ended' && reader.owner === 'voice' && voice.conversation && state.handsFree && !voice.listening)
+    setTimeout(() => { if (voice.conversation && !voice.listening && reader.state !== 'playing') startListening(voice.mode); }, 350);
+}
+
+/** Settings → Voice: engine, model status/download, microphone, read-aloud mode and voice, Hands-free. */
+async function renderVoiceSettings() {
+  const box = $('#voiceSettings'); if (!box || $('#settingsSheet').classList.contains('hidden')) return;
+  $('#setVoiceEngine').value = state.voiceEngine; $('#setSpeak').value = state.speakMode; $('#setHandsFree').checked = state.handsFree;
+  const backend = transcriberReachable();
+  const st = backend ? await voiceStatus() : null;
+  const line = $('#voiceEngineStatus'), dl = $('#voiceSetDl');
+  dl.classList.add('hidden');
+  $('#setVoiceEngine').disabled = PLATFORM === 'web';
+  if (PLATFORM === 'web') { $('#setVoiceEngine').value = 'browser';
+    line.textContent = SR ? `Voice input uses this browser's speech recognition (online, by the browser's maker)${srConsented() ? '' : '; you\'ll be asked once before it is used'}. The Web app never sends audio to a computer of yours.`
+      : 'This browser has no speech recognition. Type your questions, or use Chrome, Edge or Safari for voice input.'; }
+  else if (!backend) line.textContent = 'The Abhify.AI app on your computer isn\'t reachable: local voice is unavailable.';
+  else if (!st) line.textContent = 'Local speech status unavailable from this device.';
+  else if (!st.available) line.textContent = 'This copy of Abhify.AI has no local speech engine.';
+  else if (st.ready) line.textContent = `✓ Whisper ${st.model} is installed${st.loaded ? ` (loaded on ${st.device === 'cuda' ? 'the GPU' : 'the CPU'})` : ''}. Works offline.`;
+  else if (st.download?.state === 'downloading') { line.textContent = `Downloading Whisper ${st.model} (about ${st.download_mb} MB)…`; pollVoiceDownload(); }
+  else { line.textContent = `Whisper ${st.model} isn't installed (one-time download, about ${st.download_mb} MB from Hugging Face).` + (st.download?.error ? ` ${st.download.error}` : ''); dl.classList.remove('hidden'); dl.textContent = `Download (${st.download_mb} MB)`; }
+  $('#voiceBrowserNote').classList.toggle('hidden', state.voiceEngine !== 'browser');
+  const mic = $('#setMic'), saved = store.get(VOICE_LS.mic) || '';
+  try {
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== 'communications');
+    mic.innerHTML = '<option value="">System default microphone</option>' + devs.map((d, i) => `<option value="${esc(d.deviceId)}">${esc(d.label || `Microphone ${i + 1}`)}</option>`).join('');
+    mic.value = devs.some((d) => d.deviceId === saved) ? saved : '';
+    $('#micHint').textContent = devs.length ? (devs.some((d) => d.label) ? '' : 'Names appear after you allow the microphone once.') : 'No microphone found.';
+  } catch { mic.innerHTML = '<option value="">System default microphone</option>'; $('#micHint').textContent = 'The microphone list isn\'t available on this page.'; }
+  renderVoiceProfile();                                             // 7.1.0-dev.2: voices, styles, speed, pitch
+}
+function bindVoice() {
+  $('#voiceFab').addEventListener('click', () => startListening('command'));
+  $('#chatMic').addEventListener('click', () => startListening('dictate'));
+  $('#voiceStop').addEventListener('click', () => { voice.conversation = false; stopListening(); });
+  $('#voiceCancelRec')?.addEventListener('click', () => { voice.conversation = false; stopListening(true); });
+  $('#voiceDl').addEventListener('click', downloadVoiceModel);
+  $('#voiceUseBrowser').addEventListener('click', useBrowserVoice);
+  $('#voiceSetupClose').addEventListener('click', closeVoiceOverlay);
+  $('#voiceReviewDiscard').addEventListener('click', () => clearVoiceReview(true));
+  $('#speakStop').addEventListener('click', () => { voice.conversation = false; reader.stop(); });
+  $('#chatText').addEventListener('input', (e) => { if (!e.target.value.trim()) clearVoiceReview(); });
+  $('#voiceSetDl').addEventListener('click', downloadVoiceModel);
+  $('#setVoiceEngine').addEventListener('change', (e) => { state.voiceEngine = e.target.value === 'browser' ? 'browser' : 'local'; store.set(VOICE_LS.engine, state.voiceEngine);
+    if (state.voiceEngine === 'browser') store.set(VOICE_LS.srOk, '1');                  // chosen next to the note that says where the audio goes
+    renderVoiceSettings(); });
+  // 7.1.1: the big orb in the middle of Home and the Assistant is a real "tap to talk" button (it looked like one before, but did nothing)
+  [['#chatOrb', 'dictate'], ['#homeOrb', 'command']].forEach(([sel, mode]) => {
+    const o = $(sel); if (!o) return;
+    o.setAttribute('role', 'button'); o.tabIndex = 0; o.classList.add('orb-talk');
+    o.addEventListener('click', () => startListening(mode));
+    o.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startListening(mode); } });
+  });
+  $('#setMic').addEventListener('change', (e) => store.set(VOICE_LS.mic, e.target.value));
+  $('#micTest')?.addEventListener('click', testMicrophone);
+  $('#setSpeak').addEventListener('change', (e) => { state.speakMode = e.target.value; store.set(VOICE_LS.speak, state.speakMode); });
+  $('#setTtsVoice').addEventListener('change', (e) => { saveVoiceProfile({ voiceURI: e.target.value }); renderVoiceProfile(); });
+  $('#setHandsFree').addEventListener('change', (e) => { state.handsFree = e.target.checked; store.set(VOICE_LS.handsFree, state.handsFree ? '1' : '0'); if (!state.handsFree) voice.conversation = false; });
+  $('#voiceTestTts').addEventListener('click', () => speak(previewText(), 'test'));
+  navigator.mediaDevices?.addEventListener?.('devicechange', () => renderVoiceSettings());
+  document.addEventListener('visibilitychange', () => {                // privacy: no listening in a hidden or minimised window
+    if (document.hidden && voice.listening) { voice.conversation = false; stopListening(); toast('Stopped listening because the window was hidden or minimised.', 6000); }
+  });
+}
+
+/* ---------- 7.1 AI PROVIDERS (cloud, optional) ----------
+   Gemini, Groq, OpenRouter and a custom OpenAI-compatible endpoint, configured on this computer (More → AI & System → AI
+   providers, Settings, Model Library, and an optional, skippable setup step). A key is tested with the provider before it is
+   saved (the backend encrypts it with Windows DPAPI); the page only ever sees a mask. Cloud is used only for a model picked in
+   the chat (after a one-time consent per provider) or by the opt-in Auto router. */
+const prov = { data: null, busy: '', err: {} };
+const PROV_STATE = { connected: ['ok', 'Connected'], error: ['bad', 'Last check failed'], off: ['muted', 'Turned off'], unchecked: ['warn', 'Not checked'],
+  not_configured: ['muted', 'Not connected'] };
+
+/** Pure: "@groq:llama-3.3-70b-versatile" → { cloud: true, provider: 'groq', model: 'llama-3.3-70b-versatile' }. */
+function cloudModel(id) {
+  const s = String(id || '');
+  if (!s.startsWith('@') || !s.includes(':')) return { cloud: false, model: s };
+  const i = s.indexOf(':');
+  return { cloud: true, provider: s.slice(1, i), model: s.slice(i + 1) };
+}
+const PROV_TITLE = { gemini: 'Google Gemini', groq: 'Groq', openrouter: 'OpenRouter', custom: 'Custom endpoint' };
+/** Pure: how a model id is shown (tags, chip, picker). */
+function modelDisplay(id) {
+  const c = cloudModel(id);
+  return c.cloud ? `${PROV_TITLE[c.provider] || c.provider} · ${c.model} · cloud` : String(id || '');
+}
+
+/** Pure: one provider card (compact = the setup step). */
+function providerCardHtml(p, { compact = false, busy = '', err = '' } = {}) {
+  const [dot, label] = PROV_STATE[p.state] || ['muted', p.state];
+  const head = `<div class="prov-head"><b>${esc(p.title)}</b><span class="badge">Cloud</span><span class="prov-state ${dot}">${esc(label)}</span></div>`;
+  const error = err || (p.state === 'error' && p.last_error) ? `<p class="small err" role="alert">${esc(err || p.last_error)}</p>` : '';
+  const isBusy = busy === p.id;
+  if (p.id === 'custom' && p.state === 'not_configured') {
+    return `<div class="prov-card" data-prov="custom">${head}
+      <p class="muted small">Any OpenAI-compatible server: https:// addresses, or one on this computer (for example LM Studio at http://127.0.0.1:1234/v1).</p>
+      <label class="field small">Base URL<input class="input" data-prov-in="url" placeholder="https://api.example.com/v1" autocomplete="off" inputmode="url"></label>
+      <label class="field small">Name (optional)<input class="input" data-prov-in="name" maxlength="40" placeholder="My server"></label>
+      <label class="field small">API key (optional)<input class="input" type="password" data-prov-in="key" autocomplete="off"></label>
+      ${error}<div class="row-tight"><button type="button" class="btn btn-primary btn-sm" data-prov-act="custom" ${isBusy ? 'disabled' : ''}>${isBusy ? 'Testing…' : 'Test and save'}</button></div></div>`;
+  }
+  if (p.state === 'not_configured') {
+    return `<div class="prov-card" data-prov="${esc(p.id)}">${head}
+      <p class="small">${esc(p.cost_note || '')}</p><p class="muted small">${esc(p.privacy_note || '')}</p>
+      <label class="field small">API key<input class="input" type="password" data-prov-in="key" placeholder="${esc(p.key_hint || '')}" autocomplete="off" spellcheck="false"></label>
+      ${error}<div class="row-tight"><button type="button" class="btn btn-primary btn-sm" data-prov-act="connect" ${isBusy ? 'disabled' : ''}>${isBusy ? 'Testing the key…' : 'Test and save'}</button>
+      ${p.get_key_url ? `<a class="small" href="${esc(p.get_key_url)}" target="_blank" rel="noopener noreferrer">Get a key</a>` : ''}</div></div>`;
+  }
+  const opts = (p.models || []).slice(0, 300).map((m) => `<option value="${esc(m.id)}" ${m.id === p.model ? 'selected' : ''}>${esc(m.id)}${m.note ? ` (${esc(m.note)})` : ''}</option>`).join('');
+  const when = p.last_check || p.last_ok;
+  return `<div class="prov-card" data-prov="${esc(p.id)}">${head}
+    <p class="muted small">${p.masked ? `Key ${esc(p.masked)} · ` : ''}${p.base_url ? `${esc(p.base_url)} · ` : ''}${when ? `checked ${esc(agoText(new Date(when * 1000).toISOString()))}` : ''}</p>
+    ${compact ? '' : `<label class="field small">Model<select data-prov-in="model">${opts}</select></label>
+    ${['gemini', 'openrouter'].includes(p.id) ? `<label class="field check small"><input type="checkbox" data-prov-in="charged" ${p.allow_charged ? 'checked' : ''}><span>Allow models that may be charged</span></label>` : ''}
+    <label class="field check small"><input type="checkbox" data-prov-in="enabled" ${p.enabled !== false ? 'checked' : ''}><span>Available in the chat's model picker</span></label>`}
+    ${error}<div class="row-tight"><button type="button" class="btn btn-ghost btn-sm" data-prov-act="test" ${isBusy ? 'disabled' : ''}>${isBusy ? 'Testing…' : 'Test connection'}</button>
+    <button type="button" class="btn btn-ghost btn-sm danger" data-prov-act="remove">Remove</button></div></div>`;
+}
+
+function routerHtml(d) {
+  const r = d.router || {};
+  const targets = d.providers.filter((p) => p.state === 'connected' && p.enabled !== false)
+    .flatMap((p) => (p.models || []).slice(0, 60).map((m) => ({ id: `@${p.id}:${m.id}`, label: `${p.title} · ${m.id}` })));
+  const sel = (key) => `<select data-router="${key}"><option value="">None (stays local)</option>${targets.map((t) => `<option value="${esc(t.id)}" ${r[key] === t.id ? 'selected' : ''}>${esc(t.label)}</option>`).join('')}</select>`;
+  return `<div class="prov-card"><div class="prov-head"><b>Auto routing</b><span class="badge">${r.auto ? 'On' : 'Off'}</span></div>
+    <p class="muted small">Off by default. When on, new chats without a chosen model send coding questions or long/complex questions to the cloud model you pick here; everything else stays on your local model. Each routed answer says so. If the chosen cloud model can't be used, your local model answers.</p>
+    <label class="field small">Coding questions → ${sel('coding')}</label>
+    <label class="field small">Complex questions → ${sel('complex')}</label>
+    <label class="field check small"><input type="checkbox" data-router="auto" ${r.auto ? 'checked' : ''} ${targets.length ? '' : 'disabled'}><span>Turn Auto routing on</span></label>
+    ${targets.length ? '' : '<p class="muted small">Connect a cloud provider first.</p>'}</div>`;
+}
+
+const PROV_RULES = 'Cloud chats send your question, that chat\'s recent messages and any live sources found for it. Your memories and documents are never sent. A failed request is never retried on another provider; Ollama stays the default.';
+
+async function loadProviders() {
+  try { prov.data = await api('/providers', { timeout: 10000 }); } catch (e) { prov.data = null; prov.loadErr = e.message; }
+  return prov.data;
+}
+function renderProviders(target, compact = false) {
+  const box = typeof target === 'string' ? $(target) : target; if (!box) return;
+  const d = prov.data;
+  if (!d) { box.innerHTML = `<p class="small err">${esc(prov.loadErr || 'AI providers are configured on the computer running Abhify.AI.')}</p>`; return; }
+  box.innerHTML = `<p class="muted small">${esc(PROV_RULES)}</p>`
+    + `<div class="prov-local"><b>Ollama</b> <span class="badge">Local</span> <span class="prov-state ${state.models.ollama === false ? 'bad' : 'ok'}">${state.models.ollama === false ? 'Not reachable' : 'Default'}</span></div>`
+    + d.providers.map((p) => providerCardHtml(p, { compact, busy: prov.busy, err: prov.err[p.id] })).join('') + (compact ? '' : routerHtml(d));
+}
+function rerenderProviders() {
+  renderProviders('#providersBody'); renderProviders('#setupProviders', true);
+}
+/* 7.2.0-dev.1 Data & Sync: loaded on demand (datasync-ui.js); nothing runs until the user opens it and presses a button.
+   7.1.0-rc.1 (owner decision): the entry is hidden in this release; the work continues in the 7.2 line. */
+const DATASYNC_VISIBLE = false;
+let dataSyncModule = null;
+async function openDataSync() {
+  closePages?.(); openSheet('dataSyncSheet'); $('#dataSyncBody').innerHTML = skeleton(3);
+  try { dataSyncModule ??= await import('./datasync-ui.js'); dataSyncModule.bind(); await dataSyncModule.open(); }
+  catch (e) { $('#dataSyncBody').innerHTML = stateHtml('error', "Couldn't open Data & Sync", e.message); }
+}
+async function openProviders() {
+  closePages?.(); openSheet('providersSheet'); $('#providersBody').innerHTML = skeleton(3);
+  await loadProviders(); rerenderProviders();
+}
+async function providerAction(card, act) {
+  const id = card.dataset.prov, val = (k) => card.querySelector(`[data-prov-in="${k}"]`);
+  const go = async (fn, okMsg) => {
+    prov.busy = id; prov.err[id] = ''; rerenderProviders();
+    try { await fn(); if (okMsg) toast(okMsg); } catch (e) { prov.err[id] = e.message; }
+    prov.busy = ''; await loadProviders(); rerenderProviders(); loadModels();
+  };
+  if (act === 'connect') {
+    const key = val('key').value.trim();
+    if (!key) { prov.err[id] = 'Paste the API key first.'; rerenderProviders(); return; }
+    return go(() => api(`/providers/${id}/key`, { method: 'PUT', body: { key }, timeout: 30000 }), `✅ ${PROV_TITLE[id]} connected`);
+  }
+  if (act === 'custom') {
+    const body = { base_url: val('url').value.trim(), name: val('name').value.trim() || null, key: val('key').value.trim() || null };
+    return go(() => api('/providers/custom/endpoint', { method: 'PUT', body, timeout: 30000 }), '✅ Custom endpoint connected');
+  }
+  if (act === 'test') return go(() => api(`/providers/${id}/test`, { method: 'POST', timeout: 30000 }), `✅ ${PROV_TITLE[id]} works`);
+  if (act === 'remove') {
+    if (!confirm(`Remove ${PROV_TITLE[id]}? Its key is deleted from this computer.`)) return;
+    return go(() => api(`/providers/${id}`, { method: 'DELETE' }), `${PROV_TITLE[id]} removed`);
+  }
+}
+async function providerChange(el) {
+  if (el.dataset.router) {
+    const body = el.dataset.router === 'auto' ? { auto: el.checked } : { [el.dataset.router]: el.value };
+    try { prov.data.router = await api('/providers/router', { method: 'PUT', body }); } catch (e) { toast(e.message, 7000); }
+    await loadProviders(); rerenderProviders(); return;
+  }
+  const card = el.closest('[data-prov]'); if (!card) return;
+  const k = el.dataset.provIn, id = card.dataset.prov;
+  const body = k === 'model' ? { model: el.value } : k === 'charged' ? { allow_charged: el.checked } : k === 'enabled' ? { enabled: el.checked } : null;
+  if (!body) return;
+  try { await api(`/providers/${id}`, { method: 'PUT', body }); } catch (e) { toast(e.message, 7000); }
+  await loadProviders(); rerenderProviders(); loadModels();
+}
+function bindProviders() {
+  for (const sel of ['#providersBody', '#setupBody']) {
+    const box = $(sel); if (!box) continue;
+    box.addEventListener('click', (e) => { const b = e.target.closest('[data-prov-act]'); if (b) providerAction(b.closest('[data-prov]'), b.dataset.provAct); });
+    box.addEventListener('change', (e) => { if (e.target.matches('select, input[type=checkbox]')) providerChange(e.target); });
+  }
+  $('#providersClose')?.addEventListener('click', () => closeSheet('providersSheet'));
+  $('#dataSyncClose')?.addEventListener('click', () => closeSheet('dataSyncSheet'));
+  $$('[data-open-providers]').forEach((b) => b.addEventListener('click', openProviders));
+  $('#setupBody')?.addEventListener('click', (e) => {
+    if (!e.target.closest('#setupProvidersSkip')) return;
+    store.set('abhify_cloud_setup', 'skipped'); $('#setupProvidersStep').classList.add('hidden'); toast('Skipped: Abhify.AI uses your local models. Add a cloud provider any time in Settings → AI providers.', 6000);
+  });
+}
+/** The setup wizard's optional step (skipped steps stay hidden; Settings still has it). */
+async function renderSetupProviders() {
+  const step = $('#setupProvidersStep'); if (!step) return;
+  if (store.get('abhify_cloud_setup') === 'skipped') { step.classList.add('hidden'); return; }
+  step.classList.remove('hidden');
+  if (!prov.data) await loadProviders();
+  renderProviders('#setupProviders', true);
+}
+
+/** 7.1: before the first message to a cloud provider, the user says yes once (saved on this computer). */
+async function cloudConsent(id) {
+  const c = cloudModel(id);
+  if (!c.cloud) return true;
+  const entry = (state.models.cloud || []).find((x) => x.id === id);
+  if (entry?.consent) return true;
+  const ok = confirm(`Use ${PROV_TITLE[c.provider] || c.provider} (${c.model}) for this chat?\n\nYour messages in this chat, its recent history and any live sources are sent to ${PROV_TITLE[c.provider] || c.provider}. ${entry?.privacy_note || ''}\nYour memories and documents are not sent.`);
+  if (!ok) return false;
+  try { await api(`/providers/${c.provider}`, { method: 'PUT', body: { consent: true } }); if (entry) entry.consent = true; } catch { /* asked again next time */ }
+  return true;
+}
+
+/* ---------- 7.1.0-dev.2 AI PERSONALIZATION: assistant identity, voice & speech, wake word ----------
+   Each installation keeps its own settings: on the Windows desktop the backend stores the name and voice profile (so they
+   survive updates and port changes); the standalone Web app keeps them in this browser. Nothing is shared or synced. */
+const ID_DEFAULT = 'Abhify';
+const ID_SUGGESTIONS = ['Abhi', 'Aira', 'Nova', 'Astra', 'Ava', 'Alex', 'Echo', 'Aria', 'Orion', 'Athena', 'Jarvis', 'Neo', 'Friday'];
+const ID_LS = 'abhify_assistant_name', VP_LS = 'abhify_voice_profile';
+/** Names the Windows offline recognizer detected as "Hey/Hello <name>" in the 7.1.0-dev.2 measurement (synthetic speech, 2 voices,
+ *  no false activations). Others may still work: "Test my wake phrase" checks your own voice. "Abhify", "Abhi" and "Aira" weren't recognised. */
+const ID_WAKE_TESTED = ['Nova', 'Astra', 'Ava', 'Alex', 'Echo', 'Aria', 'Athena', 'Jarvis', 'Neo', 'Friday'];
+state.assistantName = (() => { try { return validateAssistantName(store.get(ID_LS) || ID_DEFAULT); } catch { return ID_DEFAULT; } })();
+
+/** Pure, same rules as backend identity.validate: the clean name, or throws Error(message for the user). */
+function validateAssistantName(raw) {
+  const s = typeof raw === 'string' ? raw : '';
+  if (/[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}]/u.test(s)) throw new Error('The name can\'t contain control or invisible characters.');
+  const n = s.replace(/\s+/g, ' ').trim();
+  if (!n) throw new Error('Enter a name for your assistant.');
+  if ([...n].length > 24) throw new Error('Use at most 24 characters.');
+  if (!/^[\p{L}\p{N}](?:[\p{L}\p{N}\p{M} .'\-]*[\p{L}\p{N}\p{M}])?$/u.test(n) || !/\p{L}/u.test(n)) throw new Error('Use letters, and optionally digits, spaces, apostrophes, dots or hyphens.');
+  return n;
+}
+
+/** Pure, same rules and cases as backend identity.answer (tests/data/identity_cases.json): the app's own reply or null. */
+function identityAnswer(message, name) {
+  const t = String(message || '').trim();
+  if (t.length > 120) return null;
+  if (/\b(?:can|could|may|how\s+(?:do|can))\s+i\s+(?:change|rename|choose|pick|set)\s+(?:your\s+name|you)\b|\b(?:change|rename)\s+(?:your\s+name|you)\b/i.test(t))
+    return `Yes. I'm ${name} now, and you can rename me any time: **More → Settings → AI personalization → Assistant identity**. The new name is used in chat, in my answers and for the wake phrase on this device.`;
+  if (/^\W*(?:(?:hi|hey|hello)[\s,!]+)?(?:what(?:'s|\s+is)\s+your\s+name|your\s+name|who\s+are\s+you|what\s+(?:should|do|can)\s+i\s+call\s+you|tell\s+me\s+your\s+name|do\s+you\s+have\s+a\s+name)(?:\s*,?\s*\p{L}+)?\W*$/iu.test(t))
+    return `I'm **${name}**, your AI assistant in Abhify.AI. I run on this device, and you can rename me in **Settings → AI personalization**.`;
+  return null;
+}
+
+/** Shows the current name everywhere it appears (hero, orbs, previews). */
+function applyIdentity() {
+  $$('[data-assistant-name]').forEach((el) => { el.textContent = state.assistantName; });
+  updateOrb?.();
+}
+async function loadIdentity() {
+  if (PLATFORM === 'desktop' && state.engine !== 'device' && state.apiBase !== null && !state.remote) {
+    try { const r = await api('/identity', { timeout: 6000 }); state.assistantName = r.name; store.set(ID_LS, r.name); state.wakeFriendly = r.wake_phrases; }
+    catch { /* keep the cached name */ }
+  }
+  applyIdentity();
+}
+async function saveIdentity(name) {
+  const clean = validateAssistantName(name);
+  if (PLATFORM === 'desktop' && state.engine !== 'device' && state.apiBase !== null && !state.remote)
+    await api('/preferences', { method: 'PUT', body: { assistant_name: clean } });
+  state.assistantName = clean; store.set(ID_LS, clean); applyIdentity();
+  return clean;
+}
+
+/* ---- voice profile: one logical profile, mapped onto this browser's real voices ---- */
+const VOICE_STYLES = {
+  female: { label: 'Female', gender: 'female', rate: 1, pitch: 1, note: 'A voice the engine identifies as female.' },
+  male: { label: 'Male', gender: 'male', rate: 1, pitch: 1, note: 'A voice the engine identifies as male.' },
+  robot: { label: 'AI Robot', gender: 'male', rate: 0.9, pitch: 0.4, note: 'An effect, not a separate voice: very low, even pitch on the selected voice (browsers can\'t add a real synthetic filter).' },
+  assistant: { label: 'Assistant', gender: null, rate: 1, pitch: 1, note: 'Calm, standard speed and pitch.' },
+  friendly: { label: 'Friendly', gender: null, rate: 1.05, pitch: 1.1, note: 'Slightly faster and brighter.' },
+  deep: { label: 'Deep', gender: 'male', rate: 0.95, pitch: 0.7, note: 'Lower pitch on the selected voice.' },
+  soft: { label: 'Soft', gender: 'female', rate: 0.9, pitch: 1.05, volume: 0.8, note: 'Slower and quieter.' },
+  energetic: { label: 'Energetic', gender: null, rate: 1.2, pitch: 1.15, note: 'Faster and more expressive.' },
+  custom: { label: 'Custom', gender: null, note: 'Your own voice, speed and pitch.' },
+};
+const VP_DEFAULT = { style: 'assistant', voiceURI: '', lang: '', rate: 1, pitch: 1, volume: 1 };
+state.voiceProfile = (() => { try { return { ...VP_DEFAULT, ...JSON.parse(store.get(VP_LS) || '{}') }; } catch { return { ...VP_DEFAULT }; } })();
+
+const FEMALE = /\b(female|woman|zira|heera|hazel|susan|aria|jenny|eva|catherine|linda|heather|elsa|sonia|libby|neerja|swara|natasha|clara|emma|michelle|samantha|karen|moira|tessa|fiona|veena|victoria|allison|ava|serena|kalpana|kajal|aditi|raveena|salli|joanna|kimberly|ivy|kendra|amy|nicole|olivia|zoe|siri female)\b/i;
+const MALE = /\b(male|man|david|mark|ravi|guy|george|james|richard|sean|ryan|prabhat|hemant|christopher|eric|roger|steffan|daniel|alex|fred|tom|oliver|rishi|aaron|arthur|brian|joey|justin|matthew|russell|geraint|siri male)\b/i;
+/** Pure: 'female' | 'male' | null, only from what the voice's own name says (the Web Speech API has no gender field). */
+function voiceGender(v) {
+  const n = String(v?.name || '');
+  if (/\bfemale\b/i.test(n)) return 'female';
+  if (/\bmale\b/i.test(n)) return 'male';
+  return FEMALE.test(n) ? 'female' : MALE.test(n) ? 'male' : null;
+}
+/** Pure: the voice for a profile: the chosen one if still installed; else one of the style's gender in the language,
+ *  preferring voices on this device (localService); else pickVoice's default. */
+function voiceForProfile(voices, profile, pageLang = 'en') {
+  const list = Array.from(voices || []);
+  if (!list.length) return null;
+  const chosen = profile.voiceURI && list.find((v) => v.voiceURI === profile.voiceURI);
+  if (chosen) return chosen;
+  const want = VOICE_STYLES[profile.style]?.gender;
+  const lang = (profile.lang || pageLang || 'en').toLowerCase();
+  const inLang = list.filter((v) => String(v.lang || '').toLowerCase().startsWith(lang.split('-')[0]));
+  const pool = inLang.length ? inLang : list;
+  const byGender = want ? pool.filter((v) => voiceGender(v) === want) : pool;
+  const pick = (arr) => arr.find((v) => v.localService && String(v.lang).toLowerCase() === lang) || arr.find((v) => v.localService) || arr[0];
+  return pick(byGender.length ? byGender : pool) || pickVoice(list, null, lang);
+}
+/** Pure: speed/pitch/volume for a profile (style presets; Custom uses the sliders), clamped to safe ranges. */
+function profileTuning(profile) {
+  const st = VOICE_STYLES[profile.style] || VOICE_STYLES.assistant;
+  const custom = profile.style === 'custom';
+  const clamp = (x, lo, hi, d) => (Number.isFinite(+x) ? Math.min(hi, Math.max(lo, +x)) : d);
+  return { rate: clamp(custom ? profile.rate : (st.rate ?? 1) * (profile.rate || 1), 0.5, 2, 1),
+    pitch: clamp(custom ? profile.pitch : st.pitch ?? 1, 0, 2, 1), volume: clamp(custom ? profile.volume : st.volume ?? profile.volume ?? 1, 0, 1, 1) };
+}
+function applyVoiceProfile() {
+  if (!reader.ok) return;
+  const v = voiceForProfile(window.speechSynthesis.getVoices(), state.voiceProfile, navigator.language);
+  if (v) reader.voice = v;
+  const t = profileTuning(state.voiceProfile);
+  reader.rate = t.rate; reader.pitch = t.pitch; reader.volume = t.volume;
+}
+async function saveVoiceProfile(change) {
+  state.voiceProfile = { ...state.voiceProfile, ...change };
+  store.set(VP_LS, JSON.stringify(state.voiceProfile)); applyVoiceProfile();
+  if (PLATFORM === 'desktop' && state.engine !== 'device' && state.apiBase !== null && !state.remote)
+    api('/preferences', { method: 'PUT', body: { voice_profile: state.voiceProfile } }).catch(() => {});
+}
+async function loadVoiceProfile() {
+  if (PLATFORM === 'desktop' && state.engine !== 'device' && state.apiBase !== null && !state.remote) {
+    try { const p = await api('/preferences', { timeout: 6000 }); if (p.voice_profile && Object.keys(p.voice_profile).length) { state.voiceProfile = { ...VP_DEFAULT, ...p.voice_profile }; store.set(VP_LS, JSON.stringify(state.voiceProfile)); } }
+    catch { /* cached profile */ }
+  }
+  applyVoiceProfile();
+}
+const previewText = () => `Hello! I am ${state.assistantName}, your Abhify AI assistant. How can I help you today?`;
+
+/* ---- wake word (Windows desktop only: the backend runs the Windows offline recognizer while this page is visible) ---- */
+const wake = { poll: 0, status: null, lastId: null, active: false, testing: false };
+function wakeHere() { return PLATFORM === 'desktop' && state.engine !== 'device' && state.apiBase !== null && !state.remote && state.online !== undefined; }
+async function wakeTick() {
+  if (!wakeHere()) return;
+  wakeMaybeResume();
+  try { wake.status = await api(`/voice/wake?visible=${document.hidden ? 0 : 1}`, { timeout: 5000 }); } catch { return; }
+  const d = wake.status.detection;
+  if (wake.lastId === null) wake.lastId = d?.id ?? 0;                     // a detection from before this page loaded is not acted on
+  else if (d && d.id > wake.lastId && !document.hidden) {
+    wake.lastId = d.id; wake.active = true;
+    toast(`👂 Heard “${d.phrase}”`, 2500);
+    if (!voice.listening) startListening('command');
+  }
+  renderWakeChip();
+  if (!$('#settingsSheet').classList.contains('hidden')) renderWakeSettings();
+}
+function wakeLoop() {
+  clearInterval(wake.poll); wake.poll = 0;
+  if (!wakeHere()) return;
+  wakeTick();
+  wake.poll = setInterval(() => { if (!document.hidden) wakeTick(); }, 1000);
+}
+/** After a wake-started interaction ends (not listening, not speaking, no answer pending), the engine listens again. */
+function wakeMaybeResume() {
+  if (!wake.active || voice.listening || state.busy.chat || reader.state === 'playing') return;
+  wake.active = false; api('/voice/wake/resume', { method: 'POST' }).catch(() => {});
+}
+const WAKE_STATE = { listening: ['on', 'Listening for the wake phrase'], starting: ['warn', 'Starting the recognizer…'], paused: ['warn', 'Paused'],
+  off: ['off', 'Off'], page_hidden: ['off', 'Paused while this window is hidden'], paused_after_update: ['warn', 'Paused after the update: turn it on again'],
+  unsupported: ['off', 'Not available on this computer'], incompatible: ['warn', 'This phrase can\'t be used'], error: ['bad', 'Error'] };
+function renderWakeChip() {
+  const chip = $('#wakeChip'); if (!chip) return;
+  const s = wake.status, on = s && s.settings.enabled && ['listening', 'starting'].includes(s.state);
+  chip.classList.toggle('hidden', !on);
+  if (on) $('#wakeChipText').textContent = `Listening for “${s.phrases[0]}”`;
+}
+function renderWakeSettings() {
+  const box = $('#wakeSettings'); if (!box) return;
+  const here = wakeHere();
+  $('#wakeUnsupported').classList.toggle('hidden', here);
+  $('#wakeBody').classList.toggle('hidden', !here);
+  if (!here) {
+    $('#wakeUnsupported').textContent = PLATFORM === 'web' || state.engine === 'device'
+      ? 'Not available in the browser-only app: browsers have no offline wake-word engine, and listening through the browser\'s own recognizer would send your audio online. Use the microphone button (push-to-talk).'
+      : 'The wake phrase is set up on the computer running Abhify.AI.';
+    return;
+  }
+  const s = wake.status; if (!s) { $('#wakeState').textContent = 'Checking…'; return; }
+  const [dot, label] = WAKE_STATE[s.state] || ['off', s.state];
+  $('#wakeState').innerHTML = `<span class="rt-dot" data-state="${dot === 'on' ? 'ready' : dot === 'bad' ? 'error' : 'off'}" aria-hidden="true"></span> ${esc(label)}${s.error ? ` · ${esc(s.error)}` : ''}`;
+  $('#wakeEnabled').checked = Boolean(s.settings.enabled);
+  $('#wakeEnabled').disabled = !s.availability.supported;
+  if (document.activeElement !== $('#wakeSens')) $('#wakeSens').value = s.settings.sensitivity;
+  $('#wakeNameOnly').checked = Boolean(s.settings.name_only);
+  $('#wakeUseName').checked = s.settings.use_name !== false;
+  if (document.activeElement !== $('#wakePhrase')) $('#wakePhrase').value = s.settings.phrase || '';
+  $('#wakePhrase').disabled = s.settings.use_name !== false;
+  $('#wakePhrases').textContent = s.phrases.map((p) => `“${p}”`).join(' or ');
+  $('#wakeWhy').textContent = !s.availability.supported ? s.availability.why : (s.incompatible || '');
+  $('#wakeResume').classList.toggle('hidden', s.state !== 'paused_after_update');
+}
+async function wakeUpdate(body) {
+  try { wake.status = await api('/voice/wake', { method: 'PUT', body }); } catch (e) { toast(e.message, 8000); }
+  renderWakeSettings(); renderWakeChip(); wakeLoop();
+}
+async function wakeEnable(on) {
+  if (!on) return wakeUpdate({ enabled: false });
+  const ok = confirm(`Turn on the wake phrase “${(wake.status?.phrases || ['Hey ' + state.assistantName])[0]}”?\n\n`
+    + '• The microphone listens for the phrase only while an Abhify.AI window is open and visible on this computer.\n'
+    + '• Recognition runs offline on this computer (Windows speech recognizer); no audio is sent anywhere or saved.\n'
+    + '• Windows shows its microphone indicator while it listens. You can pause or turn it off at any time.');
+  if (!ok) { renderWakeSettings(); return; }
+  return wakeUpdate({ enabled: true, confirm: true });
+}
+async function wakeTest() {
+  if (wake.testing) return;
+  wake.testing = true; const btn = $('#wakeTest'), out = $('#wakeTestOut');
+  btn.disabled = true; out.textContent = `Say “${(wake.status?.phrases || [])[0] || 'Hey ' + state.assistantName}” now (listening for 8 seconds)…`;
+  try {
+    const r = await api('/voice/wake/test', { method: 'POST', body: { seconds: 8 }, timeout: 40000 });
+    out.textContent = !r.ok ? r.error : r.detected ? `✓ Recognised “${r.best.phrase}” (confidence ${r.best.confidence}, threshold ${r.threshold}).`
+      : `✗ Not recognised${r.best ? ` (best “${r.best.phrase}” at ${r.best.confidence}, needs ${r.threshold})` : ''}. ${r.heard.length ? `Heard: ${r.heard.join(' · ')}.` : 'Nothing was heard: check the microphone.'} Try again, raise the sensitivity, or choose another name or phrase.`;
+  } catch (e) { out.textContent = e.message; }
+  btn.disabled = false; wake.testing = false;
+}
+
+/* ---- the Settings section ---- */
+function renderIdentitySettings() {
+  const box = $('#persIdentity'); if (!box) return;
+  const draft = $('#idName').value || state.assistantName;
+  $('#idSuggest').innerHTML = ID_SUGGESTIONS.map((n) => `<button type="button" class="chip${n === draft ? ' active' : ''}" data-id-name="${esc(n)}"${ID_WAKE_TESTED.includes(n) ? ' title="Recognised in our wake-phrase test"' : ''}>${esc(n)}${ID_WAKE_TESTED.includes(n) ? ' <span aria-hidden="true">👂</span>' : ''}</button>`).join('');
+  $('#idPreviewName').textContent = draft;
+  $('#idWakeHint').textContent = `Wake phrase with this name: “Hey ${draft}”. ` + (ID_WAKE_TESTED.includes(draft) ? '👂 Recognised in our wake-phrase test.'
+    : 'Not verified for the wake phrase: use “Test my wake phrase” below (Windows desktop).');
+}
+function openIdentitySettings() {
+  $('#idName').value = state.assistantName; $('#idErr').textContent = ''; renderIdentitySettings();
+}
+function renderVoiceProfile() {
+  const box = $('#persVoice'); if (!box) return;
+  const p = state.voiceProfile, voices = reader.ok ? window.speechSynthesis.getVoices() : [];
+  $('#voiceCats').innerHTML = Object.entries(VOICE_STYLES).map(([k, s]) => {
+    const avail = !s.gender || voices.some((v) => voiceGender(v) === s.gender);
+    return `<button type="button" class="vcat${p.style === k ? ' active' : ''}" data-vstyle="${k}" ${avail ? '' : 'disabled title="No such voice is installed in this browser"'}><b>${esc(s.label)}</b><small>${avail ? '' : 'not installed'}</small></button>`;
+  }).join('');
+  $('#voiceStyleNote').textContent = (VOICE_STYLES[p.style] || {}).note || '';
+  const langs = [...new Set(voices.map((v) => v.lang).filter(Boolean))].sort();
+  $('#setTtsLang').innerHTML = '<option value="">Page language</option>' + langs.map((l) => `<option value="${esc(l)}" ${l === p.lang ? 'selected' : ''}>${esc(l)}</option>`).join('');
+  const cur = voiceForProfile(voices, p, navigator.language);
+  const want = VOICE_STYLES[p.style]?.gender;
+  const shown = voices.filter((v) => (!p.lang || v.lang === p.lang) && (!want || voiceGender(v) === want || v === cur));
+  $('#setTtsVoice').innerHTML = shown.map((v) => `<option value="${esc(v.voiceURI)}" ${cur && v.voiceURI === cur.voiceURI ? 'selected' : ''}>${esc(v.name)} (${esc(v.lang)})${voiceGender(v) ? ` · ${voiceGender(v)}` : ''}${v.localService ? '' : ' · online voice: the text is sent to its service'}</option>`).join('')
+    || '<option value="">No voice for this choice</option>';
+  const t = profileTuning(p), custom = p.style === 'custom';
+  $('#setTtsRate').value = custom ? p.rate : p.rate || 1; $('#ttsRateVal').textContent = `${(+t.rate).toFixed(2)}×`;
+  $('#setTtsPitch').value = custom ? p.pitch : t.pitch; $('#ttsPitchVal').textContent = (+t.pitch).toFixed(2);
+  $('#setTtsPitch').disabled = !custom; $('#setTtsVolume').disabled = !custom;
+  $('#setTtsVolume').value = custom ? p.volume : t.volume; $('#ttsVolVal').textContent = `${Math.round(t.volume * 100)}%`;
+  $('#voiceUnavailable').classList.toggle('hidden', reader.ok && voices.length > 0);
+}
+function bindPersonalization() {
+  $('#idSuggest')?.addEventListener('click', (e) => { const b = e.target.closest('[data-id-name]'); if (!b) return; $('#idName').value = b.dataset.idName; $('#idErr').textContent = ''; renderIdentitySettings(); });
+  $('#idName')?.addEventListener('input', () => { $('#idErr').textContent = ''; try { validateAssistantName($('#idName').value); } catch (e) { $('#idErr').textContent = e.message; } renderIdentitySettings(); });
+  $('#idSave')?.addEventListener('click', async () => {
+    const before = state.assistantName;
+    try {
+      const n = await saveIdentity($('#idName').value);
+      toast(`✓ Your assistant is now ${n}`);
+      if (n !== before && wake.status?.settings?.enabled && wake.status.settings.use_name === false)
+        toast('Your wake phrase is a custom phrase; switch it to the new name in Wake word if you like.', 7000);
+      wakeTick(); renderIdentitySettings();
+    } catch (e) { $('#idErr').textContent = e.message; }
+  });
+  $('#idCancel')?.addEventListener('click', openIdentitySettings);
+  $('#idReset')?.addEventListener('click', () => { $('#idName').value = ID_DEFAULT; $('#idErr').textContent = ''; renderIdentitySettings(); });
+  $('#idPreviewSpeak')?.addEventListener('click', () => speak(`Hello! I am ${$('#idName').value.trim() || state.assistantName}, your Abhify AI assistant.`, 'test'));
+  $('#voiceCats')?.addEventListener('click', (e) => { const b = e.target.closest('[data-vstyle]'); if (!b || b.disabled) return;
+    saveVoiceProfile({ style: b.dataset.vstyle, voiceURI: b.dataset.vstyle === 'custom' ? state.voiceProfile.voiceURI : '' }); renderVoiceProfile(); });
+  $('#setTtsLang')?.addEventListener('change', (e) => { saveVoiceProfile({ lang: e.target.value, voiceURI: '' }); renderVoiceProfile(); });
+  $('#setTtsRate')?.addEventListener('input', (e) => { saveVoiceProfile({ rate: +e.target.value }); renderVoiceProfile(); });
+  $('#setTtsPitch')?.addEventListener('input', (e) => { saveVoiceProfile({ pitch: +e.target.value }); renderVoiceProfile(); });
+  $('#setTtsVolume')?.addEventListener('input', (e) => { saveVoiceProfile({ volume: +e.target.value }); renderVoiceProfile(); });
+  $('#voicePreviewStop')?.addEventListener('click', () => reader.stop());
+  $('#voiceReset')?.addEventListener('click', () => { saveVoiceProfile({ ...VP_DEFAULT }); renderVoiceProfile(); });
+  $('#wakeEnabled')?.addEventListener('change', (e) => wakeEnable(e.target.checked));
+  $('#wakeSens')?.addEventListener('change', (e) => wakeUpdate({ sensitivity: e.target.value }));
+  $('#wakeNameOnly')?.addEventListener('change', (e) => wakeUpdate({ name_only: e.target.checked }));
+  $('#wakeUseName')?.addEventListener('change', (e) => wakeUpdate({ use_name: e.target.checked }));
+  $('#wakePhrase')?.addEventListener('change', (e) => wakeUpdate({ phrase: e.target.value.trim() }));
+  $('#wakeTest')?.addEventListener('click', wakeTest);
+  $('#wakeResume')?.addEventListener('click', () => wakeEnable(true));
+  $('#wakeChipPause')?.addEventListener('click', () => api('/voice/wake/pause', { method: 'POST' }).then((s) => { wake.status = s; renderWakeChip(); }).catch((e) => toast(e.message)));
+  $$('[data-open-pers]').forEach((b) => b.addEventListener('click', openPersonalization));
+  if (reader.ok) window.speechSynthesis.addEventListener?.('voiceschanged', () => { applyVoiceProfile(); renderVoiceProfile(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) wakeTick(); });
+}
+function openPersonalization() {
+  if ($('#settingsSheet').classList.contains('hidden')) openSettings();
+  setTimeout(() => $('#aiPersonalization')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+}
+function renderPersonalization() { openIdentitySettings(); renderVoiceProfile(); renderWakeSettings(); }
 
 /* ---------- 9. PROGRESS, SETTINGS, PWA INSTALL ---------- */
 function updateProgressPill() {
@@ -1375,7 +2238,6 @@ function openSettings() {
   $('#setName').value = state.userName;
   $('#setApi').value = store.get(LS.api) || '';
   $('#setToken').value = store.get(LS.token) || '';
-  $('#setWhisper').checked = state.usePrivateWhisper;
   $('#setEngine').value = state.engine; renderDeviceSettings();
   renderDefaultModelSetting(); if (!state.models.loaded) loadModels().then(renderDefaultModelSetting);
   if (state.online) api('/preferences').then((p) => {                       // 5.2 answer style (desktop backend)
@@ -1384,6 +2246,9 @@ function openSettings() {
   }).catch(() => {});
   $('#testResult').textContent = '';
   loadLiveSettings();
+  setTimeout(renderVoiceSettings, 0);                                       // 7.1 Settings → Voice
+  setTimeout(renderPersonalization, 0);                                     // 7.1.0-dev.2 AI personalization
+  if (PLATFORM === 'web') { $('#setEngine').value = 'device'; $('#setEngine').disabled = true; }
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) && !navigator.standalone;
   const android = /android/i.test(navigator.userAgent);
   $('#installHint').textContent = ios ? '📱 To install on iPhone/iPad: open this page in Safari, tap Share, then "Add to Home Screen".'
@@ -1430,8 +2295,6 @@ async function saveSettings() {
   if (state.apiBase !== null && state.userName) api('/preferences', { method: 'PUT', body: { user_name: state.userName } }).catch(() => {});
   store.set(LS.api, $('#setApi').value.trim());
   store.set(LS.token, $('#setToken').value.trim());
-  state.usePrivateWhisper = $('#setWhisper').checked;
-  store.set(LS.whisper, state.usePrivateWhisper ? '1' : '0');
   setNameUI(); if (current === 'home') renderHome();
   await saveDefaultModel();
   closeSettings();
@@ -1507,7 +2370,7 @@ function switchTab(name) {
   }
   if (name === 'mcq' && !loaded.mcq) { loaded.mcq = true; startQuiz(); }
   if (name === 'more') renderMore();
-  if (name === 'study') { setTimeout(() => $('#discoverQ')?.focus({ preventScroll: true }), 50); renderSkills(); }
+  if (name === 'study') window.studyShow?.();                       // 7.2: Today / Courses / Interview plan / STAR stories / Discover (study-ui.js)
   if (name === 'chat') {
     if (!loaded.chat) { loaded.chat = true; loadChatHistory(); }
     setTimeout(() => $('#chatText').focus({ preventScroll: true }), 50);
@@ -1551,11 +2414,15 @@ function bindEvents() {
 
   // Chat
   const ta = $('#chatText');
-  $('#chatForm').addEventListener('submit', (e) => { e.preventDefault(); const v = ta.value; ta.value = ''; ta.style.height = ''; sendChat(v); });
+  $('#chatForm').addEventListener('submit', (e) => {
+    e.preventDefault(); const v = ta.value, spoken = voice.pendingSpeak; ta.value = ''; ta.style.height = ''; clearVoiceReview();
+    sendChat(v, { speakAnswer: spoken });                          // 7.1: a checked voice transcript's answer is read aloud
+  });
   ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#chatForm').requestSubmit(); } });
   ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; });
   $('#kbFile').addEventListener('change', (e) => { uploadKnowledge(e.target.files[0]); e.target.value = ''; });
   bindModelPicker();
+  bindModelLib();
   const fs = $('#focusSel');                                     // 6.1: the chosen mode stays chosen (this browser only)
   if (fs) {
     fs.value = store.get('abhify_chat_mode') || 'auto'; if (!fs.value) fs.value = 'auto';
@@ -1565,9 +2432,9 @@ function bindEvents() {
   }
 
   // Voice
-  $('#voiceFab').addEventListener('click', () => startListening('command'));
-  $('#chatMic').addEventListener('click', () => startListening('dictate'));
-  $('#voiceStop').addEventListener('click', stopListening);
+  bindVoice();                                                     // 7.1 voice pipeline (section 8)
+  bindPersonalization();                                           // 7.1.0-dev.2 identity, voice & speech, wake word
+  bindProviders();                                                 // 7.1 AI providers
 
   // Settings / install
   $('#settingsBtn').addEventListener('click', openSettings);
@@ -1609,6 +2476,14 @@ async function boot() {
 
   // Service worker (needs http/https; skipped when opened as a local file)
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    // 7.1.0: after an update the new service worker takes over; reload once so the new app code runs at once
+    // (before, the first visit after updating still ran the old code from the cache)
+    const hadController = Boolean(navigator.serviceWorker.controller);
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController) return;
+      try { if (sessionStorage.getItem('abhify_sw_reloaded') === CACHE_HINT) return; sessionStorage.setItem('abhify_sw_reloaded', CACHE_HINT); } catch { /* storage blocked */ }
+      location.reload();
+    });
     navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW registration failed', e));
   }
 
@@ -1617,6 +2492,7 @@ async function boot() {
   readInviteLink();
   await state.ready;
   setInterval(checkConnection, 30000);
+  loadIdentity(); loadVoiceProfile(); wakeLoop();                  // 7.1.0-dev.2 personalization (this installation only)
   newsOpen('foryou').then(() => current === 'home' && renderHome());   // News Center (falls back to the classic AI-summarized view)
   loadPreferences();
   // Mode A vs Mode B: is the AI running on THIS device or on a paired computer? (/health says so;
@@ -1645,13 +2521,26 @@ function botHtml(answer, tools = [], sources = [], model = null, stats = null, f
   const liveUrls = new Set(((live && live.sources) || []).map((e) => e.url).filter(Boolean));
   sources = (sources || []).filter((s) => !liveUrls.has(s));
   const speed = stats && stats.tokens_per_second ? ` · ${stats.tokens_per_second} tok/s` : '';
-  const tags = (model ? `<span class="tag model" title="Model that wrote this answer${stats ? ` (${stats.output_tokens} tokens in ${stats.total_seconds} s, measured by Ollama)` : ''}">${esc(model)}${speed}</span>` : '')
+  const tags = (model ? `<span class="tag model" title="Model that wrote this answer${stats ? ` (${stats.output_tokens} tokens in ${stats.total_seconds} s, measured by Ollama)` : ''}">${esc(modelDisplay(model))}${speed}</span>` : '')
     + tools.map((t) => TOOL_TAGS[t] || '').join('') + (focus ? `<span class="tag" title="How this answer was formatted">${esc(focus)}</span>` : '');
   const src = (sources || []).length ? `<div class="sources"><span class="src-label">Sources</span>${sources.map((s, i) => {
     if (!/^https?:/.test(s)) return `<span class="src-chip" title="From your documents">📄 ${esc(s)}</span>`;
     try { return `<a class="src-chip" href="${esc(s)}" target="_blank" rel="noopener" title="${esc(s)}">🌐 ${esc(new URL(s).hostname)}</a>`; } catch { return `<span class="src-chip">${esc(s)}</span>`; }
   }).join('')}</div>` : '';
-  return md(answer) + liveBoxHtml(live, question) + (tags ? `<div class="meta-tags">${tags}</div>` : '') + src + contextHtml(context);
+  return md(answer) + integrityHtml(live) + liveBoxHtml(live, question) + (tags ? `<div class="meta-tags">${tags}</div>` : '') + src + contextHtml(context);
+}
+/** 7.0.1: what the citation check changed in this answer (backend citations.py): counts only, always escaped. */
+function integrityHtml(live) {
+  const g = live && live.integrity; if (!g) return '';
+  const n = (x) => (Array.isArray(x) ? x.length : 0);
+  const bits = [];
+  if (n(g.remapped)) bits.push(`${n(g.remapped)} citation${n(g.remapped) > 1 ? 's' : ''} moved to the source that has the fact`);
+  if (n(g.unsupported)) bits.push(`${n(g.unsupported)} statement${n(g.unsupported) > 1 ? 's' : ''} not supported by the sources`);
+  if (n(g.invalid)) bits.push(`${n(g.invalid)} citation${n(g.invalid) > 1 ? 's' : ''} to a missing source removed`);
+  if (n(g.urls_removed)) bits.push(`${n(g.urls_removed)} link${n(g.urls_removed) > 1 ? 's' : ''} not from the sources removed`);
+  if (n(g.unverified_urls)) bits.push(`${n(g.unverified_urls)} source link${n(g.unverified_urls) > 1 ? 's' : ''} from the model's memory marked unverified`);
+  if (!bits.length) return g.checked ? `<p class="integrity ok">Citations checked against the sources</p>` : '';
+  return `<p class="integrity" role="note">Citations checked: ${esc(bits.join(' · '))}</p>`;
 }
 
 /* ---------- 7b2. LIVE INFORMATION (real-time engine) ----------
@@ -1745,9 +2634,13 @@ function contextHtml(c) {
 /** 6.1 message tools: Copy, and Regenerate on the newest answer. */
 const ICON_COPY = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>';
 const ICON_REGEN = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>';
+const ICON_SPEAK = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3A4.5 4.5 0 0 0 14 7.97v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>';
+/** 7.1: read this answer aloud? Settings → Voice → Read answers aloud: 'voice' (answers to spoken questions, the default), 'always', 'off'. */
+function shouldSpeak(spoken, appReply = false) { return !appReply && (state.speakMode === 'always' || (Boolean(spoken) && state.speakMode !== 'off')); }
 function msgTools(answer, { text = '', regen = false } = {}) {
   const i = answerStore.push(answer) - 1;
   return `<div class="msg-tools" data-ans="${i}"><button type="button" class="tool-btn" data-copy="msg" aria-label="Copy this answer">${ICON_COPY}<span>Copy</span></button>`
+    + (reader.ok ? `<button type="button" class="tool-btn" data-listen="msg" aria-label="Read this answer aloud">${ICON_SPEAK}<span>Listen</span></button>` : '')
     + (regen && text && state.engine !== 'device' ? `<button type="button" class="tool-btn msg-regen" data-regen-q="${esc(text)}" aria-label="Regenerate this answer">${ICON_REGEN}<span>Regenerate</span></button>` : '')
     + '</div>';
 }
@@ -1892,8 +2785,38 @@ function orbState() {
 }
 function updateOrb() {
   const [s, label] = orbState();
-  $$('.orb[id]').forEach((o) => { o.dataset.state = s; o.setAttribute('aria-label', `Abhify.AI: ${label.toLowerCase()}`); });
+  $$('.orb[id]').forEach((o) => { o.dataset.state = s; o.setAttribute('aria-label', `${state.assistantName || 'Abhify'}: ${label.toLowerCase()}${o.classList.contains('orb-talk') ? (voice.listening ? ' · tap to stop' : ' · tap to talk') : ''}`); });
   const t = $('#homeOrbState'); if (t) t.textContent = label;
+  renderSideModel();
+}
+
+/* 7.0 Synapse: the sidebar's "Active model" card. Only real data: the model that answers next (this chat's choice, the
+   default from /models, or the one /health reports) and the connection state already shown in the status bar. */
+function sideModelView() {
+  if (state.engine === 'device') {
+    const [text, dot] = deviceStatus(state.device);
+    return { name: state.device.support?.label || 'On-device AI', text, dot };
+  }
+  const h = state.health;
+  const name = state.chatModel || state.models.def || h?.llm_model || '–';
+  if (cloudModel(state.chatModel).cloud) {                          // 7.1: this chat uses a cloud model
+    const c = cloudModel(state.chatModel), up = (state.models.cloud || []).some((x) => x.id === state.chatModel);
+    return { name: c.model, text: `${PROV_TITLE[c.provider] || c.provider} · cloud${up ? '' : ' · not connected'}`, dot: up && state.online ? 'on' : 'warn' };
+  }
+  if (!state.online || !h) return { name, text: state.remote ? 'Computer not reachable' : 'Offline', dot: 'off' };
+  if (!h.ollama) return { name, text: 'Ollama not running', dot: 'off' };
+  if (!h.llm_ready) return { name, text: 'Model not installed', dot: 'warn' };
+  return { name, text: h.remote ? 'Your computer · ready' : 'Local · ready', dot: 'on' };
+}
+function renderSideModel() {
+  const box = $('#sideModel'); if (!box) return;
+  const v = sideModelView();
+  $('#sideModelName').textContent = v.name;
+  $('#sideModelName').title = v.name;
+  $('#sideModelText').textContent = v.text;
+  $('#sideModelDot').className = 'dot ' + v.dot;
+  box.dataset.state = v.dot;
+  box.setAttribute('aria-label', `Active model: ${v.name}. ${v.text}`);
 }
 
 /* ---------- 7l. BRAND LAUNCHER (dev.8) ----------
@@ -1903,12 +2826,13 @@ function updateOrb() {
 const LAUNCH = {
   home: () => switchTab('home'), chat: () => switchTab('chat'), interview: () => switchTab('interview'), mcq: () => switchTab('mcq'),
   news: () => switchTab('news'), tasks: () => openTasks(), projects: () => openProjects(), documents: () => { closePages(); $('#openKnowledge').click(); },
-  memory: () => { closePages(); $('#openMemory').click(); }, models: () => { closePages(); $('#rerunSetup').click(); },
+  memory: () => { closePages(); $('#openMemory').click(); }, models: () => openModelLib(),
+  tools: () => openLauncher($('#brandLauncher')),
   performance: () => openPerf(), system: () => { closePages(); $('#openSystem').click(); }, settings: () => $('#settingsBtn').click(),
 };
 let launchOpener = null;
 function launcherCurrent() {
-  const pages = { tasksSheet: 'tasks', projectsSheet: 'projects', newsReaderSheet: 'news', knowledgeSheet: 'documents', memorySheet: 'memory', perfSheet: 'performance', systemSheet: 'system', setupSheet: 'models', settingsSheet: 'settings' };
+  const pages = { tasksSheet: 'tasks', projectsSheet: 'projects', newsReaderSheet: 'news', knowledgeSheet: 'documents', memorySheet: 'memory', perfSheet: 'performance', systemSheet: 'system', setupSheet: 'models', modelLibSheet: 'models', settingsSheet: 'settings' };
   const open = Object.keys(pages).find((id) => $('#' + id) && !$('#' + id).classList.contains('hidden'));
   return open ? pages[open] : current;
 }
@@ -1936,6 +2860,8 @@ function bindLauncher() {
     const b = e.target.closest('[data-go]'); if (!b) return;
     closeLauncher(false); LAUNCH[b.dataset.go]?.();
   });
+  // 7.0: the sidebar's Workspace group opens the same pages as the launcher
+  $$('.side-go').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); LAUNCH[b.dataset.go]?.(); }));
   document.addEventListener('click', (e) => { if (!e.target.closest('#launcher, #brandLauncher, #brandLauncherMobile')) closeLauncher(false); });
   $('#launcher').addEventListener('keydown', (e) => {
     const all = [...$$('.launch-item')], i = all.indexOf(document.activeElement);
@@ -2513,9 +3439,12 @@ function renderMore() {
     ['Career', [['Question Bank', 'Interview questions with model answers', () => switchTab('interview'), 'study'],
       ['MCQs', 'Practise from topics, your resume or any subject', () => switchTab('mcq'), 'study']]],
     ['AI & System', [['AI models & setup', 'Installed models and what fits this computer', () => LAUNCH.models(), 'docs'],
+      ['AI providers', 'Ollama (local) and optional cloud AI: Gemini, Groq, OpenRouter, custom', () => openProviders(), 'docs'],
       ['Performance', 'CPU, memory, GPU and answer speed, measured live', () => openPerf(), 'docs'],
       ['System & data', 'Backups, updates, companion access and data folder', () => $('#openSystem').click(), 'docs']]],
-    ['Settings & privacy', [['Settings', 'Your name, answer style, theme and connection', () => $('#settingsBtn').click(), 'chat']]],
+    ['Settings & privacy', [['Settings', 'Your name, answer style, theme and connection', () => $('#settingsBtn').click(), 'chat'],
+      ['AI personalization', 'Assistant name, voice & speech, wake word', () => openPersonalization(), 'chat'],
+      ...(DATASYNC_VISIBLE ? [['Data & Sync', 'Encrypted Google Drive sync and backups (manual, optional)', () => openDataSync(), 'docs']] : [])]],
   ];
   $('#moreGroups').innerHTML = groups.map(([g, items], gi) => `<section class="more-group" aria-label="${esc(g)}"><h3 class="set-h">${esc(g)}</h3><div class="more-grid">${items.map(([t, d, , acc], i) =>
     `<button type="button" class="card card--interactive more-tile${t.startsWith('Memory') || t.startsWith('Knowledge') ? ' personal' : ''}" data-acc="${acc}" data-more="${gi}:${i}"><b>${esc(t)}</b><small>${esc(d)}</small></button>`).join('')}</div></section>`).join('');
@@ -2686,6 +3615,12 @@ function bindActions() {
       setTimeout(() => { label.textContent = was; copy.classList.remove('done'); }, 1600);
       return;
     }
+    const listen = e.target.closest('[data-listen]');                     // 7.1 read one answer aloud / stop it
+    if (listen) {
+      const i = listen.closest('.msg-tools').dataset.ans, owner = `msg:${i}`;
+      if (reader.state === 'playing' && reader.owner === owner) reader.stop(); else speak(answerStore[+i], owner);
+      return;
+    }
     const lchip = e.target.closest('.lchip-main');
     if (lchip) { toggleLiveDetail(lchip); return; }
     if (state.busy.chat) return;
@@ -2763,6 +3698,21 @@ function restoreThreadModel() {
   state.chatModel = (state.threadId && store.json(LS.threadModels, {})[state.threadId]) || null;
   renderModelChip();
 }
+/** 7.0: model names as Ollama lists them ("qwen2.5:latest") and as settings keep them ("qwen2.5") are the same model. */
+function sameModel(a, b) { return !!a && !!b && (a === b || a === `${b}:latest` || b === `${a}:latest`); }
+/** 7.0: the conversation's model comes from the backend (one source of truth); null = follows the default. */
+function setThreadModel(name) {
+  state.chatModel = name && !sameModel(name, state.models.def) ? name : null;
+  rememberThreadModel(); renderModelChip();
+}
+/** 7.0: the backend carried out a typed model command ("switch the model to llama3.2"): follow it here too. */
+function applyModelCommand(c) {
+  if (!c || c.kind === 'which' || c.kind === 'identity') return;
+  if (!c.ok) { toast(`Model not switched. Still using ${c.model || 'the previous model'}.`, 6000); return; }
+  if (c.kind === 'default') { state.models.def = c.model; loadModels(); }
+  setThreadModel(c.model);
+  toast(`Model switched to ${c.model}`);
+}
 
 async function loadModels() {
   if (state.engine === 'device' || state.apiBase === null) { renderModelChip(); return; }
@@ -2770,7 +3720,7 @@ async function loadModels() {
   try {
     const r = await api('/models', { timeout: 8000 });
     Object.assign(state.models, { list: r.models || [], def: r.default || null, ollama: r.ollama, error: r.error || null,
-      locked: !!r.locked, loaded: true, forbidden: false });
+      locked: !!r.locked, loaded: true, forbidden: false, cloud: r.cloud || [] });                   // 7.1: connected cloud models
   } catch (e) {
     const forbidden = /computer|local|403|PC/i.test(e.message);
     Object.assign(state.models, { list: [], loaded: true, forbidden, error: forbidden ? null : e.message });
@@ -2788,6 +3738,11 @@ function modelChipView(st = state) {
   if (m.forbidden) return { label: 'Computer\'s default model', kind: 'remote', problem: null };
   if (m.loaded && m.ollama === false) return { label: 'Ollama not reachable', kind: 'error', problem: m.error };
   const pick = st.chatModel || m.def;
+  if (cloudModel(pick).cloud) {                                    // 7.1: a cloud model chosen for this chat
+    const there = (m.cloud || []).some((x) => x.id === pick);
+    return there || !m.loaded ? { label: modelDisplay(pick), kind: 'cloud', problem: null }
+      : { label: `${modelDisplay(pick)} · not connected`, kind: 'error', problem: 'This cloud provider isn\'t connected (Settings → AI providers).' };
+  }
   const installed = (n) => m.list.some((x) => x.name === n || x.name === `${n}:latest`);
   if (m.loaded && !m.list.length) return { label: 'No chat model installed', kind: 'error', problem: 'Install one in Models & setup.' };
   if (m.loaded && pick && !installed(pick)) return { label: `${pick} · not installed`, kind: 'error', problem: `${pick} is not installed in Ollama.` };
@@ -2801,6 +3756,7 @@ function renderModelChip() {
   chip.dataset.state = v.kind;
   chip.title = v.problem || 'Choose the AI model for this chat';
   chip.setAttribute('aria-label', `AI model: ${v.label}${v.problem ? '. ' + v.problem : ''}`);
+  renderSideModel();
 }
 
 function renderModelPop() {
@@ -2821,13 +3777,27 @@ function renderModelPop() {
     html += m.list.map((x) => {
       const sel = cur && (x.name === cur || x.name === `${cur}:latest`);
       const meta = [x.parameter_size, x.quantization, x.size_gb ? `${x.size_gb} GB` : null].filter(Boolean).join(' · ');
+      // 7.0: only what Ollama reports: in memory now (/api/ps), its capabilities (/api/show); "good for" only for known families
+      const caps = (x.capabilities || []).filter((c) => ['vision', 'tools', 'thinking'].includes(c)).map((c) => `<span class="cap">${esc(c)}</span>`).join('');
       return `<button type="button" class="model-opt" role="option" aria-selected="${sel ? 'true' : 'false'}" data-model="${esc(x.name)}">
-        <span class="radio" aria-hidden="true"></span><span class="opt-main"><b>${esc(x.name)}</b><small>${esc(meta || 'Local · Ollama')} · local</small></span>
-        ${x.default ? '<span class="badge">Default</span>' : ''}</button>`;
+        <span class="radio" aria-hidden="true"></span><span class="opt-main"><b>${esc(x.name)}</b><small>${esc(meta || 'Local · Ollama')} · installed${x.loaded ? ' · in memory' : ''}</small>
+        ${x.use || caps ? `<small class="opt-use">${x.use ? esc(x.use) : ''}${caps ? ` ${caps}` : ''}</small>` : ''}</span>
+        ${sel ? '<span class="badge active">Active</span>' : ''}${x.default ? '<span class="badge">Default</span>' : ''}</button>`;
     }).join('');
-    html += '<p class="muted small pad">Used for your next messages in this chat. Earlier answers keep the model they were written with.</p>';
+    html += `<p class="muted small pad">${state.chatModel ? 'Chosen for this conversation.' : 'This conversation follows the default.'} Used for your next messages here; earlier answers keep the model that wrote them. You can also type "switch the model to …".</p>`;
   }
-  if (!state.remote && state.engine !== 'device') html += '<button type="button" class="btn btn-ghost pop-act" data-model-act="manage">Manage models</button>';
+  if (state.engine !== 'device' && !m.forbidden && (m.cloud || []).length) {          // 7.1: connected cloud providers
+    html += '<div class="pop-head">Cloud (sends this chat to the provider)</div>' + m.cloud.map((x) => {
+      const sel = cur === x.id;
+      return `<button type="button" class="model-opt" role="option" aria-selected="${sel}" data-model="${esc(x.id)}"><span class="radio" aria-hidden="true"></span>
+        <span class="opt-main"><b>${esc(x.model)}</b><small>${esc(x.provider_title)} · cloud${x.consent ? '' : ' · asks before the first message'}</small></span>${sel ? '<span class="badge active">Active</span>' : ''}</button>`;
+    }).join('');
+  }
+  if (!state.remote && state.engine !== 'device' && !m.forbidden && !(m.cloud || []).length)   // 7.1.0: online AI was hard to find
+    html += '<div class="pop-head">Online AI (optional)</div><button type="button" class="model-opt add-online" data-model-act="providers"><span class="opt-main"><b>＋ Add Gemini, Groq or OpenRouter</b>'
+      + '<small>Uses your own API key; asks before anything is sent. Local models keep working offline.</small></span></button>';
+  if (!state.remote && state.engine !== 'device') html += '<button type="button" class="btn btn-ghost pop-act" data-model-act="manage">Download more models…</button>'
+    + '<button type="button" class="btn btn-ghost pop-act" data-model-act="providers">Cloud AI providers…</button>';
   pop.innerHTML = html;
 }
 
@@ -2841,12 +3811,19 @@ function closeModelPop(focusChip = false) {
   $('#modelPop').classList.add('hidden'); $('#modelChip').setAttribute('aria-expanded', 'false');
   if (focusChip) $('#modelChip').focus();
 }
-function pickChatModel(name) {
-  if (!state.models.list.some((x) => x.name === name)) { toast('That model is no longer installed'); loadModels(); return; }
-  const def = state.models.def;
-  state.chatModel = def && (name === def || name === `${def}:latest`) ? null : name;
-  rememberThreadModel(); renderModelChip(); closeModelPop(true);
-  toast(`Next answers in this chat: ${name}`);
+async function pickChatModel(name) {
+  const cloud = cloudModel(name).cloud;
+  if (cloud && !(state.models.cloud || []).some((x) => x.id === name)) { toast('That cloud provider is no longer connected'); loadModels(); return; }
+  if (!cloud && !state.models.list.some((x) => x.name === name)) { toast('That model is no longer installed'); loadModels(); return; }
+  if (cloud && !(await cloudConsent(name))) { closeModelPop(true); return; }   // 7.1: asked once per provider
+  const previous = state.chatModel, wanted = sameModel(name, state.models.def) ? null : name;
+  closeModelPop(true);
+  if (state.threadId) {                                     // 7.0: saved for this conversation on the backend (checked against Ollama)
+    try { await api(`/models/conversation/${encodeURIComponent(state.threadId)}`, { method: 'PUT', body: { model: wanted } }); }
+    catch (e) { state.chatModel = previous; renderModelChip(); toast(`Model not switched: ${e.message}`, 7000); return; }
+  }
+  setThreadModel(wanted);                                   // a new chat sends it with the first message, which stores it
+  toast(`Model switched to ${modelDisplay(name)}`);
 }
 function bindModelPicker() {
   $('#modelChip').addEventListener('click', () => ($('#modelPop').classList.contains('hidden') ? openModelPop() : closeModelPop()));
@@ -2854,7 +3831,8 @@ function bindModelPicker() {
     const opt = e.target.closest('[data-model]'); if (opt) return pickChatModel(opt.dataset.model);
     const act = e.target.closest('[data-model-act]')?.dataset.modelAct;
     if (act === 'retry') loadModels().then(renderModelPop);
-    if (act === 'manage') { closeModelPop(); openSystem(); }
+    if (act === 'manage') { closeModelPop(); openModelLib(); }
+    if (act === 'providers') { closeModelPop(); openProviders(); }
   });
   $('#modelPop').addEventListener('keydown', (e) => {
     const opts = [...$('#modelPop').querySelectorAll('button')];
@@ -2864,6 +3842,131 @@ function bindModelPicker() {
     else if (e.key === 'ArrowUp' && opts.length) { e.preventDefault(); opts[(i - 1 + opts.length) % opts.length].focus(); }
   });
   document.addEventListener('click', (e) => { if (!e.target.closest('#modelBar')) closeModelPop(); });
+}
+
+/* ---------- 7.0 MODEL LIBRARY ----------
+   The chat models installed in Ollama (GET /models: names, sizes, parameters, quantization, in memory, Ollama's own
+   capabilities), set as default (PUT /models/default), remove (DELETE /models/{name}, after confirm; the default and the
+   embedding model are refused by the backend), and downloads (POST /setup/models/pull with confirm: true, progress from
+   GET /setup/models/pull, Cancel: POST /setup/models/pull/cancel; Ollama resumes a cancelled download). Nothing starts
+   without the user's confirmation. */
+let modelLibTimer = 0;
+function openModelLib() {
+  closePages(); openSheet('modelLibSheet');
+  loadModels().then(renderModelLib); renderModelLib(); pollModelPulls();
+  api('/setup/advice', { timeout: 30000 }).then((a) => { state.advice = a; renderModelLib(); }).catch(() => {});   // 7.0.2
+}
+/** 7.0.2: the hardware advice for an installed model name ("qwen2.5:latest" is the catalog's qwen2.5:7b). */
+function adviceFor(name) {
+  const a = state.advice; if (!a) return null;
+  const all = [a.primary, ...(a.alternatives || []), ...(a.incompatible || [])].filter(Boolean);
+  return all.find((r) => [r.name, ...(r.aliases || [])].some((n) => sameModel(n, name))) || null;
+}
+/** 7.1.0: the verified catalog's models that aren't installed, with whether each fits this computer, and a Download button. */
+function renderModelAvail() {
+  const box = $('#modelLibAvail'); if (!box) return;
+  const a = state.advice;
+  if (!a) { box.innerHTML = '<p class="muted small">Checking this computer…</p>'; return; }
+  const installed = (r) => r.installed || state.models.list.some((x) => [r.name, ...(r.aliases || [])].some((n) => sameModel(n, x.name)));
+  const fits = [a.primary, ...(a.alternatives || [])].filter((r) => r && !installed(r));
+  const too = (a.incompatible || []).filter((r) => !installed(r));
+  const row = (r, ok) => `<div class="lib-row${ok ? '' : ' dim'}" data-avail="${esc(r.name)}">
+      <div class="lib-main"><span class="lib-title"><b class="mono">${esc(r.name)}</b>${a.primary && r.name === a.primary.name ? '<span class="badge rec">Recommended for this computer</span>' : ''}
+        ${ok ? `<span class="badge">${esc(r.mode || '')}${r.comfortable ? '' : ' · may be slow'}</span>` : '<span class="badge">Too large here</span>'}</span>
+        <small class="muted">${esc(r.parameters)} · ${esc(r.quantization)} · download ${r.download_gb} GB · needs about ${r.memory_required_gb} GB memory · ${esc(r.license)}</small>
+        <small class="opt-use">${esc(r.use || '')}${ok ? '' : ` · ${esc((r.reasons || []).join('; '))}`}</small></div>
+      <div class="lib-acts">${ok ? `<button type="button" class="btn btn-primary btn-sm" data-avail-act="pull">Download ${r.download_gb} GB…</button>` : ''}</div></div>`;
+  box.innerHTML = (fits.map((r) => row(r, true)).join('') || '<p class="muted small">Every catalog model that fits this computer is already installed.</p>')
+    + (too.length ? `<details><summary class="small">Too large for this computer (${too.length})</summary>${too.map((r) => row(r, false)).join('')}</details>` : '');
+}
+
+function renderModelLib() {
+  renderModelAvail();
+  const m = state.models, list = $('#modelLibList'); if (!list) return;
+  $('#modelLibStatus').textContent = m.ollama === false ? (m.error || 'Ollama isn\'t reachable.')
+    : m.loading && !m.loaded ? 'Loading…' : `${m.list.length} chat model${m.list.length === 1 ? '' : 's'} installed in Ollama on this computer · default: ${m.def || '–'}`;
+  if (m.ollama === false) { list.innerHTML = '<p class="small err">Start Ollama, then press Refresh.</p>'; return; }
+  if (m.loaded && !m.list.length) { list.innerHTML = '<p class="muted small">No chat model installed yet. Download one below.</p>'; return; }
+  list.innerHTML = m.list.map((x) => {
+    const meta = [x.parameter_size, x.quantization, x.family, x.size_gb ? `${x.size_gb} GB` : null].filter(Boolean).join(' · ');
+    const caps = (x.capabilities || []).map((c) => `<span class="cap">${esc(c)}</span>`).join('');
+    const active = sameModel(x.name, state.chatModel || m.def);
+    const adv = adviceFor(x.name), recHere = adv && state.advice.primary && adv.name === state.advice.primary.name;
+    return `<div class="lib-row" data-lib="${esc(x.name)}">
+      <div class="lib-main"><span class="lib-title"><b class="mono">${esc(x.name)}</b>
+        ${x.default ? '<span class="badge">Default</span>' : ''}${active ? '<span class="badge active">Active in this chat</span>' : ''}${x.loaded ? '<span class="badge live">In memory</span>' : ''}${recHere ? '<span class="badge rec">Recommended for this computer</span>' : ''}${adv && adv.mode ? `<span class="badge">${esc(adv.mode)}</span>` : adv && !adv.compatible ? '<span class="badge">Too large here</span>' : ''}</span>
+        <small class="muted">${esc(meta || 'Local · Ollama')}</small>
+        ${x.use || caps ? `<small class="opt-use">${x.use ? esc(x.use) : ''} ${caps}</small>` : ''}</div>
+      <div class="lib-acts">
+        ${x.default ? '' : `<button type="button" class="btn btn-ghost btn-sm" data-lib-act="default"${m.locked ? ' disabled' : ''}>Make default</button>`}
+        ${x.default ? '' : '<button type="button" class="btn btn-ghost btn-sm danger" data-lib-act="remove">Remove…</button>'}
+      </div></div>`;
+  }).join('');
+}
+async function pollModelPulls() {
+  clearTimeout(modelLibTimer);
+  if ($('#modelLibSheet').classList.contains('hidden')) return;
+  let pulls = {};
+  try { pulls = (await api('/setup/models/pull', { timeout: 8000 })).pulls || {}; } catch { /* backend busy: try again */ }
+  const rows = Object.values(pulls);
+  $('#modelLibPulls').innerHTML = rows.map((p) => {
+    const pct = p.total ? Math.floor((p.completed / p.total) * 100) : 0;
+    const gb = p.total ? ` · ${(p.completed / 1e9).toFixed(2)} / ${(p.total / 1e9).toFixed(2)} GB` : '';
+    return `<div class="lib-row" data-pull="${esc(p.model)}"><div class="lib-main"><b class="mono">${esc(p.model)}</b>
+      <small class="muted">${esc(p.status)}${p.status === 'downloading' ? ` · ${pct}%${gb}` : ''} · ${esc(p.message || '')}</small>
+      ${p.status === 'downloading' ? `<div class="lib-bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Download ${esc(p.model)}"><span style="width:${pct}%"></span></div>` : ''}</div>
+      <div class="lib-acts">${p.status === 'downloading' ? '<button type="button" class="btn btn-ghost btn-sm" data-pull-act="cancel">Cancel</button>' : ''}</div></div>`;
+  }).join('');
+  if (rows.some((p) => p.status === 'done' && !state.models.list.some((x) => sameModel(x.name, p.model)))) loadModels().then(renderModelLib);
+  if (rows.some((p) => p.status === 'downloading')) modelLibTimer = setTimeout(pollModelPulls, 1500);
+}
+function bindModelLib() {
+  $('#modelLibRefresh').addEventListener('click', () => loadModels().then(() => { renderModelLib(); toast('Model list refreshed'); }));
+  $('#modelLibSetup').addEventListener('click', () => { closeSheet('modelLibSheet'); $('#rerunSetup').click(); });
+  $('#modelLibList').addEventListener('click', async (e) => {
+    const act = e.target.closest('[data-lib-act]')?.dataset.libAct, name = e.target.closest('[data-lib]')?.dataset.lib;
+    if (!act || !name) return;
+    if (act === 'default') {
+      try {
+        const r = await api('/models/default', { method: 'PUT', body: { model: name } });
+        Object.assign(state.models, { list: r.models || [], def: r.default }); renderModelChip(); renderModelLib();
+        toast(`Default model switched to ${r.default}. New chats use it.`);
+      } catch (err) { toast(`Default not changed: ${err.message}`, 7000); }
+    } else if (act === 'remove') {
+      if (!confirm(`Remove ${name} from Ollama on this computer?\n\nIt frees its disk space; you can download it again later. Chats that used it switch to the default model.`)) return;
+      try {
+        const r = await api(`/models/${encodeURIComponent(name)}?confirm=true`, { method: 'DELETE', timeout: 60000 });
+        Object.assign(state.models, { list: r.models || [], def: r.default });
+        if (sameModel(state.chatModel, name)) setThreadModel(null);
+        renderModelChip(); renderModelLib(); toast(`Removed ${r.deleted}`);
+      } catch (err) { toast(`Not removed: ${err.message}`, 7000); }
+    }
+  });
+  $('#modelLibAvail')?.addEventListener('click', async (e) => {
+    if (!e.target.closest('[data-avail-act="pull"]')) return;
+    const name = e.target.closest('[data-avail]').dataset.avail;
+    const r = [state.advice?.primary, ...(state.advice?.alternatives || [])].find((x) => x && x.name === name);
+    if (!r || !confirm(`Download ${name} (${r.download_gb} GB) with Ollama?\n\nIt needs about ${r.memory_required_gb} GB of memory when used and is stored by Ollama on this computer. Licence: ${r.license}.\nYou can cancel; a cancelled download resumes later.`)) return;
+    try { await api('/setup/models/pull', { method: 'POST', body: { model: name, confirm: true } }); toast(`Downloading ${name}…`); pollModelPulls(); }
+    catch (err) { toast(`Download not started: ${err.message}`, 8000); }
+  });
+  $('#modelLibPull').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = $('#modelLibName').value.trim();
+    if (!/^[A-Za-z0-9._:\-/]+$/.test(name)) { toast('Type an Ollama model name, e.g. llama3.2:3b'); return; }
+    if (!confirm(`Download ${name} with Ollama?\n\nIt can be several GB and is stored by Ollama on this computer. You can cancel; a cancelled download resumes later.`)) return;
+    try {
+      await api('/setup/models/pull', { method: 'POST', body: { model: name, confirm: true } });
+      $('#modelLibName').value = ''; toast(`Downloading ${name}…`); pollModelPulls();
+    } catch (err) { toast(`Download not started: ${err.message}`, 8000); }
+  });
+  $('#modelLibPulls').addEventListener('click', async (e) => {
+    if (!e.target.closest('[data-pull-act="cancel"]')) return;
+    const name = e.target.closest('[data-pull]').dataset.pull;
+    try { await api('/setup/models/pull/cancel', { method: 'POST', body: { model: name } }); toast(`Stopped ${name}. Download again to resume.`); }
+    catch (err) { toast(`Couldn't stop it: ${err.message}`); }
+    setTimeout(pollModelPulls, 400);
+  });
 }
 
 /** Settings → Default chat model (PC only): the installed chat models, saved with PUT /models/default. */
@@ -2897,10 +4000,14 @@ async function loadChatHistory() {
   if (state.engine === 'device') return loadDeviceHistory();
   if (!state.threadId || state.apiBase === null) return;
   try {
-    const { messages } = await api(`/conversations/${encodeURIComponent(state.threadId)}?limit=50`);
+    const conv = await api(`/conversations/${encodeURIComponent(state.threadId)}?limit=50`), { messages } = conv;
+    if ('model' in conv) setThreadModel(conv.model);        // 7.0: switching conversations restores their model (from the backend)
     messages.forEach((m, i) => {
       const last = i === messages.length - 1, q = i > 0 && messages[i - 1].role === 'user' ? messages[i - 1].content : '';
-      addMsg(m.role === 'user' ? 'user' : 'bot', m.role === 'user' ? esc(m.content) : botHtml(m.content, m.tools, m.sources) + msgTools(m.content, { text: q, regen: last }));
+      const by = m.model && m.model !== 'abhify' ? m.model : null;   // the model that wrote it (7.0); app replies have none
+      addMsg(m.role === 'user' ? 'user' : 'bot', m.role === 'user' ? esc(m.content)
+        : m.model === 'abhify' ? `<div class="app-reply" role="status">${md(m.content)}</div>`
+        : botHtml(m.content, m.tools, m.sources, by) + msgTools(m.content, { text: q, regen: last }));
     });
   } catch { /* offline: keep the welcome message only */ }
 }
@@ -2943,7 +4050,8 @@ async function openSetup() {
 
 async function refreshSetup() {
   try {
-    [setup.diag, setup.profiles] = await Promise.all([api('/system/diagnostics'), api('/setup/profiles')]);
+    [setup.diag, setup.profiles, setup.advice] = await Promise.all([api('/system/diagnostics'), api('/setup/profiles'),
+      api('/setup/advice', { timeout: 30000 }).catch(() => null)]);       // 7.0.2: hardware-aware recommendation (read-only)
   } catch (e) {
     $('#setupBody').innerHTML = `<p class="empty">⚠️ Can't reach the Abhify.AI backend (${esc(e.message)}).<br>Start it with start.bat, then reopen this window.</p>`;
     return;
@@ -2989,8 +4097,9 @@ function renderSetup() {
       ${stat('Free disk (models)', gb(d.disk.models_free_gb), d.disk.models_free_gb < 6 ? 'warn' : 'ok')}
       ${stat('Ollama', ol.reachable ? `running ${ol.version || ''}` : 'not running', ol.reachable ? 'ok' : 'bad')}
     </div></div>
-    <div class="step"><h3>2 · Choose AI models</h3>
-      <p class="muted small">Recommended: <b>${esc(P.profiles[rec].label)}</b> (${esc(d.recommended_profile.reason)}). You can change this later.</p>
+    ${adviceHtml(setup.advice)}
+    <div class="step"><h3>2b · Or choose a preset</h3>
+      <p class="muted small">Preset: <b>${esc(P.profiles[rec].label)}</b> (${esc(d.recommended_profile.reason)}). You can change this later.</p>
       <div class="profiles">${Object.entries(P.profiles).map(([k, p]) => `
         <button class="profile ${k === P.active ? 'active' : ''}" data-setup="profile" data-profile="${k}">
           <b>${esc(p.label)}</b>${k === rec ? '<span class="badge rec">Recommended</span>' : ''}${p.installed ? '<span class="badge">Installed</span>' : ''}
@@ -2999,15 +4108,63 @@ function renderSetup() {
         </button>`).join('')}</div></div>
     <div class="step"><h3>3 · Download</h3>${dl}
       <p class="muted small">Models download once and then work offline. Nothing downloads unless you click.</p></div>
+    <div class="step hidden" id="setupProvidersStep"><h3>5 · Cloud AI (optional)</h3>
+      <p class="small">Abhify.AI works fully with your local models. If you also have a Gemini, Groq or OpenRouter key, add it here: it is tested before it is saved. You can skip this and add one later in Settings → AI providers.</p>
+      <div id="setupProviders"></div>
+      <div class="row"><button type="button" class="btn btn-ghost btn-sm" id="setupProvidersSkip">Skip: use only local AI</button></div></div>
     <div class="step"><h3>4 · Test</h3>
       <button class="btn btn-ghost" data-setup="test" ${!ol.reachable || active.missing.length ? 'disabled' : ''}>▶ Run a quick test</button>
       <span class="small" id="setupTest">${setup.testMsg}</span></div>`;
   $('#setupFinish').disabled = !(ol.reachable && !active.missing.length);
+  renderSetupProviders();                                           // 7.1: optional, skippable
+}
+
+/* 7.0.2: "Your computer is ready. We recommend this AI model for your hardware." Facts are labelled verified / estimate /
+   not available (backend hardware_advisor.py); nothing downloads or changes until the user chooses. */
+function adviceHtml(a) {
+  if (!a) return '';
+  const SRC = { verified: 'verified', estimate: 'estimate', unavailable: 'not available' };
+  const facts = (a.device || []).map((f) => `<li><span class="muted">${esc(f.label)}:</span> ${esc(String(f.value))} <span class="fact-src ${esc(f.source)}">${esc(SRC[f.source] || f.source)}</span></li>`).join('');
+  const card = (r, primary) => `<div class="lib-row${primary ? ' rec-primary' : ''}"><div class="lib-main">
+      <span class="lib-title"><b class="mono">${esc(r.name)}</b>${primary ? '<span class="badge rec">Recommended</span>' : ''}${r.installed ? '<span class="badge">Installed</span>' : ''}${r.mode ? `<span class="badge live">${esc(r.mode)}</span>` : ''}</span>
+      <small class="muted">${esc(r.parameters)} · ${esc(r.quantization)} · ${r.installed ? 'already installed, no download' : `${esc(r.download_gb)} GB download`} · needs about ${esc(r.memory_required_gb)} GB of memory · ${esc(r.license)}</small>
+      <small class="opt-use">${esc(r.use)}${primary && a.primary.why ? ` · ${esc(a.primary.why)}` : ''}</small></div>
+      <div class="lib-acts">${r.installed
+        ? `<button type="button" class="btn ${primary ? 'btn-primary' : 'btn-ghost'} btn-sm" data-setup="use-model" data-model="${esc(r.name)}">Use this model</button>`
+        : `<button type="button" class="btn ${primary ? 'btn-primary' : 'btn-ghost'} btn-sm" data-setup="advice-pull" data-model="${esc(r.name)}" data-gb="${esc(r.download_gb)}">Download…</button>`}</div></div>`;
+  const emb = a.embedding && !a.embedding.installed
+    ? `<p class="small">Document search also needs <b>${esc(a.embedding.name)}</b> (${esc(a.embedding.download_gb)} GB). <button type="button" class="btn btn-ghost btn-sm" data-setup="advice-pull" data-model="${esc(a.embedding.name)}" data-gb="${esc(a.embedding.download_gb)}">Download…</button></p>` : '';
+  return `<div class="step" id="adviceStep"><h3>2 · Recommended AI model for this computer</h3>
+      <details class="device-facts"><summary class="small">What Abhify.AI found on this computer</summary><ul class="facts">${facts}</ul></details>
+      ${a.primary ? `<p class="small"><b>Your computer is ready.</b> We recommend this model for your hardware:</p>${card(a.primary, true)}`
+        : `<p class="small err">No catalog model fits this computer: ${esc((a.incompatible[0] || {}).reasons?.join('; ') || 'not enough memory or disk')}.</p>`}
+      ${!a.ollama.reachable ? `<p class="small">⚠️ Ollama isn't running, so downloads and the test need it first (see Download below).</p>` : ''}
+      ${emb}
+      ${(a.alternatives || []).length ? `<details><summary class="small">Other compatible models (${a.alternatives.length})</summary>${a.alternatives.map((r) => card(r, false)).join('')}</details>` : ''}
+      ${(a.incompatible || []).length ? `<details><summary class="small">Not suitable here (${a.incompatible.length})</summary><ul class="facts">${a.incompatible.map((r) => `<li><b class="mono">${esc(r.name)}</b>: ${esc(r.reasons.join('; '))}</li>`).join('')}</ul></details>` : ''}
+      <p class="muted small">${esc(a.note)} "Use this model" first runs a real test answer on this computer; only if it answers does it become your default.</p>
+      <span class="small" id="adviceMsg">${setup.adviceMsg || ''}</span></div>`;
 }
 
 async function setupAction(el) {
   const a = el.dataset.setup;
   try {
+    if (a === 'use-model') {
+      const m = el.dataset.model;
+      setup.adviceMsg = `Testing ${m} with a real answer on this computer…`; renderSetup();
+      const r = await api('/setup/use-model', { method: 'POST', body: { model: m }, timeout: 240000 });
+      setup.adviceMsg = r.ok ? `✅ ${r.model} answered in ${r.test.seconds} s and is now your default model.` : `❌ ${r.model} didn't pass the test: ${r.test?.error || r.error}. Your default is still ${r.default}.`;
+      if (r.ok) { toast(`Model switched to ${r.model}`); loadModels(); }
+      await refreshSetup(); return;
+    }
+    if (a === 'advice-pull') {
+      const m = el.dataset.model;
+      if (!confirm(`Download ${m}?
+
+About ${el.dataset.gb} GB, downloaded once from the Ollama registry and stored by Ollama on this computer. You can cancel; a cancelled download resumes later.`)) return;
+      await api('/setup/models/pull', { method: 'POST', body: { model: m, confirm: true } });
+      setup.adviceMsg = `Downloading ${m}… (progress below)`; pollPull(); renderSetup(); return;
+    }
     if (a === 'recheck') await refreshSetup();
     else if (a === 'profile') {
       await api('/setup/profile', { method: 'POST', body: { profile: el.dataset.profile } });
@@ -3311,6 +4468,19 @@ async function refreshKnowledge(quiet = false) {
         ${f.status === 'failed' ? '<div class="actions"><button class="mini-btn" data-k="retry-one" title="Retry">↻</button></div>' : ''}
       </div>`).join('') || `<p class="muted small">${st.running ? 'No files yet. Drop PDFs or notes into the folder.' : 'Start watching to index this folder.'}</p>`;
   }
+  renderUploads();
+}
+
+/* 7.2.1: documents added through the app (chat upload): listed here so they can be deleted. */
+async function renderUploads() {
+  const box = $('#kUploads'); if (!box) return;
+  let files = [];
+  try { ({ files } = await api('/knowledge/files?source=upload')); } catch { box.innerHTML = ''; return; }
+  box.innerHTML = files.length ? `<h4 class="set-h">Uploaded documents (${files.length})</h4>${files.map((f) => `
+      <div class="list-item" data-upload="${esc(f.path)}">
+        <div class="text">${STATUS_ICON[f.status] || ''} ${esc(f.path)}<div class="meta">${esc(f.status)}${f.chunks ? ` · ${f.chunks} chunks` : ''}</div></div>
+        <div class="actions"><button class="mini-btn" data-k="delete-upload" aria-label="Delete ${esc(f.path)}" title="Delete">🗑</button></div>
+      </div>`).join('')}` : '';
 }
 
 async function knowledgeAction(action, el) {
@@ -3323,6 +4493,12 @@ async function knowledgeAction(action, el) {
     } else if (action === 'rescan') await api('/knowledge/rescan', { method: 'POST' });
     else if (action === 'retry') { const r = await api('/knowledge/retry', { method: 'POST' }); toast(`Retrying ${r.reset} file(s)`); }
     else if (action === 'retry-one') await api(`/knowledge/retry?doc_id=${el.closest('[data-doc]').dataset.doc}`, { method: 'POST' });
+    else if (action === 'delete-upload') {
+      const name = el.closest('[data-upload]').dataset.upload;
+      if (!confirm(`Delete "${name}"?\n\nIt's removed from search and answers now. The file is kept in Trash for 7 days, then removed.`)) return;
+      const r = await api(`/knowledge/documents/${encodeURIComponent(name)}?confirm=true`, { method: 'DELETE' });
+      toast(`Deleted "${name}"${r.projects_updated ? ` and removed it from ${r.projects_updated} project(s)` : ''}`);
+    }
     else if (action === 'change') {
       const cur = $('#kFolder').textContent.replace('📁 ', '');
       const path = prompt('Folder to watch (absolute path). Whole drives, your entire user folder and system folders are not allowed.', cur);

@@ -184,7 +184,7 @@ fun ChatTab(vm: AppViewModel, withMic: (() -> Unit) -> Unit, onModels: () -> Uni
                 Column(Modifier.fillMaxWidth().padding(top = Dimens.gap, start = Dimens.tiny, end = Dimens.tiny), horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(Dimens.gap)) {
                     AiOrb(orbStateOf(vm), 96)
-                    Text(if (vm.g.userName.isNotBlank()) "Hi ${vm.g.userName}!" else "Hi! I'm Abhify", style = MaterialTheme.typography.headlineSmall,
+                    Text("Ask ${vm.assistantName.value} anything", style = MaterialTheme.typography.headlineSmall,   // 7.1.0: a heading, not a greeting that looks like an answer
                         color = MaterialTheme.colorScheme.onBackground)
                     val st = vm.states()
                     Text(when (vm.aiMode.value) {
@@ -261,6 +261,7 @@ fun ChatTab(vm: AppViewModel, withMic: (() -> Unit) -> Unit, onModels: () -> Uni
             Text(if (vm.listening.value) "🎙 Listening… ${vm.heard.value}" else "🎙 ${vm.voiceError.value}", Modifier.weight(1f),
                 style = MaterialTheme.typography.bodyMedium, color = if (vm.listening.value) MaterialTheme.colorScheme.tertiary else LocalExtra.current.bad)
             if (vm.listening.value) TextButton(vm::cancelVoice) { Text("Cancel") }
+            else { TextButton({ withMic { vm.retryVoice() } }) { Text("Retry") }; TextButton({ vm.voiceError.value = null }) { Text("Dismiss") } }   // 7.1.1
         }
         if (vm.speaking.value || vm.speechPaused.value) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (vm.speechPaused.value) "⏸ Reading paused" else "🔊 Reading the answer aloud", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.tertiary)
@@ -569,9 +570,9 @@ private fun Bubble(m: AppViewModel.UiMsg, isLast: Boolean, generating: Boolean, 
 // 4.6.2: News moved out of Study into its own tab (News Center)
 // 5.3 Study: the existing sections keep their numbers (other screens open them by number); Discover, MCQs and the
 // Question Bank (the same screens as in Career, not copies) are added. Shown order differs from the numbers.
-private val LEARN_SECTIONS = listOf("Overview", "Tutor", "Plans", "Cards", "Quiz", "MCQs", "Questions", "Discover")
-private val LEARN_GLYPHS = listOf("🏠", "💡", "🗓", "🃏", "❔", "✅", "📚", "🔍")
-private val LEARN_ORDER = listOf(0, 7, 1, 2, 3, 4, 5, 6)                       // Overview, Discover, Tutor, Plans, Cards, Quiz, MCQs, Questions
+private val LEARN_SECTIONS = listOf("Overview", "Tutor", "Plans", "Cards", "Quiz", "MCQs", "Questions", "Discover", "Prepare")
+private val LEARN_GLYPHS = listOf("🏠", "💡", "🗓", "🃏", "❔", "✅", "📚", "🔍", "🎯")
+private val LEARN_ORDER = listOf(8, 0, 7, 1, 2, 3, 4, 5, 6)                    // 7.2: Prepare (courses, interview plan, STAR stories) first; then Overview, Discover, Tutor, Plans, Cards, Quiz, MCQs, Questions
 
 @Composable
 fun LearnTab(vm: AppViewModel, withMic: (() -> Unit) -> Unit = {}) {
@@ -586,7 +587,7 @@ fun LearnTab(vm: AppViewModel, withMic: (() -> Unit) -> Unit = {}) {
         Box(Modifier.weight(1f)) {
             when (vm.learnMode.value) {
                 0 -> StudyView(vm); 1 -> TutorView(vm); 2 -> PlansView(vm); 3 -> CardsView(vm); 4 -> QuizView(vm)
-                5 -> McqView(vm); 6 -> QuestionBankView(vm, withMic, bankMode) { bankMode = it }; else -> DiscoverView(vm)
+                5 -> McqView(vm); 6 -> QuestionBankView(vm, withMic, bankMode) { bankMode = it }; 8 -> StudyPrepView(vm); else -> DiscoverView(vm)
             }
         }
     }

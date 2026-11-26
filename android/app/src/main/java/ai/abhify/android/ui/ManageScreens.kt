@@ -479,7 +479,7 @@ fun PrivacyScreen(vm: AppViewModel) = Page("Privacy", vm) {
 
 // ---------------------------------------------------------------------- settings
 @Composable
-fun SettingsScreen(vm: AppViewModel) = Page("Settings", vm) {
+fun SettingsScreen(vm: AppViewModel, withMic: (() -> Unit) -> Unit = { it() }) = Page("Settings", vm) {
     // Since the stability milestone Settings is the one place for AI, models, performance and system configuration
     // (moved from More); the existing pages are opened, never duplicated.
     SettingsGroup("AI", accent = Accent.CHAT) {
@@ -546,8 +546,9 @@ fun SettingsScreen(vm: AppViewModel) = Page("Settings", vm) {
             title = { Text("What the AI is told") },
             text = { Box(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) { Text(pv, style = MaterialTheme.typography.bodyMedium) } }) }
     }
+    AssistantIdentityGroup(vm)                                         // 7.1.0-dev.2 AI personalization: the assistant's name
     // 5.4 Voice & Conversation (replaces "Voice & audio": read aloud and speed are inside, now saved)
-    VoiceSettingsGroup(vm)
+    VoiceSettingsGroup(vm, withMic)
     LiveInfoSettingsGroup(vm)                                          // 6.2 real-time information (what may be looked up, which services)
     BriefingSettingsGroup(vm)                                          // next build: personal briefing (reminder off by default)
     SettingsGroup("Diagnostics") {

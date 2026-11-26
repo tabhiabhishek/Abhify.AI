@@ -163,7 +163,8 @@ def test_web_news_refresh_and_pull_to_refresh_contracts():
     assert "the previous stories stay" in news and "Updated just now" in news
     assert "newsAi(" not in news and "reader." not in news                                         # no briefing, Listen untouched
     ptr = js[js.index("const PTR_TARGETS"):js.index("/* ---------- 6. MCQ PRACTICE")]
-    assert "location.reload" not in js and "window.location.reload" not in js                      # never a page reload
+    assert "location.reload" not in ptr and "location.reload" not in news                          # refresh never reloads the page
+    assert js.count("location.reload") == 1 and "controllerchange" in js[js.index("location.reload") - 400:js.index("location.reload")]   # 7.1.0: only once, after an app update
     assert "input, textarea, select, [contenteditable], .scroll-x, .chips" in ptr                  # not from fields or chip rows
     assert "ptrAtTop(e.target)" in ptr and "window.getSelection" in ptr and "busy" in ptr
     assert set(re.findall(r"^\s+(\w+): \(\) =>", ptr, re.M)) == {"news", "interview", "mcq"}

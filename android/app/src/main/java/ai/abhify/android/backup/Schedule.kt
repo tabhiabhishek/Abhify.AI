@@ -18,24 +18,24 @@ data class BackupSchedule(
     val hour: Int = 2,                           // preferred local hour (0–23)
     val weekday: Int = 7,                        // 1 = Monday … 7 = Sunday (weekly only)
     val categories: List<String> = listOf("Personal memory", "Conversations", "Notes and tasks"),
-    val toDrive: Boolean = false,
     val folderUri: String? = null,               // a folder the user picked (Storage Access Framework); null = none
     val folderName: String? = null,
     val keep: Int = 5,                           // retention per destination (1–30)
     val wifiOnly: Boolean = true,
+    /** 7.2: this schedule used to upload to Google Drive (read from an older saved schedule; never saved again). Drive was removed as a destination. */
+    val driveRemoved: Boolean = false,
 ) {
     fun json(): String = JSONObject().put("enabled", enabled).put("weekly", weekly).put("hour", hour).put("weekday", weekday)
-        .put("categories", JSONArray(categories)).put("toDrive", toDrive).put("folderUri", folderUri ?: JSONObject.NULL)
+        .put("categories", JSONArray(categories)).put("folderUri", folderUri ?: JSONObject.NULL)
         .put("folderName", folderName ?: JSONObject.NULL).put("keep", keep).put("wifiOnly", wifiOnly).toString()
 
-    /** Why this can't be saved, or null. Drive backups run unattended, so they must be encrypted. */
+    /** Why this can't be saved, or null. 7.2: scheduled backups go only to a folder on this phone (no automatic Drive uploads). */
     fun problem(hasPassphrase: Boolean, driveConnected: Boolean): String? = when {
         !enabled -> null
         categories.isEmpty() -> "Choose at least one thing to back up."
         categories.any { it !in Backup.CATEGORIES } -> "Unknown backup category."
-        !toDrive && folderUri == null -> "Choose where to save: Google Drive, a folder on this phone, or both."
-        toDrive && !driveConnected -> "Connect Google Drive first (More → Google Drive)."
-        toDrive && !hasPassphrase -> "Scheduled backups to Google Drive must be encrypted: set a passphrase (8+ characters)."
+        folderUri == null -> if (driveRemoved) "Scheduled backups no longer go to Google Drive (7.2: uploads only happen when you start them). Choose a folder on this phone."
+            else "Choose a folder on this phone to save scheduled backups."
         hour !in 0..23 || weekday !in 1..7 -> "Choose a valid time."
         keep !in 1..30 -> "Keep between 1 and 30 backups."
         else -> null
@@ -59,9 +59,9 @@ data class BackupSchedule(
             val o = JSONObject(s!!)
             BackupSchedule(o.optBoolean("enabled"), o.optBoolean("weekly"), o.optInt("hour", 2), o.optInt("weekday", 7),
                 o.optJSONArray("categories")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList(),
-                o.optBoolean("toDrive"), o.optString("folderUri").takeIf { o.has("folderUri") && !o.isNull("folderUri") && it.isNotBlank() },
+                o.optString("folderUri").takeIf { o.has("folderUri") && !o.isNull("folderUri") && it.isNotBlank() },
                 o.optString("folderName").takeIf { o.has("folderName") && !o.isNull("folderName") && it.isNotBlank() },
-                o.optInt("keep", 5).coerceIn(1, 30), o.optBoolean("wifiOnly", true))
+                o.optInt("keep", 5).coerceIn(1, 30), o.optBoolean("wifiOnly", true), driveRemoved = o.optBoolean("toDrive"))
         }.getOrDefault(BackupSchedule())
     }
 }

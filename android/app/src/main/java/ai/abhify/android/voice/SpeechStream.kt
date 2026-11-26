@@ -37,7 +37,7 @@ class SpeechStream(val turn: Int, private val minChars: Int = 40) {
 
     private fun emit(chunk: String): List<String> {
         // 6.2: citations ([S1], [W2], [L1]) and links are never read aloud; the chips stay in the conversation
-        val t = Markdown.toSpeech(chunk.replace(Regex("\\s*\\[(?:S|C|W|L)?\\d+]"), "").replace(Regex("\\s*\\(?https?://\\S+"), ""))
+        val t = Markdown.toSpeech(chunk.replace(Regex("\\s*\\[(?:S|C|W|L)?\\d+]"), "").replace(Regex("\\s*\\[unsupported]"), "").replace(Regex("\\s*\\(?https?://\\S+"), ""))
             .replace(Regex("\\s+"), " ").trim()
         if (t.none { it.isLetterOrDigit() }) return emptyList()
         return ai.abhify.android.voice.Voice.parts(t, Voice.MAX_PART).also { spoken += it }

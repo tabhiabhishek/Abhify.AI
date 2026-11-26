@@ -48,6 +48,7 @@ import androidx.compose.ui.composed
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -107,35 +108,41 @@ fun AiOrb(state: OrbState, size: Int = 48, modifier: Modifier = Modifier, still:
     val spinMs = when (state) { OrbState.THINKING, OrbState.PROCESSING -> 1400; OrbState.SEARCHING -> 2200; OrbState.GENERATING, OrbState.SPEAKING -> 3200; else -> 9000 }
     val spin by if (animate) t.animateFloat(0f, 360f, infiniteRepeatable(tween(spinMs, easing = LinearEasing)), label = "spin")
         else remember { androidx.compose.runtime.mutableFloatStateOf(0f) }
-    val colors = when (state) {
-        OrbState.ERROR -> listOf(Color(0xFFFF7A6B), Color(0xFFF43F5E), Color(0xFFFF9A8C), Color(0xFFFF7A6B))
-        OrbState.OFFLINE -> listOf(Color(0xFF6B7280), Color(0xFF4B5563), Color(0xFF9CA3AF), Color(0xFF6B7280))
-        else -> listOf(Brand.Violet, Color(0xFF4F7BFF), Brand.Cyan, Color(0xFFA855F7), Brand.Violet)   // 5.6 neural core: violet ↔ electric cyan
+    // 7.0 Synapse core: a violet sphere (lavender light → Synapse violet → deep indigo) inside two orbiting rings
+    // (electric cyan and violet), each carrying one node. Error is coral, offline grey; both are still.
+    val (light, mid, deep) = when (state) {
+        OrbState.ERROR -> Triple(Color(0xFFFFD2CB), Color(0xFFFF7A6B), Color(0xFF5A1620))
+        OrbState.OFFLINE -> Triple(Color(0xFFD1D5DB), Color(0xFF6B7280), Color(0xFF1F2430))
+        else -> Triple(Color(0xFFF1ECFF), Brand.Synapse, Color(0xFF1B1450))
     }
+    val ringA = when (state) { OrbState.ERROR -> Color(0xFFFF9A8C); OrbState.OFFLINE -> Color(0xFF9CA3AF); else -> Brand.Cyan }
+    val ringB = when (state) { OrbState.ERROR -> Color(0xFFFF7A6B); OrbState.OFFLINE -> Color(0xFF6B7280); else -> Brand.Synapse }
     Canvas(modifier.size(size.dp).semantics { contentDescription = "Abhify.AI: ${state.label}" }) {
         val r = this.size.minDimension / 2f
         val c = Offset(this.size.width / 2f, this.size.height / 2f)
-        val halo = 0.80f + 0.12f * breath
-        drawCircle(Brush.radialGradient(listOf(colors[0].copy(alpha = 0.35f), Color.Transparent), c, r), r, c)        // halo
-        rotate(spin, c) { drawCircle(Brush.sweepGradient(colors, c), r * halo * 0.78f, c) }                              // aurora body
-        drawCircle(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.55f), Color.Transparent), c + Offset(-r * 0.22f, -r * 0.25f), r * 0.45f),
-            r * halo * 0.78f, c)                                                                                          // glossy light
-        // 5.3 neural layer: three nodes on an inner ring joined by faint links (rotates with the core; still when static)
-        val nodes = (0 until 3).map { i -> val a = Math.toRadians((spin * 0.5f + i * 120f).toDouble())
-            c + Offset((kotlin.math.cos(a) * r * 0.42f).toFloat(), (kotlin.math.sin(a) * r * 0.42f).toFloat()) }
-        val link = Color.White.copy(alpha = if (state == OrbState.OFFLINE) 0.18f else 0.32f)
-        for (i in nodes.indices) drawLine(link, nodes[i], nodes[(i + 1) % nodes.size], strokeWidth = (size / 48f).coerceAtLeast(0.6f).dp.toPx())
-        nodes.forEach { drawCircle(Color.White.copy(alpha = if (state == OrbState.OFFLINE) 0.35f else 0.75f), r * 0.07f, it) }
+        val pulse = 0.96f + 0.08f * breath
+        val stroke = (size / 48f).coerceIn(0.8f, 1.6f).dp.toPx()
+        drawCircle(Brush.radialGradient(listOf(mid.copy(alpha = 0.42f), Color.Transparent), c, r), r, c)                 // glow
+        val core = r * 0.40f * pulse
+        drawCircle(Brush.radialGradient(listOf(light, mid, deep), c + Offset(0f, -core * 0.18f), core * 1.25f), core, c)   // sphere
+        fun ring(angle: Float, color: Color, alpha: Float, node: Float) = rotate(angle, c) {
+            val w = r * 1.66f; val h = r * 0.60f
+            drawOval(color.copy(alpha = alpha), Offset(c.x - w / 2f, c.y - h / 2f), androidx.compose.ui.geometry.Size(w, h), style = Stroke(stroke))
+            val a = Math.toRadians(node.toDouble())
+            drawCircle(color, r * 0.065f, c + Offset((kotlin.math.cos(a) * w / 2f).toFloat(), (kotlin.math.sin(a) * h / 2f).toFloat()))
+        }
+        ring(-18f + spin * 0.25f, ringA, 0.62f, spin)                                    // cyan ring, node orbiting
+        ring(72f - spin * 0.4f, ringB, 0.58f, -spin * 1.3f + 140f)                       // violet ring, counter-rotating
         if (state == OrbState.SPEAKING || state == OrbState.INTERRUPTED) {           // speaking: a soft outer pulse; interrupted: a still ring
             val k = if (animate && state == OrbState.SPEAKING) breath else 0.4f
-            drawCircle(Brand.Violet.copy(alpha = 0.5f * (1f - k)), r * (0.84f + 0.14f * k), c, style = Stroke(width = 2.dp.toPx()))
+            drawCircle(Brand.Synapse.copy(alpha = 0.5f * (1f - k)), r * (0.84f + 0.14f * k), c, style = Stroke(width = 2.dp.toPx()))
         }
         if (state == OrbState.LISTENING) {
             val k = if (animate) breath else 0.5f
-            drawCircle(Brand.Mint.copy(alpha = 0.6f * (1f - k)), r * (0.82f + 0.18f * k), c, style = Stroke(width = 2.dp.toPx()))
+            drawCircle(Brand.Cyan.copy(alpha = 0.65f * (1f - k)), r * (0.82f + 0.18f * k), c, style = Stroke(width = 2.dp.toPx()))
         }
         if (state == OrbState.SEARCHING) {                                                // a cyan scan sweeping the core
-            drawArc(Brand.Mint.copy(alpha = 0.85f), spin * 2f, 70f, false, Offset(c.x - r * 0.9f, c.y - r * 0.9f),
+            drawArc(Brand.Cyan.copy(alpha = 0.85f), spin * 2f, 70f, false, Offset(c.x - r * 0.9f, c.y - r * 0.9f),
                 androidx.compose.ui.geometry.Size(r * 1.8f, r * 1.8f), style = Stroke(width = 2.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round))
         }
     }
@@ -207,13 +214,17 @@ fun accentOf(t: AppViewModel.Tab): Accent = when (t) {
 fun AuroraNavBar(selected: AppViewModel.Tab, items: List<AppViewModel.Tab>, icon: (AppViewModel.Tab) -> Int, onPick: (AppViewModel.Tab) -> Unit) {
     val x = LocalExtra.current
     val reduced = reducedMotion()
-    Row(Modifier.fillMaxWidth().background(x.glassStrong).navigationBarsPadding().padding(horizontal = 6.dp, vertical = 6.dp),
+    // 7.0 Synapse: one identity for every tab: a violet-tinted pill with a lavender icon, a hairline on top of the bar
+    val pillOn = if (x.dark) Brand.Synapse.copy(alpha = 0.24f) else Color(0xFFE9E3FF)
+    val iconOn = if (x.dark) Brand.Lavender else Color(0xFF4B2FD0)
+    Row(Modifier.fillMaxWidth().background(if (x.dark) Color(0xFF090A13) else x.glassStrong)
+        .drawBehind { drawLine(x.line, Offset(0f, 0f), Offset(size.width, 0f), 1.dp.toPx()) }
+        .navigationBarsPadding().padding(horizontal = 6.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceAround, verticalAlignment = Alignment.CenterVertically) {
         items.forEach { t ->
             val on = selected == t
-            val a = accentOf(t)
-            val pill by animateColorAsState(if (on) a.g1 else Color.Transparent, Motion.tween(Motion.BASE, reduced), label = "pill")
-            val tint by animateColorAsState(if (on) Color.White else x.muted, Motion.tween(Motion.BASE, reduced), label = "tint")
+            val pill by animateColorAsState(if (on) pillOn else Color.Transparent, Motion.tween(Motion.BASE, reduced), label = "pill")
+            val tint by animateColorAsState(if (on) iconOn else x.muted, Motion.tween(Motion.BASE, reduced), label = "tint")
             val w by animateFloatAsState(if (on) 60f else 44f, Motion.tween(Motion.BASE, reduced, Motion.Emphasized), label = "w")
             Column(Modifier.weight(1f).heightIn(min = 56.dp).clip(RoundedCornerShape(16.dp))
                 .clickable(onClickLabel = t.label) { onPick(t) }.semantics { this.selected = on; role = Role.Tab },
@@ -222,7 +233,7 @@ fun AuroraNavBar(selected: AppViewModel.Tab, items: List<AppViewModel.Tab>, icon
                 Box(Modifier.width(w.dp).height(32.dp).clip(RoundedCornerShape(16.dp)).background(pill), contentAlignment = Alignment.Center) {
                     Icon(painterResource(icon(t)), null, tint = tint, modifier = Modifier.size(22.dp))
                 }
-                Text(t.label, style = MaterialTheme.typography.labelSmall, maxLines = 1, color = if (on) a.text else x.muted,
+                Text(t.label, style = MaterialTheme.typography.labelSmall, maxLines = 1, color = if (on) MaterialTheme.colorScheme.onBackground else x.muted,
                     fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium)
             }
         }

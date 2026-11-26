@@ -3,6 +3,231 @@
 All notable changes to Abhify.AI. Format: [Keep a Changelog](https://keepachangelog.com/); versions follow [SemVer](https://semver.org/).
 The database schema version is listed separately, because not every release changes it.
 
+## [7.2.1]: final stable release (2026-11-25; physical validation passed 2026-11-26, owner-reported; not production-signed)
+
+**Note:** links in older entries to per-version reports in `docs/` refer to files removed at the 7.2.1 consolidation. Tracked ones remain in Git history.
+
+Android 7.2.1 = versionCode **7020199** (final = 99). SHELL_REV `ui72.5`. Database schemas unchanged: Windows SQLite v7, Android ChatDb v17. **Feature freeze:** this release adds no features beyond 7.2.1-dev.2. It consolidates 7.2.0-dev.1 → 7.2.1-dev.2 into one stable baseline.
+- **Included, from the development builds:**
+  - Study with courses and interview preparation (7.2.0-dev.1).
+  - Study enhancements: mock interview, resume tailoring, report, model check, reminders, offline packs and widget on Android (7.2.0-dev.2).
+  - Privacy patch: filtered cloud prompts, project-memory enforcement, Study respects the memory switch, microphone fix, upload delete with 7-day Trash, safer Android defaults, unused install permission removed (7.2.1-dev.1).
+  - Windows installer update fix for stray processes (7.2.1-dev.2).
+- **Documentation:**
+  - New canonical `docs/ABHIFY_AI_COMPLETE_DOCUMENTATION.md` (31 sections, full API route table).
+  - Concise root README with architecture, privacy, RAG and install diagrams.
+  - `docs/README.md` index classifying the historical reports, which are kept unchanged.
+  - The pre-7.2.1 README is kept as `docs/archive_README_pre_7.2.1.md`.
+- **Test change, reported:** the API-route documentation guards (`test_readme_documents_every_api_route` and the route checks in `test_desktop_56`, `test_realtime` and `test_voice_71`) now check the complete documentation instead of the README.
+- **Release packaging:** `release/Abhify.AI-7.2.1/` holds the installer, portable zip, APK, release notes, checksums, install guide, signing guide and test summary.
+
+## [7.2.1-dev.2]: Windows installer update fix (2026-11-25; development build, not production-signed)
+
+Android 7.2.1-dev.2 = versionCode **7020102**: only the version changes, the Android code is the same as 7.2.1-dev.1. SHELL_REV `ui72.4`.
+- **Windows update no longer fails with "Error opening file for writing: …\runtime\_asyncio.pyd".** This was reported on the owner's laptop. Cause: an Abhify.AI process the app's run file didn't know about kept the old program files locked, for example a leftover instance, or an earlier update attempt that had already removed `runtime\python.exe`. The old installer only stopped the recorded process.
+  - In a normal install this showed the error.
+  - In a silent install it skipped the locked files, leaving a mix of old and new files.
+- **How the installer behaves now:**
+  - It stops every `python.exe` / `pythonw.exe` running from the Abhify.AI install folder. Nothing else is touched.
+  - It removes the old program files and checks they are really gone, retrying.
+  - If something still holds them, it asks you to close Abhify.AI and click Retry. It never continues with a mixed install.
+  - The uninstaller does the same.
+  - Your data (`%LOCALAPPDATA%\AbhifyAI`) is never touched, and it is backed up before the update.
+- **Sandbox upgrade test:** now includes a stray Abhify process during the update (`upgrade_clears_stray_process`).
+
+## [7.2.1-dev.1]: privacy patch (2026-11-25; development build, not production-signed)
+
+Android 7.2.1-dev.1 = versionCode **7020101**. SHELL_REV `ui72.3`. No database or data-format migration. Plan: `docs/ABHIFY_7_2_1_DEV1_PRIVACY_PATCH_PLAN.md`. Report: `docs/ABHIFY_7_2_1_DEV1_REPORT.md`.
+- **Online models get less (F1, F1b, Windows).** Checked by capturing the real requests the app sends to a provider.
+  - Questions about your projects, tasks or this computer are answered by the app itself ("…stay on this computer"); the provider isn't called.
+  - Your user name is no longer sent.
+  - After switching a chat from a local model to an online one, earlier answers from the local model (which can quote your memories or records) are left out, with a note under the answer.
+- **Projects with memory off (F2, Windows).** The AI can no longer save memories there; it is checked in the memory tool itself.
+- **Study personal context (F3, Windows and Android).** It follows the app-wide memory switch. When memory is off, nothing personal is used, and your ticked items are kept for later.
+- **Documents (F4).** They stay shared knowledge by design (your decision); a test documents the rule.
+- **Delete uploaded documents (F5, Windows).**
+  - Knowledge → Uploaded documents → Delete removes a document from search and answers at once and from every project.
+  - The file is kept in Trash for 7 days.
+  - Deletion works on this computer only.
+- **Microphone (Desktop and Web).**
+  - Very quiet microphones (such as laptop microphone arrays) are no longer cut off with "the microphone isn't picking up sound". Any real sound goes to Whisper.
+  - The speech threshold adapts to room noise.
+  - Only true silence counts as "no sound", and that message now names the likely causes: mute key or Windows microphone privacy.
+  - Test microphone shows the measured level.
+- **Android.**
+  - The unused "install other apps" permission is removed.
+  - New installs start with online chat history off; existing installs keep their setting.
+
+## [7.2.0-dev.2]: Study enhancements (2026-11-24; development build, not production-signed)
+
+Android 7.2.0-dev.2 = versionCode **7020002**. SHELL_REV `ui72.2`. Plan: `docs/ABHIFY_7_2_0_DEV2_PLAN.md`. Owner-approved: Mermaid (vendored, hash-pinned) and the daily reminder's notification permission (already declared; asked only when turned on). The Pyodide code runner was not approved.
+- **Mock interview:**
+  - Questions come from your interview plan's skills, alternating with behavioural themes.
+  - The question is read aloud with your single soft voice, and a per-question timer runs.
+  - You answer by typing or by voice. On Windows, speech is transcribed by Whisper on this computer. On the Web, the browser's own speech recognition is used, after a notice.
+  - Each answer is scored for relevance, depth and structure, quoting only your own words. Sessions are saved with a summary and a full transcript.
+- **Resume tailoring:**
+  - Your most relevant bullets are rewritten for a job.
+  - A rewrite that adds a number or a skill that isn't in your resume is left out, with the reason.
+  - The job's skills that your resume doesn't show are listed. Nothing is saved.
+- **Personal context (Personal AI Brain opt-in), per course:**
+  - Off by default. You tick goals, notes and projects for one course.
+  - Lessons say what they used. Chats are never used.
+- **Diagrams:** lessons can include a Mermaid diagram, drawn locally (strict security). The text is shown if drawing fails. Android shows the text.
+- **Progress report:** a printable page from recorded numbers only. Save it as PDF from the print dialog.
+- **Model quality check:** 3 short probes; the result is cached per model with honest advice. A model is never blocked.
+- **Course streak:** now counts any study activity on the course, not only focused time. No time is invented.
+- **Drive sync for Study:** the merge rules are prepared and tested in `study_sync.py`. They are not connected; the live sync protocol is unchanged.
+
+## [7.2.0-dev.1]: Study, for courses and interview preparation (2026-11-23; development build, not production-signed)
+
+Android 7.2.0-dev.1 = versionCode **7020001**. SHELL_REV `ui72.1`. No new dependencies and no new Android permissions. Spec: `docs/specs/ABHIFY_STUDY_V1.md`. Report: `docs/ABHIFY_7_2_0_DEV1_STUDY_REPORT.md`.
+- **Study tab** (Windows, Web and Android, each standalone): Today, Courses, Interview plan, STAR stories, plus Discover (unchanged).
+- **Courses:**
+  - 5 ready-made tracks (AI/ML, Software Engineering, Data Science, Cloud, Behavioural) and courses on any topic (AI-written outline).
+  - On first open each course asks for your goal (preset role or custom), your level (beginner, intermediate, advanced or custom) and minutes a day.
+  - Changing them later keeps every bit of progress. The earlier version is kept, and the course shows what changed. Finished lessons are never assigned again.
+- **Lessons** are written on demand for your goal and level, then saved: in simple words, going deeper, advanced, real-world example, code, common mistakes, exercise, interview questions and follow-ups. Each lesson has an AI tutor that sees only the lesson and your goal.
+- **Practice and revision:**
+  - Unlimited MCQs: the next 5 load as you scroll, with no repeats. Practice stops when nothing new comes back instead of generating forever.
+  - You can practise all modules, one module, or weak topics first.
+  - Flashcards and missed questions follow spaced repetition (1, 3, 7, 14, 30 days). A question missed twice comes back the same day.
+  - Daily and weekly revision.
+- **Course dashboard** from recorded data only:
+  - progress, lessons and modules done, real study time and score;
+  - exercises done, weak topics, items to revise and streak;
+  - next lesson, weekly milestones, capstone project and learning history.
+- **Interview plan:**
+  - Paste a job description to get its required and preferred skills and your gaps against your resume. The resume is used only if you paste it.
+  - You also get a day-by-day plan to your interview date.
+  - A new plan keeps the old one as a version, and moves skills you already have at Ready to the end.
+- **STAR stories:** a bank covering 8 behavioural themes, with AI coaching. The tighter version is dropped if it adds any number that isn't in your story.
+- **Data:**
+  - Windows saves to `data/study.json`: atomic writes, a `.bak` of the last good file, and an unreadable file kept as `study.corrupt-*.json` (never overwritten). It has a schema version and is included in backups.
+  - The Web app saves in this browser, with the same protections.
+  - Export and Import are on every platform. Nothing syncs between devices.
+- **Privacy:** Study uses local models only. A cloud chat model choice falls back to the local default, so lessons, answers, resumes and stories never go online. The Personal AI Brain link is deferred.
+- **Voice:** one soft, friendly voice (Android): calmer pace and a warmer tone. Other voices are offered only when the phone really has them.
+- **Robustness for small local models:**
+  - AI output length is capped;
+  - lesson headings in other styles are normalised;
+  - a lesson must contain its sections, with one automatic retry;
+  - list items written as one string are split.
+
+## [7.1.0-rc.2]: fixes from the owner's real-phone test (2026-11-23; release candidate, not production-signed)
+
+Android 7.1.0-rc.2 = versionCode **7010052**. SHELL_REV `ui71.4`. New Android library: Vosk 0.3.47 + JNA 5.13.0 (owner-approved; offline wake word). No new Android permissions. Report: `docs/ABHIFY_7_1_0_RC2_REPORT.md`.
+- **Android crash (found from the phone's crash report):** the citation checker used a regex flag, `(?U)`, that Android's ICU engine rejects; desktop Java (and so every unit test) accepts it. Every answer crashed about a second in, typed or spoken. Fixed with explicit Unicode classes. The answer's cleanup step can no longer throw, and a test forbids the flag.
+- **Android hardening:**
+  - the native engine's token callback can't leave a pending Java exception;
+  - native crashes, low-memory closes and ANRs are recorded from Android's exit records;
+  - a local voice-pipeline log (no personal text) is attached to crash reports.
+- **Weather and live questions (Android):** when current information can't be fetched (offline, no city), the app says so itself and the model isn't asked, so it can't invent today's weather.
+- **Android voices:** Male / Female / Assistant each use the voice you pick (with ▶ preview) when the phone's speech engine doesn't label voices by gender; before, all three fell back to the same default (female) voice. The engine name and voice count are shown. Test microphone.
+- **Android wake word:** offline Vosk engine, optional (41 MB, verified SHA-256, from alphacephei.com), with Install / Cancel / Test / Remove. Off by default, listens only while the app is open.
+- **Android chat:** the empty screen shows a heading ("Ask <name> anything") instead of a greeting that looked like an answer.
+- **Windows/Web microphone:**
+  - after an update the page reloads once, so the new code runs (before, the first visit still ran the old cached code);
+  - Whisper's invented words on silence ("Thank you.") are dropped;
+  - "The microphone isn't picking up sound (device)" when nothing is heard;
+  - Settings → Voice → Test microphone with a live meter;
+  - short phrases with "chat"/"assistant" are no longer swallowed as a command that answered "How can I help?".
+- **Windows:**
+  - online AI is offered in the model picker ("+ Add Gemini, Groq or OpenRouter");
+  - Model Library: "Available to download", 11 more models read from the Ollama registry (sizes, digests, licences), offered but never auto-chosen;
+  - opens in its own app window (Edge app mode; tray option to go back to a browser tab);
+  - the installer has an update mode ("Update Abhify.AI <old> → <new>", skips the setup pages, keeps all data).
+
+## [7.1.0-rc.1]: voice and microphone stabilization (2026-11-23; release candidate, not production-signed)
+
+Android 7.1.0-rc.1 = versionCode **7010051** (new stage rule: dev.N = N, rc.N = 50+N, final = 99, so it installs over 7.1.0-dev.2). SHELL_REV `ui71.3`. No new Android permissions. Windows database: schema v7 adds three empty bookkeeping tables for the 7.2 Data & Sync work (additive; a backup is made first). That work is included but its entry is hidden in this release (owner decision). New Python dependency `cryptography` (owner-approved, used by the hidden 7.2 work). Report: `docs/ABHIFY_7_1_0_RC1_VOICE_REPORT.md`.
+- **Windows desktop:** the large orb in the middle of Home and the Assistant is now a real "tap to talk" button. Before, it looked like the microphone but did nothing. Speech recognition on this computer (Whisper) no longer depends on which AI answers: with "On-device AI" chosen, the microphone used to say the computer wasn't reachable. Two quick clicks no longer open two microphone sessions.
+- **Standalone Web:** the microphone works without a computer. It uses the browser's own recognition after a one-time notice that the browser's maker processes the audio online. Before, it always asked for a computer that a standalone Web app never has. Browsers without recognition (Firefox) get a clear message, and typing still works. Microphone errors no longer give Windows-specific advice on phones.
+- **Android crash fixes:**
+  - Recognition can't crash the app: a stale result from an earlier session is ignored, and every recogniser error has a plain message. If the on-device recogniser fails, Android's standard recogniser is tried once.
+  - If no AI is set up, the voice companion says so, puts your words in the message box and stops listening, instead of looping.
+  - Any failure while preparing an answer becomes a message, never an uncaught exception.
+  - Low-memory phones no longer load the AI model while the microphone listens.
+  - Leaving the app releases the microphone.
+  - Retry and Dismiss buttons for voice errors.
+  - A local crash report (Settings → Voice & Conversation) for diagnosing future crashes on the phone; it is never uploaded.
+- **Android voice:** exactly three output voices, Male, Female and Assistant. They are resolved against the voices the phone's speech engine really has installed. When there is no match, the app says so and uses the default voice. Preview and Stop preview. Older saved styles map to the nearest of the three.
+- **Android wake word (optional, off by default):**
+  - "Listen for <your assistant's name> while Abhify is open", using the name from Assistant identity, any script, with small misrecognitions tolerated. The name must open the phrase, so ordinary speech doesn't trigger it.
+  - Only on phones with on-device recognition, so audio never leaves the phone. Only while the app is open on screen; a pill on every screen shows it, with Stop.
+  - Not available: background or screen-off listening (it would need a new permission and a permanent notification).
+- **Tests:** backend `test_voice_711.py`; Android `V711VoiceTest`; browser checks with a simulated microphone (desktop end to end, Web consent flow). No physical phone or laptop microphone was tested.
+
+## [7.1.0-dev.2]: assistant identity, voice styles, Windows wake phrase, faster answers, cross-origin security (2026-11-20; development build)
+
+Database schema: unchanged (v6; new settings are key/value preferences). No new dependencies. No new Android permissions. SHELL_REV `ui71.2`. Android 7.1.0-dev.2 = versionCode **7010002**. Reports: `docs/ABHIFY_7_1_0_DEV2_REPORT.md`, `docs/ABHIFY_7_1_0_DEV1_STABILIZATION.md`.
+- **Independent platforms:** Windows, Android and the Web app each keep their own name, voice and settings; the standalone Web build (`abhify-platform=web`) never contacts a backend and runs the AI in the browser.
+- **Assistant identity** (`backend/identity.py`, `chat/Identity.kt`, web `validateAssistantName`/`identityAnswer`): suggested names or a custom one (validated, any script), used in prompts, the UI and voice; "What is your name?" / "Who are you?" answered by the app with the current name. Shared cases `backend/tests/data/identity_cases.json` on all three.
+- **Voice & speech:** styles Female / Male / AI Robot / Assistant / Friendly / Deep / Soft / Energetic / Custom mapped onto the real installed voices (gender only from the voice's own name or engine marks; Robot is a labelled pitch effect), language, voice, speed 0.75–1.5×, pitch and volume (Custom), preview / stop / restore; desktop profile stored by the backend, Web in the browser, Android in its own settings (pitch added).
+- **Wake phrase (Windows):** "Hey <name>" with the Windows built-in offline recognizer (`backend/wakeword.py`; no dependency, no download, no audio leaves the PC): off by default, explicit confirmation, listens only while an Abhify.AI window is visible, pauses after each activation, paused again after an update, "Test my wake phrase". Measured on synthetic speech: 6/6 detected, 0/24 false activations for "Hey/Hello Nova"; per-name results (some names, e.g. Abhify, Abhi, Aira, weren't recognised). Web: honestly unsupported (no offline engine in browsers). Android: not implemented (needs an approved engine/permission).
+- **Performance:** the agent's tools are offered only when a message asks for one (memory, documents, the web); general questions skip the tool round. Warm first token 5.5 s → 0.95 s (llama3.2, measured).
+- **Hardware report:** CUDA version supported by the NVIDIA driver and the Vulkan runtime.
+- **Security (from the stabilization pass):** CORS no longer trusts `*.netlify.app` / `*.vercel.app`; cross-site requests to the API are refused (CSRF); a loopback connection counts as this computer only with a loopback Host (DNS rebinding).
+
+## [7.1.0-dev.1]: voice, cloud providers on Windows/Web, branding, real-time honesty (2026-11-20; development build, not released)
+
+Database schema: unchanged (v6). No new dependencies. No new Android permissions. SHELL_REV `ui71.1`. Android 7.1.0-dev.1 = versionCode **7010001** (source; only place detection changed). Report: `docs/ABHIFY_7_1_0_DEV1_REPORT.md`.
+- **Voice (Windows desktop / web):** speech recognition runs on this computer by default (Whisper); the browser's recognition (audio sent to Google/Microsoft) only when chosen. The Whisper model is never downloaded silently any more (before: a hidden ~145 MB download on first use, or a raw error offline): `GET /voice/status`, `POST /voice/model/download` (confirm, this computer only), a clear 409 when missing. Listening: visible state with a live level meter, stops on silence after speech (also when you start talking at once), at 60 s (was 15 s), when the window is hidden or the microphone disappears; Cancel discards. The transcript goes into the message box to check, edit, send or discard; Hands-free conversation (off by default) sends it and listens again after the answer is read. Microphone choice (falls back to the default if unplugged), clear messages for blocked / missing / busy microphones. Read aloud: per-answer Listen, a Stop chip, a choice of system voice (local voices first), "Read answers aloud: spoken questions / every answer / never".
+- **Cloud AI providers on Windows/Web** (`backend/providers.py`): Google Gemini, Groq, OpenRouter (same endpoints and free-model rules as Android) and a custom OpenAI-compatible endpoint (https, or a server on this computer; private/link-local addresses refused, re-checked before each request, no redirects). Keys tested with the provider before saving, encrypted with Windows DPAPI in `<data>/secrets/` (never in backups, never returned, only masked). Saved providers are checked at start. Cloud is used only for a model picked in the chat (one-time consent per provider) or the opt-in Auto router (coding / complex questions; off by default). No fallback between providers. Cloud chats never receive memories or documents; project chats stay local. Every answer is tagged provider · model · cloud. Optional, skippable setup step; More → AI & System → AI providers.
+- **Branding:** the header and sidebar show the official Abhify.AI mark again (`brand/logo-mark-96.png`) and the full name "Abhify.AI"; 7.0 had replaced it with a drawn orbit symbol.
+- **Real-time:** "weather in my location / here / near me" no longer geocodes the word "location" (it answered for a US town and saved it as your city); it uses the saved city or asks (same on Android). A missing reading (weather, exchange rate, system status) gets the app's own answer instead of a remembered number. Calculations and code questions are answered without a web search tool.
+
+## [7.0.2]: hardware-aware local model setup (2026-11-19; packages in `release/Abhify.AI-7.0.2/`)
+
+Database schema: unchanged (v6). Android 7.0.2 = versionCode **7000299** (development certificate, updates 7.0.1/7.0.0). SHELL_REV `ui70.6`. No new dependencies, no new Android permissions.
+- **Windows/desktop:** `backend/hardware_advisor.py` + `backend/model_catalog.json` (sizes, digests, quantization and licences read from the Ollama registry). `GET /setup/advice` reports this computer (each fact labelled verified / estimate / unavailable: Windows version from the build, CPU name from the registry, RAM, NVIDIA GPU + driver via nvidia-smi, other adapters via WMI, disk, Ollama) and recommends one model: a model that is comfortable (GPU <= 70 % of VRAM; CPU <= 50 % of RAM left after a max(4 GB, 30 %) reserve, up to the 7-8B tier), preferring the GPU and an already-installed model (no duplicate download), never the largest that merely fits. `POST /setup/use-model` runs a real inference first and only then makes the model the default. The setup wizard and Model Library show it; downloads still need confirmation (progress, cancel, resume).
+- **Android:** the recommendation is now stable, not the largest that fits (the best compatible model leaving 3.5 GB for Android and apps, within the memory free now, and not while the phone overheats); low battery is a warning; the device step shows phone, SoC, CPU features, Vulkan, battery and the execution mode (CPU until the GPU passes a per-model test). Download, verification and the self-test before activation are unchanged.
+- **Web:** the browser capability report (secure context, WebAssembly, WebGPU adapter, buffer limit, logical processors, memory estimate, storage quota, isolation), each labelled; a model is offered only when browser storage holds it; a real test answer before the browser AI is marked ready.
+- **Citations** (from 7.0.2-dev.1): remarks about source ages checked against real publication times; the publisher/date attribution after a marker no longer counts as a claim (23 shared cases).
+
+## [7.0.2-dev.1]: source-age checks (2026-11-19; source, not built)
+
+Database schema: unchanged (v6). Android 7.0.2 (7000201) in source.
+- A remark that names sources ("the information on [W1] and [W2] is from 1 and 2 days ago") is checked against the sources' real publication times (±1 unit) instead of being marked unsupported; a wrong age is still unsupported. Chained references ("on [W1] and [W2]") recognised. Seen live with llama3.2 after the 7.0.1 build; 21 shared cases.
+
+## [7.0.1]: citation integrity, internal release (2026-11-19; packages in `release/Abhify.AI-7.0.1/`)
+
+Android 7.0.1 = versionCode **7000199** (debug certificate, updates 7.0.0). SHELL_REV `ui70.5`. Also in 7.0.1: a marker used as the NAME of a source ("the information on [W1] is from…", "see [W2]") is kept as a reference instead of being marked unsupported (live false positive), while "According to [W1], …", "In [W1], X…" and any sentence whose numbers aren't in the source stay fully checked (18 shared cases).
+
+### 7.0.1-dev.1
+
+Database schema: unchanged (**v6**). No new dependencies. SHELL_REV `ui70.4`. Report: `docs/ABHIFY_7_0_0_CITATION_INTEGRITY.md`.
+- **`backend/citations.py`** (and `Citations` in Android `intel/Realtime.kt`, same rules): after generation, an answer keeps only citations backed by its retrieved sources. Ids not in the source registry are removed; a sentence whose cited source lacks its facts (numbers must match) is moved to the one other source that has them (small local models misnumber facts), else marked `[unsupported]`; links that are not one of the sources are removed. Immutable registry with a fingerprint; `live.integrity` reports what changed and the page shows it. Applied before the answer is shown or saved.
+- **Sources:** links into private/loopback/`.local` hosts are never shown; a publication time after the retrieval time becomes "date not given".
+- **Voice:** `[unsupported]` is never read aloud (web and Android).
+- **Tests:** shared cases `backend/tests/data/citation_cases.json` (11) run on both platforms, plus fuzzing (no marker outside the registry survives).
+
+## [7.0.0]: Abhify.AI 7.0 Synapse release (2026-11-19)
+
+Everything in 7.0.0-dev.1 and 7.0.0-dev.2 below, packaged for Windows (installer and portable ZIP), Android (7.0.0, versionCode 7000099) and web (backend package, Docker, configuration template) in `release/Abhify.AI-7.0.0/` (kept out of Git). Database schema **v6**. SHELL_REV `ui70.3`. Also: the Workspace items fit the icon rail at 600–1023 px; the Model Library shows badges in one row.
+
+## [7.0.0-dev.2]: in-chat model switching and Model Library (2026-11-19; source)
+
+Database schema: **v6** (additive: `conversations.model`, `messages.model`; `migrate()` backs the database up first). No new dependencies.
+- **Root cause fixed:** typing "switch the model to llama3.2" went to the current model, which replied "Sure, I'll switch the model to Llama3.2" while the response's own `model` field still said qwen2.5. Model commands ("switch/change the model to …", "use the … model", "set the default model to …", "which model are you?") are now recognised by the app (`backend/model_switch.py`) and carried out for real, checked against Ollama's installed chat models; a failure (not installed, ambiguous, Ollama down) says why and keeps the previous model. Loose phrasing ("switch to X") only counts when X is an installed model.
+- **One source of truth:** each conversation's model is stored on the backend (`conversations.model`). The model for a turn is the one sent by the picker, else the conversation's, else the global default; switching conversations restores it; new chats inherit the default. `PUT /models/conversation/{id}` (picker). A stored model that was removed falls back to the default with a notice.
+- **Proof of the serving model:** answers carry `served_by`, the model name Ollama returns in its own response metadata, stored per message (`messages.model`) and shown under each answer. Live check: `tests/test_model_switch_live.py` (opt-in `ABHIFY_LIVE_OLLAMA=1`) passed against the local Ollama (llama3.2 ⇄ qwen2.5).
+- **Model picker:** installed status, in memory (`/api/ps`), Ollama's own capabilities (`/api/show`, never assumed), parameter size, quantization, disk size, a "good for" note for known families, Active/Default badges; "Model switched to …" confirmation; errors keep the previous model.
+- **Model Library** (More → AI Models, sidebar → Models): installed models, Make default, Remove (confirmation; the default and the embedding model are refused), Download a named model only after confirmation with live progress and Cancel (`POST /setup/models/pull/cancel`; Ollama resumes later), Refresh.
+- **Sidebar:** a Workspace group (Tasks, Projects, Knowledge, Models, Tools, System) under the five destinations; phones keep the five-item bar.
+- **Version:** desktop/web `7.0.0-dev.2` (SHELL_REV `ui70.2`). `7.0.0-dev.1`'s installer stays as built.
+
+## [7.0.0-dev.1]: Synapse redesign, web and desktop (2026-11-18; installer built: `dist/windows/7.0.0-dev.1/`)
+
+Database schema: unchanged (**v5**). No new dependencies, no API change. SHELL_REV `ui70.1`. Report: `docs/ABHIFY_7_0_WEB_DESKTOP_REDESIGN.md`; reference mockup `docs/design/concepts/option-a-synapse.html`.
+- **Look:** the approved "Synapse" identity. Obsidian background (#06070D) with soft violet and cyan glows; glass cards with a violet hairline, 16 px radius, an inset highlight and a soft shadow; violet (#9D7BFF, dark text on it) as the primary colour and electric cyan (#3DE0FF) for live data. A matching light palette (#F6F5FF background, #5B3FE0 violet); text contrast is at least 4.5:1 in both themes, and a test checks it.
+- **Type:** Space Grotesk (headings, big numbers, wordmark), Inter (body) and JetBrains Mono (times, sources, model names, eyebrow labels). The three variable fonts are bundled in `frontend/fonts/` with their SIL OFL licences and precached by the service worker, so the shell still renders offline. No CDN.
+- **Neural core:** an SVG sphere with two orbiting rings (18 s / 11 s) and a breathing pulse replaces the old ring orb in the brand mark, the Home hero, the briefing card, the assistant welcome, News and Talk (voice overlay). Its states are idle, thinking (faster), listening (cyan) and unavailable (grey and still). It stays still with reduced motion.
+- **Navigation:** the same five destinations, with line icons. The sidebar shows the core, the "Abhify" wordmark and "AI Assistant" (no wrapping); the active item is a violet pill with an inset ring. A new **Active model** card shows the model that answers next and the real connection state (for example "Local · ready"). Collapse still works; phones keep the bottom bar with the active item in a violet pill.
+- **Components:** primary, glass-outline secondary and ghost buttons; `.qa` quick actions; mono source chips with freshness colours (live cyan, recent violet, cached amber, unavailable grey); violet→cyan progress bars; restyled inputs, dialogs, toasts, skeletons, and empty and error states; a subtle message-appear animation and a card hover lift (existing motion tokens).
+- **Version:** desktop/web `7.0.0-dev.1` (`backend/version.py`, service-worker cache `abhify-v7.0.0-dev.1+ui70.1`).
+- **Tests:** 550 passed, 2 skipped (was 541 passed, 2 skipped; 9 new in `test_web_desktop_70.py`; `test_web_desktop_61.py` now pins `ui70.1` / `abhify-v7.0.0-dev.1`).
+
 ## [2.0.0-dev.8]: premium redesign and chat model choice, in progress (not built)
 
 Database schema: unchanged (**v5**). No new dependencies. Design: `docs/PREMIUM_REDESIGN_SPEC.md`.

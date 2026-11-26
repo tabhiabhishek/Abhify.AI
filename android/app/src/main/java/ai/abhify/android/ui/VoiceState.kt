@@ -48,6 +48,14 @@ class VoiceState(private val vm: AppViewModel) {
     private var turnSeq = 0
     /** 5.6: how many sentences of the current answer were handed to speech (shown as "speaking" progress). */
     val spokenParts = androidx.compose.runtime.mutableIntStateOf(0)
+    /** 7.1.1: set when the next end of speech must not start listening again. */
+    @Volatile private var noRelisten = false
+    /** 7.1.1: a failure in any voice task is shown in the panel (and the panel stays usable); it never closes the app. */
+    private val guard = kotlinx.coroutines.CoroutineExceptionHandler { _, e ->
+        android.util.Log.w("AbhifyVoice", "voice task failed: ${e.javaClass.simpleName}")
+        processing.value = false
+        vm.voiceError.value = "That didn't work (${e.javaClass.simpleName}). Nothing was changed; tap the microphone to try again."
+    }
 
     fun start() {
         if (!vm.voiceSettings.value.enabled) { vm.voiceError.value = "The voice assistant is off in Settings → Voice & Conversation."; return }
@@ -58,9 +66,18 @@ class VoiceState(private val vm: AppViewModel) {
         stream?.cancel(); stream = null
         active.value = false; awaitingAnswer = false; pending.value = null
         vm.cancelVoice(); vm.stopSpeaking(); level.floatValue = 0f
+        vm.resumeWakeSoon()                                                 // 7.1.1: back to listening for the name, if that's on
+    }
+
+    /** 7.1.1: the user called the assistant by name; what followed the name (if anything) is the first turn. */
+    fun startFromWake(command: String) {
+        if (!vm.voiceSettings.value.enabled) return
+        active.value = true; actionReply.value = null
+        if (command.isBlank()) listen() else handle(command)
     }
 
     fun listen() {
+        noRelisten = false
         if (!active.value || vm.listening.value) return
         val s = vm.voiceSettings.value
         vm.startVoice(languageTag = s.recognitionTag(java.util.Locale.getDefault().toLanguageTag())) { text -> handle(text) }
@@ -83,8 +100,8 @@ class VoiceState(private val vm: AppViewModel) {
         vm.stopSpeaking()
         if (wasGenerating) vm.stop()
         interrupted.value = true
-        vm.viewModelScope.launch { delay(1200); interrupted.value = false }
-        if (!vm.listening.value) vm.viewModelScope.launch { delay(250); listen() }
+        vm.viewModelScope.launch(guard) { delay(1200); interrupted.value = false }
+        if (!vm.listening.value) vm.viewModelScope.launch(guard) { delay(250); listen() }
     }
 
     /** 5.6: called with the answer so far while it streams; completed sentences are spoken in order. */
@@ -97,8 +114,9 @@ class VoiceState(private val vm: AppViewModel) {
 
     /** Called when speech ends: the next turn starts automatically in a conversation (natural turn-taking). */
     fun onSpeechFinished() {
+        if (noRelisten) { noRelisten = false; return }                     // 7.1.1: after "I can't answer yet" the microphone stays off
         if (active.value && vm.voiceSettings.value.autoListen && !vm.generating.value && pending.value == null && !vm.speechPaused.value)
-            vm.viewModelScope.launch { delay(350); if (active.value && !vm.speaking.value && !vm.generating.value && !vm.speechPaused.value) listen() }   // a pause isn't the end
+            vm.viewModelScope.launch(guard) { delay(350); if (active.value && !vm.speaking.value && !vm.generating.value && !vm.speechPaused.value) listen() }   // a pause isn't the end
     }
 
     /** Called when an answer this loop asked for has finished (spoken next, or the next turn if voice is off). */
@@ -113,10 +131,23 @@ class VoiceState(private val vm: AppViewModel) {
         if (tail.isNotEmpty()) vm.speakAppend(tail) else if (!vm.speaking.value) onSpeechFinished()
     }
 
-    private fun handle(text: String) {
+    private fun handle(text: String) = try { handleUnsafe(text) } catch (e: Exception) {
+        processing.value = false
+        vm.pendingInput.value = text
+        vm.voiceError.value = "Something went wrong with \"${text.take(80)}\" (${e.javaClass.simpleName}). Your words are in the message box; nothing was changed."
+    }
+
+    private fun handleUnsafe(text: String) {
         processing.value = true
         val m = AppActions.match(text)
         if (m == null) {
+            // 7.1.1: no AI set up (no model, no provider, offline…): say so, keep the words for later, don't loop the microphone
+            vm.assistantProblem()?.let { why ->
+                processing.value = false; awaitingAnswer = false; noRelisten = true
+                vm.pendingInput.value = text
+                say("I heard: \"${text.take(120)}\". I can't answer yet: $why Your words are in the message box, so you can send them once that's set up.", listenAfter = false)
+                return
+            }
             actionReply.value = null; awaitingAnswer = true
             stream?.cancel(); stream = ai.abhify.android.voice.SpeechStream(++turnSeq); spokenParts.intValue = 0
             vm.tab.value = AppViewModel.Tab.CHAT; vm.home()
@@ -144,7 +175,7 @@ class VoiceState(private val vm: AppViewModel) {
     fun confirm() {
         val m = pending.value ?: return
         pending.value = null
-        vm.viewModelScope.launch {
+        vm.viewModelScope.launch(guard) {
             val r = withContext(Dispatchers.IO) { runCatching {
                 val ws = vm.chatWorkspace.value ?: g.db.workspaces().firstOrNull() ?: ai.abhify.android.chat.Workspace(g.db.addWorkspace("Inbox", "project"), "Inbox", "project")
                 when (m.spec.id) {
@@ -155,7 +186,7 @@ class VoiceState(private val vm: AppViewModel) {
                 }
             } }
             r.onSuccess { (msg, label, undoIt) ->
-                undo.value = label to { vm.viewModelScope.launch { withContext(Dispatchers.IO) { undoIt() }; undo.value = null; say("Undone.") } }
+                undo.value = label to { vm.viewModelScope.launch(guard) { withContext(Dispatchers.IO) { undoIt() }; undo.value = null; say("Undone.") } }
                 vm.studio.loadWork(); say(msg)
             }.onFailure { say("That didn't work: ${it.message ?: "unknown error"}. Nothing was changed.") }
         }
@@ -182,7 +213,7 @@ class VoiceState(private val vm: AppViewModel) {
             "open_memory" -> { vm.go(AppViewModel.Route.MEMORIES); say("Opened Personal memory.") }
             "open_models" -> { vm.go(AppViewModel.Route.MODELS); say("Opened AI models.") }
             "new_chat" -> { vm.newChat(); say("Started a new chat. What would you like to talk about?") }
-            "open_last_conversation" -> vm.viewModelScope.launch {
+            "open_last_conversation" -> vm.viewModelScope.launch(guard) {
                 val c = withContext(Dispatchers.IO) { g.db.conversationPage(false, null, null, 1, 0).firstOrNull() }
                 if (c == null) say("You don't have any saved conversations yet.") else { vm.loadConversation(c.id); go(AppViewModel.Tab.CHAT); say("Opened \"${c.title}\".") }
             }
@@ -192,27 +223,27 @@ class VoiceState(private val vm: AppViewModel) {
                 say("${r.route}. " + (if (model != null) "The phone model is $model." else "No AI model is downloaded on this phone.")) }
             "screen_help" -> say(if (!vm.voiceSettings.value.screenHelp) "Screen help is turned off in Voice and Conversation settings."
                 else screenHelp())
-            "project_status" -> vm.viewModelScope.launch { say(withContext(Dispatchers.IO) { projectStatus() }) }
-            "recommendations" -> { vm.companion.load(); vm.viewModelScope.launch { delay(600); say(recommendations()) } }
-            "study_progress" -> vm.viewModelScope.launch { say(withContext(Dispatchers.IO) { studyProgress() }) }
-            "plan_day" -> vm.viewModelScope.launch { val p = vm.brain.planNow()
+            "project_status" -> vm.viewModelScope.launch(guard) { say(withContext(Dispatchers.IO) { projectStatus() }) }
+            "recommendations" -> { vm.companion.load(); vm.viewModelScope.launch(guard) { delay(600); say(recommendations()) } }
+            "study_progress" -> vm.viewModelScope.launch(guard) { say(withContext(Dispatchers.IO) { studyProgress() }) }
+            "plan_day" -> vm.viewModelScope.launch(guard) { val p = vm.brain.planNow()
                 say(if (p == null || p.entries.isEmpty()) "There are no open to-dos or recorded next actions, so there's nothing to plan. You could add to-dos to a project."
                     else "Here's a plan for about ${p.minutesPlanned} minutes. " + p.entries.take(4).joinToString(" ") { "${it.title}, because: ${it.reason.lowercase()}." } +
                         (if (p.blocked.isNotEmpty()) " ${p.blocked.size} to-do(s) are marked blocked." else "")) }
             "briefing" -> vm.brain.makeBriefing(ai.abhify.android.intel.Briefing.Kind.ON_DEMAND) { b -> vm.openBriefing(); say(b.spoken()) }
-            "weekly_review" -> vm.viewModelScope.launch { val w = vm.brain.weekNow()
+            "weekly_review" -> vm.viewModelScope.launch(guard) { val w = vm.brain.weekNow()
                 say(if (w == null) "I couldn't read your to-dos." else (if (w.completed.isEmpty()) "No to-dos were marked done in the last 7 days." else
                     "This week you completed ${w.completed.size}: ${w.completed.take(3).joinToString()}.") + " ${w.stillOpen} are still open" +
                     (if (w.overdue > 0) ", ${w.overdue} past their due date." else ".")) }
-            "review_project" -> vm.viewModelScope.launch {
+            "review_project" -> vm.viewModelScope.launch(guard) {
                 val ws = withContext(Dispatchers.IO) { g.db.workspaces().filter { !vm.projects.isArchived(it.id) }.maxByOrNull { vm.projects.meta(it.id).status.updatedAt } }
                 if (ws == null) say("You don't have a project to review yet.")
                 else { vm.agent.reviewProject(ws.id); say("I'm reviewing \"${ws.name}\". I'll show the unfinished work I find; nothing is created until you approve it.") } }
-            "project_summary" -> vm.viewModelScope.launch {
+            "project_summary" -> vm.viewModelScope.launch(guard) {
                 val ws = withContext(Dispatchers.IO) { g.db.workspaces().filter { !vm.projects.isArchived(it.id) }.maxByOrNull { vm.projects.meta(it.id).status.updatedAt } }
                 if (ws == null) say("You don't have a project yet.")
                 else { vm.agent.run(ws.id, AgentState.Workflow.STATUS); say("Here's the summary of \"${ws.name}\" from its saved records, with blockers and possible duplicates on screen.") } }
-            "ask_knowledge" -> vm.viewModelScope.launch { val r = vm.brain.resolve(m.arg.orEmpty())
+            "ask_knowledge" -> vm.viewModelScope.launch(guard) { val r = vm.brain.resolve(m.arg.orEmpty())
                 say(if (r.items.isEmpty()) "I found nothing about ${m.arg} in your records." else "From your records about ${m.arg}: " +
                     r.items.take(3).joinToString(" ") { "${it.record.source.label} \"${it.record.title}\", ${it.freshness.label}." }) }
             else -> say("I can't do that yet.")

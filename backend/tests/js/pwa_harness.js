@@ -62,7 +62,8 @@ out.invite_only_unpaired = status({}, false, H({ remote: true, authorized: false
 // dev.8 model chip: what the chat shows for each model-list state (pure function, real code)
 {
   const mctx = { state: null }; vm.createContext(mctx);
-  vm.runInContext(extract('modelChipView'), mctx);
+  vm.runInContext([extract('cloudModel'), extract('modelDisplay'), extract('modelChipView'),
+    "var PROV_TITLE = { custom: 'Custom endpoint', groq: 'Groq' };"].join('\n'), mctx);   // 7.1: cloud model ids
   const M = (o) => ({ list: [], def: null, ollama: null, error: null, locked: false, loaded: false, loading: false, forbidden: false, ...o });
   const L = [{ name: 'qwen2.5:latest', default: true }, { name: 'qwen2.5:1.5b', default: false }];
   const view = (models, chatModel = null, engine = 'pc', device = {}) => mctx.modelChipView({ engine, device, models: M(models), chatModel });

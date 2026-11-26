@@ -207,6 +207,66 @@ def add_upload(data: bytes, filename: str) -> dict:
     return {"filename": name, "chunks": n, "duplicate": False}
 
 
+TRASH_DAYS = 7
+
+
+def trash_dir():
+    return lfs.documents_dir() / "trash"
+
+
+def delete_upload(name: str) -> dict:
+    """7.2.1: deletes a document added through the app. Its chunks leave the search index at once, its record and every
+    project reference are removed, and the original file is moved to <data>/documents/trash/<date>/ for TRASH_DAYS days
+    (then purged at startup). Nothing about the content is logged. Raises KeyError when no such upload exists."""
+    import shutil
+    import projects
+    doc = db.get_document("upload", name)
+    if not doc:
+        raise KeyError(name)
+    store = get_vectorstore()
+    with INDEX_LOCK:
+        ids = store._collection.get(where={"$and": [{"path_key": name}, {"origin": "upload"}]}, include=[])["ids"]
+        if ids:
+            store._collection.delete(ids=ids)
+    db.delete_document("upload", name)
+    moved = 0
+    sha = (doc.get("sha256") or "")[:12]
+    original = lfs.uploads_dir() / f"{sha}-{name}"
+    if sha and original.exists():
+        day = trash_dir() / time.strftime("%Y-%m-%d")
+        day.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(original), str(day / original.name))
+        moved = 1
+    unlinked = 0
+    for p in projects.list_projects(include_archived=True):
+        if name in (p.get("documents") or []):
+            projects.remove_document(p["id"], name)
+            unlinked += 1
+    log.info("Deleted an upload (%d chunks)", len(ids))
+    return {"deleted": name, "chunks_removed": len(ids), "file_in_trash": bool(moved), "projects_updated": unlinked,
+            "trash_days": TRASH_DAYS}
+
+
+def purge_trash(now: float | None = None) -> int:
+    """Removes trash day-folders older than TRASH_DAYS (run at startup). Returns the number of files removed."""
+    import shutil
+    from datetime import datetime
+    root = trash_dir()
+    if not root.exists():
+        return 0
+    now = now or time.time()
+    removed = 0
+    for day in root.iterdir():
+        try:
+            age = now - datetime.strptime(day.name, "%Y-%m-%d").timestamp()
+        except ValueError:
+            continue
+        if day.is_dir() and age > TRASH_DAYS * 86400:
+            removed += sum(1 for f in day.rglob("*") if f.is_file())
+            shutil.rmtree(day, ignore_errors=True)
+    return removed
+
+
 # --------------------------------------------------------------------------- read path
 def search(query: str, k: int = 4) -> list[Document]:
     """Similarity search. [] when empty, or when the index needs a rebuild (never mix models)."""

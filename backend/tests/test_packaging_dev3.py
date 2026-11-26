@@ -135,9 +135,10 @@ def test_version_is_consistent():
 
 
 def test_readme_documents_every_api_route():
-    """README maintenance guard: every real route must appear in the README's API table."""
+    """Docs maintenance guard: every real route must appear in the API table of the canonical
+    documentation (moved there from the README in 7.2.1 so the README can stay concise)."""
     import main
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme = (ROOT / "docs" / "ABHIFY_AI_COMPLETE_DOCUMENTATION.md").read_text(encoding="utf-8")
     missing = []
     for r in main.app.routes:
         if not hasattr(r, "methods") or r.path.startswith(("/docs", "/redoc", "/openapi")):
@@ -147,7 +148,7 @@ def test_readme_documents_every_api_route():
         if f"`{path}" not in readme and f" {path}`" not in readme and f"{path}`" not in readme \
                 and not re.search(re.escape(parent) + r"/\{[^}]*\b" + re.escape(last) + r"\b", readme):
             missing.append(r.path)
-    assert not missing, f"routes not documented in README.md: {missing}"
+    assert not missing, f"routes not documented in docs/ABHIFY_AI_COMPLETE_DOCUMENTATION.md: {missing}"
 
 
 def test_dev2_installer_untouched_if_present():

@@ -135,11 +135,13 @@ def test_whisper_falls_back_to_cpu(monkeypatch):
     calls = []
 
     class FakeModel:
-        def __init__(self, name, device, compute_type):
+        def __init__(self, name, device, compute_type, local_files_only=False):
+            assert local_files_only                       # 7.1: never a silent download
             calls.append(device)
             if device == "cuda":
                 raise RuntimeError("CUDA driver not found")
     monkeypatch.setitem(sys.modules, "faster_whisper", types.SimpleNamespace(WhisperModel=FakeModel))
     monkeypatch.setattr(transcribe, "_model", None)
+    monkeypatch.setattr(transcribe, "model_installed", lambda name=None: True)
     assert transcribe._load() and calls == ["cuda", "cpu"]
     monkeypatch.setattr(transcribe, "_model", None)

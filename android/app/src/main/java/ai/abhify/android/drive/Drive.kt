@@ -152,6 +152,9 @@ class DriveApi(private val http: DriveTransport, private val token: () -> String
      */
     fun upload(sub: String, name: String, mime: String, bytes: ByteArray, replaceId: String? = null, keepBoth: Boolean = false,
                session: String? = null, onSession: (String?) -> Unit = {}, progress: (Long, Long) -> Unit = { _, _ -> }): Upload {
+        // 7.2: nothing unencrypted is ever written into the Backups folder (checked before any network call)
+        if (canonical(sub) == BACKUPS && !ai.abhify.android.backup.BackupPolicy.isEncrypted(bytes))
+            throw DriveException(ai.abhify.android.backup.BackupPolicy.PLAINTEXT_REFUSED)
         val parent = folder(sub)
         val md5 = md5(bytes)
         val siblings = list(parent)

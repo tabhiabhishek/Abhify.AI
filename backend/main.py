@@ -8,6 +8,10 @@ Learning features
   POST /generate-question         AI-generated interview questions
   POST /generate-mcq              AI-generated multiple-choice questions
   POST /transcribe                Faster-Whisper transcription
+  GET  /providers                 7.1: cloud AI providers (Gemini, Groq, OpenRouter, custom): state, masked key, models
+  PUT  /providers/{id}/key        7.1: test and save a key (DPAPI-encrypted); POST /providers/{id}/test; PUT/DELETE /providers/{id}
+  GET  /voice/status              7.1: local speech engine status (model installed, download size/progress)
+  POST /voice/model/download      7.1: download the speech model, only with confirm (this computer only)
   POST /voice                     audio -> transcription -> agent answer
   POST /knowledge/upload          add a PDF / .txt / .md to the knowledge base (de-duplicated)
   GET  /knowledge                 documents in the knowledge base
@@ -72,7 +76,7 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request,
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 import companion
 import database as db
@@ -83,6 +87,7 @@ import local_file_service as lfs
 import log_redaction
 import membership
 import memory_service as mem
+import model_switch
 import career_mcq
 import news_center
 import projects
@@ -134,6 +139,10 @@ SHUTDOWN_HOOK: dict = {}       # the desktop launcher registers a callable here
 async def lifespan(_: FastAPI):
     log_redaction.install()                 # again: uvicorn may have added handlers after import
     STARTUP.update(prepare_storage())
+    try:
+        knowledge.purge_trash()                     # 7.2.1: deleted uploads are kept 7 days, then removed
+    except Exception as e:                          # noqa: BLE001 - never blocks startup
+        log.warning("trash purge skipped: %s", type(e).__name__)
     log.info("%s %s ready: data=%s schema=v%s models=%s", APP_NAME, __version__, STARTUP["data_root"],
              STARTUP["schema"]["to"], system.active_models())
     if lfs.load_settings()["knowledge"].get("watcher_enabled"):
@@ -144,7 +153,12 @@ async def lifespan(_: FastAPI):
     STARTUP["update_result"] = updates.record_startup()       # did an update we started finish?
     stop_updates = asyncio.Event()
     update_task = asyncio.create_task(updates.periodic(stop_updates))   # only checks if the owner enabled it
+    import providers
+    provider_check = asyncio.create_task(providers.check_all_on_start())  # 7.1: saved cloud providers only (model lists)
     yield
+    provider_check.cancel()
+    import wakeword
+    wakeword.ENGINE.shutdown()                                      # 7.1.0-dev.2: the microphone is released when the app exits
     stop_updates.set(); update_task.cancel()
     watcher.stop()                 # clean shutdown of the observer + worker threads
 
@@ -178,6 +192,10 @@ def local_only(request: Request) -> None:
 async def companion_guard(request: Request, call_next):
     """Mode B (phone -> this PC): remote API calls need companion access enabled AND a valid token.
     Static PWA files are always served so the app shell can load and explain what's missing."""
+    cross = companion.cross_site_reason(request, settings.cors_origin_list)   # 7.1: CSRF / cross-origin guard
+    if cross:
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"detail": cross}, status_code=403)
     denied = companion.check(request, settings.allow_remote_admin)
     if denied:
         from fastapi.responses import JSONResponse
@@ -255,6 +273,30 @@ class MemoryPatch(BaseModel):
 
 class PrefsIn(BaseModel):
     user_name: str | None = Field(None, max_length=40)
+    assistant_name: str | None = Field(None, max_length=64)        # 7.1.0-dev.2: validated by identity.validate
+
+    voice_profile: dict | None = None                              # 7.1.0-dev.2: read-aloud voice profile (validated below)
+
+    @field_validator("voice_profile")
+    @classmethod
+    def _voice_profile(cls, v):
+        if v is None:
+            return v
+        allowed = {"style": str, "voiceURI": str, "lang": str, "rate": (int, float), "pitch": (int, float), "volume": (int, float)}
+        out = {}
+        for k, val in v.items():
+            if k not in allowed or not isinstance(val, allowed[k]) or (isinstance(val, str) and len(val) > 200):
+                raise ValueError(f"Invalid voice setting: {k}")
+            out[k] = val if isinstance(val, str) else max(0.0, min(2.0, float(val)))
+        return out
+
+    @field_validator("assistant_name")
+    @classmethod
+    def _assistant_name(cls, v):
+        if v is None:
+            return v
+        import identity
+        return identity.validate(v)
     memory_enabled: bool | None = None
     save_history: bool | None = None
     history_retention_days: int | None = Field(None, ge=0, le=3650)
@@ -311,18 +353,65 @@ async def health(request: Request):
 
 
 # --------------------------------------------------------------------------- chat
-@app.post("/chat")
-async def chat(req: ChatRequest, request: Request):
-    guest = companion.role_of(request) == "member"           # members never touch the owner's data
-    model = None
-    if req.model and not guest:                               # dev.8: the chat's model choice, checked, never swapped
+async def _chat_model(req: "ChatRequest") -> tuple[str | None, str | None]:
+    """7.0: the model for this turn, one source of truth: the model sent with the message (the page's picker), else the
+    model stored for the conversation, else None (= the global default). (model, notice). Never substitutes another model:
+    an explicit choice that isn't installed is an error; a stored one that was removed falls back to the default, said so."""
+    import providers
+    if req.model and providers.is_cloud(req.model.strip()):                 # 7.1: a cloud model the owner picked
         try:
-            model = await system.resolve_chat_model(req.model.strip())
+            return providers.resolve(req.model.strip()), None
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    if req.model:
+        try:
+            return await system.resolve_chat_model(req.model.strip()), None
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
         except ConnectionError as e:
             raise _unavailable(e)
-    await system.note_chat_model(model or system.active_models()["llm"])   # release the previous chat model
+    stored = mem.conversation_model(req.thread_id)
+    if stored and providers.is_cloud(stored):
+        try:
+            return providers.resolve(stored), None
+        except ValueError as e:
+            mem.set_conversation_model(req.thread_id, None)
+            return None, f"{e} The default local model answered instead (nothing was sent to the cloud)."
+    if not stored:
+        import intelligence                                                 # 7.1: opt-in Auto router (off by default)
+        routed, why = providers.route(req.message, intelligence.detect(req.message, req.focus))
+        if routed:
+            return routed, f"Auto routing: {providers.label(routed)} answered this {why}."
+        return None, None
+    try:
+        return await system.resolve_chat_model(stored), None
+    except ValueError:
+        mem.set_conversation_model(req.thread_id, None)
+        return None, f"This conversation's model {stored} is no longer installed, so the default model answered."
+    except ConnectionError as e:
+        raise _unavailable(e)
+
+
+def _remember_model(cid: str | None, req: "ChatRequest", model: str | None) -> None:
+    """The model picked in the chat is remembered for that conversation (switching conversations restores it)."""
+    if cid and req.model and model:
+        mem.set_conversation_model(cid, model)
+
+
+@app.post("/chat")
+async def chat(req: ChatRequest, request: Request):
+    guest = companion.role_of(request) == "member"           # members never touch the owner's data
+    if not guest:                                             # 7.0: "switch the model to …" is done by the app, not the model
+        done = await model_switch.handle(req.message.strip(), req.thread_id, req.model, save=db.get_prefs().get("save_history", True))
+        if done:
+            return {**done, "thread_id": done["conversation_id"]}
+        import identity
+        who = identity.handle(req.message.strip(), req.thread_id, save=db.get_prefs().get("save_history", True))
+        if who:                                               # 7.1.0-dev.2: identity questions answered by the app
+            return {**who, "thread_id": who["conversation_id"]}
+    model, notice = (None, None) if guest else await _chat_model(req)     # dev.8 / 7.0: checked, never swapped
+    if not (model or "").startswith("@"):                              # 7.1: cloud models don't occupy Ollama
+        await system.note_chat_model(model or system.active_models()["llm"])   # release the previous chat model
     extra = {**({"project_id": req.project_id} if req.project_id and not guest else {}),
              **({"focus": req.focus} if req.focus != "auto" and not guest else {}),         # default: the call is unchanged
              **({"regenerate": True} if req.regenerate and req.thread_id and not guest else {}),
@@ -337,7 +426,9 @@ async def chat(req: ChatRequest, request: Request):
         import insights
         insights.note_provider_failure("chat", e)                 # 5.6: a count only (no content)
         raise _unavailable(e)
-    return {**result, "thread_id": result["conversation_id"]}
+    if not guest:
+        _remember_model(result["conversation_id"], req, model)
+    return {**result, "thread_id": result["conversation_id"], **({"model_notice": notice} if notice else {})}
 
 
 @app.post("/chat/stream")
@@ -346,21 +437,29 @@ async def chat_stream(req: ChatRequest, request: Request):
     The answer appears while it is written instead of after it. Errors arrive as {"type":"error","message"}."""
     if companion.role_of(request) == "member":
         raise HTTPException(status_code=403, detail="Guests use /chat.")
-    model = None
-    if req.model:
-        try:
-            model = await system.resolve_chat_model(req.model.strip())
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-        except ConnectionError as e:
-            raise _unavailable(e)
+    import json as _json
+    done = await model_switch.handle(req.message.strip(), req.thread_id, req.model, save=db.get_prefs().get("save_history", True))
+    if done:                                                  # 7.0: a model command, carried out by the app (no model call)
+        async def command_events():
+            yield _json.dumps({"type": "model_command", **(done["model_command"] or {})}, ensure_ascii=False) + "\n"
+            yield _json.dumps({"type": "token", "text": done["answer"]}, ensure_ascii=False) + "\n"
+            yield _json.dumps({"type": "done", **done, "thread_id": done["conversation_id"]}, ensure_ascii=False) + "\n"
+        return StreamingResponse(command_events(), media_type="application/x-ndjson", headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+    import identity
+    who = identity.handle(req.message.strip(), req.thread_id, save=db.get_prefs().get("save_history", True))
+    if who:                                                   # 7.1.0-dev.2: "what is your name?" answered by the app
+        async def identity_events():
+            yield _json.dumps({"type": "token", "text": who["answer"]}, ensure_ascii=False) + "\n"
+            yield _json.dumps({"type": "done", **who, "thread_id": who["conversation_id"]}, ensure_ascii=False) + "\n"
+        return StreamingResponse(identity_events(), media_type="application/x-ndjson", headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
+    model, notice = await _chat_model(req)
     if req.project_id and not projects.get(req.project_id):
         raise HTTPException(status_code=400, detail="That project doesn't exist any more.")
-    await system.note_chat_model(model or system.active_models()["llm"])
+    if not (model or "").startswith("@"):                              # 7.1: cloud models don't occupy Ollama
+        await system.note_chat_model(model or system.active_models()["llm"])
     from agent import stream_agent
 
     async def events():
-        import json as _json
         try:
             async for ev in stream_agent(req.message.strip(), req.thread_id, model=model, project_id=req.project_id,
                                          **({"focus": req.focus} if req.focus != "auto" else {}),    # default: the call is unchanged
@@ -368,6 +467,9 @@ async def chat_stream(req: ChatRequest, request: Request):
                                          **({"refresh_live": True} if req.refresh_live else {})):
                 if ev["type"] == "done":
                     ev["thread_id"] = ev["conversation_id"]
+                    _remember_model(ev["conversation_id"], req, model)
+                    if notice:
+                        ev["model_notice"] = notice
                 yield _json.dumps(ev, ensure_ascii=False) + "\n"
         except Exception as e:                                              # noqa: BLE001 - reported to the page, not hidden
             log.warning("Streamed chat failed: %s", type(e).__name__)
@@ -454,8 +556,98 @@ async def system_performance():
 # --------------------------------------------------------------------------- chat models (dev.8)
 @app.get("/models", dependencies=[Depends(local_only)])
 async def list_chat_models():
-    """Chat models installed in Ollama and the default for new chats (for the chat's model picker)."""
-    return await system.chat_models()
+    """Chat models installed in Ollama and the default for new chats (for the chat's model picker); 7.1: plus the selected
+    model of each connected cloud provider ("cloud": [...], ids "@provider:model")."""
+    import providers
+    return {**(await system.chat_models()), "cloud": providers.cloud_models()}
+
+
+# --------------------------------------------------------------------------- 7.1: cloud AI providers (this computer only)
+class ProviderKeyIn(BaseModel):
+    key: str = Field(..., max_length=512)
+
+
+class ProviderUpdateIn(BaseModel):
+    enabled: bool | None = None
+    model: str | None = Field(None, max_length=200)
+    allow_charged: bool | None = None
+    consent: bool | None = None
+
+
+class CustomProviderIn(BaseModel):
+    base_url: str = Field(..., max_length=300)
+    name: str | None = Field(None, max_length=40)
+    key: str | None = Field(None, max_length=512)
+
+
+class RouterIn(BaseModel):
+    auto: bool | None = None
+    coding: str | None = Field(None, max_length=250)
+    complex: str | None = Field(None, max_length=250)
+
+
+def _provider_call(fn):
+    import providers
+    try:
+        return fn()
+    except (providers.ProviderError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/providers", dependencies=[Depends(local_only)])
+async def providers_status():
+    """Cloud providers: state, masked key, models, router and the privacy rules. Keys are never returned."""
+    import providers
+    return providers.all_status()
+
+
+@app.put("/providers/custom/endpoint", dependencies=[Depends(local_only)])
+async def providers_custom(req: CustomProviderIn):
+    """A custom OpenAI-compatible endpoint (https, or a server on this computer); tested before it is saved."""
+    import providers
+    try:
+        return await providers.set_custom(req.base_url, req.name, req.key)
+    except (providers.ProviderError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/providers/router", dependencies=[Depends(local_only)])
+async def providers_router(req: RouterIn):
+    import providers
+    return _provider_call(lambda: providers.save_router(req.auto, req.coding, req.complex))
+
+
+@app.put("/providers/{pid}/key", dependencies=[Depends(local_only)])
+async def providers_key(pid: str, req: ProviderKeyIn):
+    """Tests the key with the provider (its model list: free) and saves it, encrypted, only if it works."""
+    import providers
+    try:
+        return await providers.save_key(pid, req.key)
+    except providers.ProviderError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/providers/{pid}/test", dependencies=[Depends(local_only)])
+async def providers_test(pid: str):
+    import providers
+    try:
+        return await providers.test(pid)
+    except providers.ProviderError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/providers/{pid}", dependencies=[Depends(local_only)])
+async def providers_update(pid: str, req: ProviderUpdateIn):
+    import providers
+    return _provider_call(lambda: providers.update(pid, req.enabled, req.model, req.allow_charged, req.consent))
+
+
+@app.delete("/providers/{pid}", dependencies=[Depends(local_only)])
+async def providers_remove(pid: str):
+    """Deletes the provider's key and settings."""
+    import providers
+    _provider_call(lambda: providers.remove(pid))
+    return providers.all_status()
 
 
 @app.put("/models/default", dependencies=[Depends(local_only)])
@@ -556,6 +748,440 @@ def career_mcq_answer(req: CareerAnswerIn):
 @app.get("/career/mcq/stats", dependencies=[Depends(local_only)])
 def career_mcq_stats(scope: str | None = None):
     return career_mcq.stats(scope)
+
+
+# --------------------------------------------------------------------------- Study 7.2: courses, unlimited MCQs, prep plan, STAR, readiness
+import study  # noqa: E402
+
+
+async def _study_model(name: str | None) -> str | None:
+    """Study uses local Ollama models only: a cloud chat model choice falls back to the local default (nothing is sent online)."""
+    import providers
+    if not name or providers.is_cloud(name):
+        return None
+    try:
+        return await system.resolve_chat_model(name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except ConnectionError as e:
+        raise _unavailable(e)
+
+
+def _study_err(e: Exception) -> HTTPException:
+    if isinstance(e, (study.StudyError, ValueError)):
+        msg = str(e)
+        return HTTPException(503 if "isn't available" in msg else 400, msg)
+    return _unavailable(e)
+
+
+class StudyCourseIn(BaseModel):
+    track: str | None = Field(None, max_length=20)
+    topic: str | None = Field(None, max_length=120)
+    model: str | None = Field(None, max_length=200)
+
+
+class StudyLessonIn(BaseModel):
+    course_id: str = Field(..., max_length=40)
+    lesson_id: str = Field(..., max_length=40)
+    refresh: bool = False
+    model: str | None = Field(None, max_length=200)
+
+
+class StudyDoneIn(BaseModel):
+    course_id: str = Field(..., max_length=40)
+    lesson_id: str = Field(..., max_length=40)
+    done: bool = True
+
+
+class StudyMcqIn(BaseModel):
+    course_id: str = Field(..., max_length=40)
+    round: int = Field(0, ge=0, le=100000)
+    level: str = Field("junior", max_length=20)
+    difficulty: str = Field("medium", max_length=10)
+    count: int = 5
+    model: str | None = Field(None, max_length=200)
+    avoid: list[str] = Field(default_factory=list, max_length=60)
+    module_id: str | None = Field(None, max_length=40)
+    weak: bool = False
+
+
+class StudyAnswerIn(BaseModel):
+    skill: str = Field(..., max_length=80)
+    question: dict = Field(default_factory=dict)
+    correct: bool
+    course_id: str | None = Field(None, max_length=40)
+    module_id: str | None = Field(None, max_length=40)
+
+
+class StudyPrefsIn(BaseModel):
+    target: str = Field(..., max_length=80)
+    level: str = Field(..., max_length=80)
+    minutes: int = Field(60, ge=15, le=240)
+
+
+class StudyTimeIn(BaseModel):
+    seconds: int = Field(..., ge=0, le=600)
+
+
+class StudyCardGradeIn(BaseModel):
+    remembered: bool
+
+
+class StudyStepIn(BaseModel):
+    index: int
+    done: bool = True
+
+
+class StudyTutorIn(BaseModel):
+    lesson_id: str = Field(..., max_length=40)
+    question: str = Field(..., max_length=1500)
+    model: str | None = Field(None, max_length=200)
+
+
+class StudyPlanIn(BaseModel):
+    jd: str = Field(..., max_length=20000)
+    resume_text: str = Field("", max_length=20000)
+    resume_doc: str | None = Field(None, max_length=300)
+    interview_date: str | None = Field(None, max_length=10)
+    minutes: int = Field(60, ge=15, le=240)
+
+
+class StudyPlanItemIn(BaseModel):
+    day: int
+    index: int
+    done: bool = True
+
+
+class StudyStoryIn(BaseModel):
+    id: str | None = Field(None, max_length=40)
+    title: str = Field(..., max_length=120)
+    competencies: list[str] = Field(default_factory=list, max_length=8)
+    situation: str = Field("", max_length=2000)
+    task: str = Field("", max_length=2000)
+    action: str = Field("", max_length=2000)
+    result: str = Field("", max_length=2000)
+
+
+class StudyCoachIn(BaseModel):
+    model: str | None = Field(None, max_length=200)
+
+
+@app.get("/learn/tracks", dependencies=[Depends(local_only)])
+def study_tracks():
+    return study.tracks()
+
+
+@app.get("/learn/state", dependencies=[Depends(local_only)])
+def study_state():
+    """Everything the Study tab shows: courses with progress, the plan, readiness, today's items, streak, due reviews."""
+    return study.overview()
+
+
+@app.get("/learn/courses/{cid}", dependencies=[Depends(local_only)])
+def study_course(cid: str):
+    d = study.load()
+    c = d["courses"].get(cid)
+    if not c:
+        raise HTTPException(404, "Unknown course.")
+    o = study.course_outline(c)
+    cached = {k.split("/", 1)[1] for k in d["lessons"] if k.startswith(cid + "/")}
+    return {**c, "modules": [{**m, "lessons": [{**l, "done": l["id"] in c["done"], "ready": l["id"] in cached} for l in m["lessons"]]}
+                             for m in o["modules"]]}
+
+
+@app.post("/learn/courses", dependencies=[Depends(local_only)])
+async def study_add_course(req: StudyCourseIn):
+    try:
+        if req.track:
+            return study.create_course(track=req.track)
+        return await study.custom_course(req.topic or "", await _study_model(req.model))
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise _study_err(e)
+
+
+@app.delete("/learn/courses/{cid}", dependencies=[Depends(local_only)])
+def study_delete_course(cid: str):
+    if not study.delete_course(cid):
+        raise HTTPException(404, "Unknown course.")
+    return {"deleted": cid}
+
+
+@app.post("/learn/lesson", dependencies=[Depends(local_only)])
+async def study_lesson(req: StudyLessonIn):
+    try:
+        return await study.lesson(req.course_id, req.lesson_id, req.refresh, await _study_model(req.model))
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise _study_err(e)
+
+
+@app.post("/learn/lesson/done", dependencies=[Depends(local_only)])
+def study_lesson_done(req: StudyDoneIn):
+    try:
+        return study.set_done(req.course_id, req.lesson_id, req.done)
+    except study.StudyError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/learn/mcq", dependencies=[Depends(local_only)])
+async def study_mcq(req: StudyMcqIn):
+    """One more batch for a course (the Study tab asks again as the list scrolls to the end)."""
+    try:
+        return await study.course_mcq(req.course_id, req.round, req.level, req.difficulty, req.count, await _study_model(req.model),
+                                      [a[:200] for a in req.avoid], req.module_id, req.weak)
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise _study_err(e)
+
+
+@app.post("/learn/mcq/answer", dependencies=[Depends(local_only)])
+def study_mcq_answer(req: StudyAnswerIn):
+    q = {k: req.question.get(k) for k in ("key", "q", "options", "answer", "explanation", "module") if k in req.question}
+    return study.answer(req.skill, q, req.correct, course_id=req.course_id, module_id=req.module_id)
+
+
+def _study_call(fn, *a):
+    try:
+        return fn(*a)
+    except study.StudyError as e:
+        raise HTTPException(400, str(e))
+
+
+async def _study_ai(coro):
+    try:
+        return await coro
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise _study_err(e)
+
+
+@app.put("/learn/courses/{cid}/prefs", dependencies=[Depends(local_only)])
+def study_prefs(cid: str, req: StudyPrefsIn):
+    """Goal and level for this course. Changing them later keeps all progress; the overview is rebuilt."""
+    return _study_call(study.set_prefs, cid, req.target, req.level, req.minutes)
+
+
+@app.get("/learn/prefs/options", dependencies=[Depends(local_only)])
+def study_prefs_options():
+    return {"targets": study.TARGETS, "levels": study.LEVELS}
+
+
+@app.post("/learn/courses/{cid}/overview", dependencies=[Depends(local_only)])
+async def study_overview(cid: str, req: StudyCoachIn):
+    return await _study_ai(study.build_overview(cid, await _study_model(req.model)))
+
+
+@app.get("/learn/courses/{cid}/dashboard", dependencies=[Depends(local_only)])
+def study_dashboard(cid: str):
+    return _study_call(study.dashboard, cid)
+
+
+@app.post("/learn/courses/{cid}/time", dependencies=[Depends(local_only)])
+def study_time(cid: str, req: StudyTimeIn):
+    return {"seconds": _study_call(study.add_time, cid, req.seconds)}
+
+
+@app.post("/learn/courses/{cid}/exercise", dependencies=[Depends(local_only)])
+def study_exercise(cid: str, req: StudyDoneIn):
+    return _study_call(study.set_exercise, cid, req.lesson_id, req.done)
+
+
+@app.post("/learn/courses/{cid}/cards", dependencies=[Depends(local_only)])
+async def study_make_cards(cid: str, req: StudyLessonIn):
+    return {"cards": await _study_ai(study.make_cards(cid, req.lesson_id, await _study_model(req.model)))}
+
+
+@app.get("/learn/cards", dependencies=[Depends(local_only)])
+def study_cards(course_id: str | None = None, weekly: bool = False):
+    return {"cards": study.due_cards(course_id, weekly=weekly)}
+
+
+@app.post("/learn/cards/{card_id}", dependencies=[Depends(local_only)])
+def study_grade_card(card_id: str, req: StudyCardGradeIn):
+    return _study_call(study.grade_card, card_id, req.remembered)
+
+
+@app.post("/learn/courses/{cid}/capstone", dependencies=[Depends(local_only)])
+async def study_capstone(cid: str, req: StudyCoachIn):
+    return await _study_ai(study.make_capstone(cid, await _study_model(req.model)))
+
+
+@app.post("/learn/courses/{cid}/capstone/step", dependencies=[Depends(local_only)])
+def study_capstone_step(cid: str, req: StudyStepIn):
+    return _study_call(study.capstone_step, cid, req.index, req.done)
+
+
+@app.post("/learn/courses/{cid}/tutor", dependencies=[Depends(local_only)])
+async def study_tutor(cid: str, req: StudyTutorIn):
+    return await _study_ai(study.tutor(cid, req.lesson_id, req.question, await _study_model(req.model)))
+
+
+@app.get("/learn/export", dependencies=[Depends(local_only)])
+def study_export():
+    """Your Study data as one JSON file (courses, progress, lessons, cards, plan, stories). Saved where you choose."""
+    return study.export_data()
+
+
+@app.post("/learn/import", dependencies=[Depends(local_only)])
+def study_import(body: dict):
+    return _study_call(study.import_data, body)
+
+
+# ---- 7.2.0-dev.2: mock interview, resume tailoring, Personal AI Brain opt-in, model quality check (study_plus.py)
+import study_plus  # noqa: E402
+
+
+class StudyBrainIn(BaseModel):
+    enabled: bool = False
+    memories: list[int] = Field(default_factory=list, max_length=20)
+    projects: list[str] = Field(default_factory=list, max_length=10)
+
+
+class StudyTailorIn(BaseModel):
+    jd: str = Field(..., max_length=20000)
+    resume_text: str = Field("", max_length=30000)
+    resume_doc: str | None = Field(None, max_length=300)
+    model: str | None = Field(None, max_length=200)
+
+
+class StudyMockIn(BaseModel):
+    count: int = Field(6, ge=3, le=12)
+    skills: list[str] = Field(default_factory=list, max_length=8)
+    model: str | None = Field(None, max_length=200)
+
+
+class StudyMockAnswerIn(BaseModel):
+    i: int = Field(..., ge=0, le=20)
+    answer: str = Field(..., max_length=4000)
+    seconds: int = Field(0, ge=0, le=3600)
+    model: str | None = Field(None, max_length=200)
+
+
+@app.get("/learn/brain/sources", dependencies=[Depends(local_only)])
+def study_brain_sources():
+    """What can be shared with a course (goal memories, other memories, projects). Nothing is shared until chosen."""
+    return study_plus.brain_sources()
+
+
+@app.put("/learn/courses/{cid}/brain", dependencies=[Depends(local_only)])
+def study_brain(cid: str, req: StudyBrainIn):
+    return _study_call(study_plus.set_brain, cid, req.enabled, req.memories, req.projects)
+
+
+@app.get("/learn/quality", dependencies=[Depends(local_only)])
+def study_quality(model: str | None = None):
+    return {"result": study_plus.quality_status(model)}
+
+
+@app.post("/learn/quality", dependencies=[Depends(local_only)])
+async def study_quality_run(req: StudyCoachIn):
+    return await _study_ai(study_plus.quality_check(await _study_model(req.model)))
+
+
+@app.post("/learn/resume/tailor", dependencies=[Depends(local_only)])
+async def study_tailor(req: StudyTailorIn):
+    """Rewrites the most relevant resume bullets for a job, keeping only facts already in the resume. Nothing is stored."""
+    resume = req.resume_text
+    if req.resume_doc and not resume.strip():
+        resume = await asyncio.to_thread(knowledge.document_text, req.resume_doc, 30000) or ""
+    return await _study_ai(study_plus.tailor(resume, req.jd, await _study_model(req.model)))
+
+
+@app.post("/learn/mock", dependencies=[Depends(local_only)])
+async def study_mock_start(req: StudyMockIn):
+    return await _study_ai(study_plus.mock_start(req.count, req.skills, await _study_model(req.model)))
+
+
+@app.get("/learn/mock", dependencies=[Depends(local_only)])
+def study_mock_list():
+    return {"sessions": study_plus.mock_list()}
+
+
+@app.get("/learn/mock/{sid}", dependencies=[Depends(local_only)])
+def study_mock_get(sid: str):
+    return _study_call(study_plus.mock_get, sid)
+
+
+@app.post("/learn/mock/{sid}/answer", dependencies=[Depends(local_only)])
+async def study_mock_answer(sid: str, req: StudyMockAnswerIn):
+    return await _study_ai(study_plus.mock_answer(sid, req.i, req.answer, req.seconds, await _study_model(req.model)))
+
+
+@app.post("/learn/mock/{sid}/finish", dependencies=[Depends(local_only)])
+def study_mock_finish(sid: str):
+    return _study_call(study_plus.mock_finish, sid)
+
+
+@app.delete("/learn/mock/{sid}", dependencies=[Depends(local_only)])
+def study_mock_delete(sid: str):
+    if not study_plus.mock_delete(sid):
+        raise HTTPException(404, "Unknown interview session.")
+    return {"deleted": sid}
+
+
+@app.get("/learn/review", dependencies=[Depends(local_only)])
+def study_review():
+    return {"due": study.due_reviews()}
+
+
+@app.post("/learn/plan", dependencies=[Depends(local_only)])
+async def study_plan(req: StudyPlanIn):
+    resume = req.resume_text
+    if req.resume_doc and not resume.strip():
+        resume = await asyncio.to_thread(knowledge.document_text, req.resume_doc, 20000) or ""
+    try:
+        return study.make_plan(req.jd, resume, req.interview_date, req.minutes)
+    except study.StudyError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/learn/plan", dependencies=[Depends(local_only)])
+def study_plan_delete():
+    return study.clear_plan()
+
+
+@app.post("/learn/plan/item", dependencies=[Depends(local_only)])
+def study_plan_item(req: StudyPlanItemIn):
+    try:
+        return study.plan_item(req.day, req.index, req.done)
+    except study.StudyError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.get("/learn/stories", dependencies=[Depends(local_only)])
+def study_stories():
+    return {"stories": study.load()["stories"], "competencies": study.tracks()["competencies"]}
+
+
+@app.post("/learn/stories", dependencies=[Depends(local_only)])
+def study_save_story(req: StudyStoryIn):
+    try:
+        old = next((x for x in study.load()["stories"] if x["id"] == req.id), None) if req.id else None
+        return study.save_story({**req.model_dump(), "coach": (old or {}).get("coach")})
+    except study.StudyError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/learn/stories/{sid}", dependencies=[Depends(local_only)])
+def study_delete_story(sid: str):
+    if not study.delete_story(sid):
+        raise HTTPException(404, "Unknown story.")
+    return {"deleted": sid}
+
+
+@app.post("/learn/stories/{sid}/coach", dependencies=[Depends(local_only)])
+async def study_coach(sid: str, req: StudyCoachIn):
+    try:
+        return await study.coach(sid, await _study_model(req.model))
+    except HTTPException:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise _study_err(e)
 
 
 # --------------------------------------------------------------------------- projects (stability milestone)
@@ -1007,6 +1633,121 @@ async def _read_audio(file: UploadFile) -> bytes:
     return data
 
 
+def _voice_error(e: Exception) -> HTTPException:
+    """7.1: a missing speech model is a clear, actionable 409 (never a raw library error or a hidden download)."""
+    import transcribe as tr
+    if isinstance(e, tr.NotInstalled):
+        return HTTPException(409, str(e))
+    return _unavailable(e)
+
+
+@app.get("/voice/status")
+async def voice_status():
+    """7.1: the local speech engine: library present, model installed (checked offline), download size and progress."""
+    import transcribe as tr
+    return await asyncio.to_thread(tr.status)
+
+
+class VoiceDownloadIn(BaseModel):
+    confirm: bool = False
+
+
+@app.post("/voice/model/download", dependencies=[Depends(local_only)])
+async def voice_model_download(req: VoiceDownloadIn):
+    """7.1: downloads the local speech model ONLY when the user confirmed it (the size is shown first). Runs in the background;
+    poll GET /voice/status. From this computer only."""
+    import transcribe as tr
+    if not req.confirm:
+        raise HTTPException(400, f"Confirm the download first: about {tr.SIZES_MB.get(tr.get_settings().whisper_model, '?')} MB from Hugging Face.")
+    try:
+        return await asyncio.to_thread(tr.download)
+    except RuntimeError as e:
+        raise HTTPException(503, str(e))
+
+
+# --------------------------------------------------------------------------- 7.1.0-dev.2: wake phrase (Windows, this computer only)
+class WakeIn(BaseModel):
+    enabled: bool | None = None
+    confirm: bool = False
+    use_name: bool | None = None
+    phrase: str | None = Field(None, max_length=40)
+    name_only: bool | None = None
+    sensitivity: Literal["low", "medium", "high"] | None = None
+
+
+@app.get("/voice/wake", dependencies=[Depends(local_only)])
+def wake_status(visible: bool = False):
+    """Wake-phrase settings and engine state. The open page calls this about once a second with visible=1: the engine runs
+    only while an Abhify.AI page on this computer is visible."""
+    import wakeword
+    wakeword.ENGINE.heartbeat(visible)
+    return wakeword.ENGINE.status()
+
+
+@app.put("/voice/wake", dependencies=[Depends(local_only)])
+def wake_update(req: WakeIn):
+    """Turning the wake phrase on needs confirm=true (the page explains microphone use first). Off by default; after an update
+    it waits for a new confirmation."""
+    import wakeword
+    from version import __version__
+    ch = req.model_dump(exclude_none=True, exclude={"confirm"})
+    if req.phrase is not None:
+        ch["phrase"] = " ".join(req.phrase.split())
+    if req.enabled:
+        if not req.confirm:
+            raise HTTPException(400, "Confirm first: the microphone listens for the wake phrase while an Abhify.AI page is open.")
+        av = wakeword.availability()
+        if not av["supported"]:
+            raise HTTPException(409, av["why"])
+        bad = wakeword.compatibility(wakeword.phrases({**wakeword.settings(), **ch}))
+        if bad:
+            raise HTTPException(400, bad)
+        ch["confirmed_version"] = __version__
+    try:
+        wakeword.save(ch)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if req.enabled is False:
+        wakeword.ENGINE.shutdown()
+    return wakeword.ENGINE.status()
+
+
+@app.post("/voice/wake/pause", dependencies=[Depends(local_only)])
+def wake_pause():
+    """Stop listening now (until Resume or the next app start); the setting stays on."""
+    import wakeword
+    wakeword.ENGINE.paused_until = float("inf")
+    wakeword.ENGINE._stop("paused")
+    return wakeword.ENGINE.status()
+
+
+@app.post("/voice/wake/resume", dependencies=[Depends(local_only)])
+def wake_resume():
+    """The page finished the interaction that a detection started: listen for the wake phrase again."""
+    import wakeword
+    wakeword.ENGINE.resume()
+    return wakeword.ENGINE.status()
+
+
+class WakeTestIn(BaseModel):
+    phrase: str | None = Field(None, max_length=40)
+    seconds: float = Field(8.0, ge=3, le=15)
+
+
+@app.post("/voice/wake/test", dependencies=[Depends(local_only)])
+async def wake_test(req: WakeTestIn):
+    """"Test my wake phrase": listens for a few seconds and says whether the phrase was recognised. Nothing is kept."""
+    import wakeword
+    av = wakeword.availability()
+    if not av["supported"]:
+        raise HTTPException(409, av["why"])
+    ph = [" ".join(req.phrase.split())] if req.phrase else wakeword.phrases()
+    bad = wakeword.compatibility(ph)
+    if bad:
+        raise HTTPException(400, bad)
+    return await asyncio.to_thread(wakeword.test_live, ph, req.seconds, wakeword.settings()["sensitivity"])
+
+
 @app.post("/transcribe")
 async def transcribe_audio(file: UploadFile = File(...), language: str | None = Form(None)):
     from transcribe import transcribe
@@ -1014,7 +1755,7 @@ async def transcribe_audio(file: UploadFile = File(...), language: str | None = 
     try:
         return await asyncio.to_thread(transcribe, audio, language)
     except Exception as e:
-        raise _unavailable(e)
+        raise _voice_error(e)
 
 
 @app.post("/voice")
@@ -1026,7 +1767,7 @@ async def voice(request: Request, file: UploadFile = File(...), thread_id: str |
     try:
         tr = await asyncio.to_thread(transcribe, audio, language)
     except Exception as e:
-        raise _unavailable(e)
+        raise _voice_error(e)
     if not tr["text"]:
         return {"transcript": "", "answer": "I didn't catch that. Please try again.", "thread_id": thread_id}
     try:
@@ -1079,6 +1820,18 @@ async def knowledge_status(request: Request):
         out.update(folder=companion.public_name(out["folder"]), default_folder=None,
                    last_error=companion.redact_text(out.get("last_error")))
     return out
+
+
+@app.delete("/knowledge/documents/{name}", dependencies=[Depends(local_only)])
+async def delete_knowledge_upload(name: str, confirm: bool = False):
+    """7.2.1: delete a document added through the app: removed from search and answers now, the file kept in Trash for
+    7 days. Files from the watched folder are removed by deleting them from that folder."""
+    if not confirm:
+        raise HTTPException(400, "Add confirm=true to delete this document.")
+    try:
+        return await asyncio.to_thread(knowledge.delete_upload, name)
+    except KeyError:
+        raise HTTPException(404, "No uploaded document with that name (files from the watched folder are removed by deleting them there).")
 
 
 @app.get("/knowledge/files")
@@ -1240,6 +1993,15 @@ def put_preferences(p: PrefsIn):
     return db.set_prefs(**p.model_dump(exclude_none=True))
 
 
+@app.get("/identity", dependencies=[Depends(local_only)])
+def get_identity():
+    """7.1.0-dev.2: the assistant's name on this computer, the default, suggestions and the wake phrases it implies."""
+    import identity
+    name = identity.current()
+    return {"name": name, "default": identity.DEFAULT_NAME, "suggestions": identity.SUGGESTIONS, "max_length": identity.MAX_LEN,
+            "wake_phrases": identity.wake_phrases(name), "product": "Abhify.AI"}
+
+
 # --------------------------------------------------------------------------- conversations
 @app.get("/conversations")
 def conversations():
@@ -1248,7 +2010,37 @@ def conversations():
 
 @app.get("/conversations/{conversation_id}")
 def conversation(conversation_id: str, limit: int = 100):
-    return {"id": conversation_id, "messages": mem.recent_messages(conversation_id, limit=min(limit, 500))}
+    return {"id": conversation_id, "model": mem.conversation_model(conversation_id),
+            "messages": mem.recent_messages(conversation_id, limit=min(limit, 500))}
+
+
+class ConversationModelIn(BaseModel):
+    model: str | None = Field(None, max_length=200, description="An installed chat model, or null to follow the default")
+
+
+@app.put("/models/conversation/{conversation_id}", dependencies=[Depends(local_only)])
+async def set_conversation_model(conversation_id: str, req: ConversationModelIn):
+    """7.0: this conversation's model (the chat's model picker). Checked against Ollama; a failure keeps the previous one."""
+    if not conversation_id or len(conversation_id) > 64:
+        raise HTTPException(400, "Unknown conversation.")
+    previous = mem.conversation_model(conversation_id)
+    import providers
+    if req.model and providers.is_cloud(req.model.strip()):                # 7.1: a connected cloud model
+        try:
+            real = providers.resolve(req.model.strip())
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+    elif req.model:
+        try:
+            real = await system.resolve_chat_model(req.model.strip())
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except ConnectionError as e:
+            raise _unavailable(e)
+    else:
+        real = None
+    mem.set_conversation_model(conversation_id, real)
+    return {"id": conversation_id, "model": real, "previous": previous, "default": system.active_models()["llm"]}
 
 
 @app.delete("/conversations/{conversation_id}")
@@ -1304,9 +2096,66 @@ def pull_status():
     return {"pulls": system.PULLS}
 
 
+@app.post("/setup/models/pull/cancel", dependencies=[Depends(local_only)])
+def cancel_pull(p: PullIn):
+    """7.0 Model Library: stops a running download (Ollama keeps the partial download, so Download resumes it)."""
+    return {"model": p.model, "cancelled": system.cancel_pull(p.model)}
+
+
+@app.delete("/models/{name:path}", dependencies=[Depends(local_only)])
+async def delete_model(name: str, confirm: bool = False):
+    """7.0 Model Library: removes an installed Ollama model. Needs confirm=true; the default chat model and the
+    embedding model can't be removed here (choose another default first)."""
+    if not confirm:
+        raise HTTPException(400, "Removing a model needs confirmation (confirm=true).")
+    try:
+        return await system.delete_model(name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except ConnectionError as e:
+        raise _unavailable(e)
+
+
 @app.post("/setup/test", dependencies=[Depends(local_only)])
 async def test_model():
     return await system.test_inference()
+
+
+@app.get("/setup/advice", dependencies=[Depends(local_only)])
+async def setup_advice():
+    """7.0.2: this computer's hardware (each fact labelled verified / estimate / unavailable) and the recommended local
+    model with alternatives. Read-only: downloads nothing and changes nothing."""
+    import hardware_advisor
+    diag = await system.diagnostics()
+    adapters, cpu = await asyncio.gather(asyncio.to_thread(hardware_advisor.display_adapters), asyncio.to_thread(hardware_advisor.cpu_name))
+    return {"device": hardware_advisor.device_report(diag, adapters, cpu, await asyncio.to_thread(hardware_advisor.acceleration)),
+            **hardware_advisor.advise(diag, default_model=system.active_models()["llm"])}
+
+
+class UseModelIn(BaseModel):
+    model: str = Field(..., min_length=1, max_length=100, pattern=r"^[A-Za-z0-9._:\-/]+$")
+
+
+@app.post("/setup/use-model", dependencies=[Depends(local_only)])
+async def setup_use_model(req: UseModelIn):
+    """7.0.2: the user chose this (installed) model: run a REAL local inference first; only if it answers does it become the
+    default chat model. A failed test changes nothing and says why."""
+    import hardware_advisor
+    have = [m["name"] for m in (await system.ollama_status()).get("models", [])]
+    try:                                                         # "qwen2.5:7b" (catalog) may be installed as "qwen2.5:latest"
+        real = await system.resolve_chat_model(hardware_advisor.installed_name(req.model.strip(), have))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except ConnectionError as e:
+        raise _unavailable(e)
+    test = await system.test_inference(real)
+    if not test.get("ok"):
+        return {"ok": False, "model": real, "test": test, "default": system.active_models()["llm"]}
+    try:
+        await system.set_default_chat_model(real)
+    except PermissionError as e:
+        return {"ok": False, "model": real, "test": test, "error": str(e), "default": system.active_models()["llm"]}
+    return {"ok": True, "model": real, "test": test, "default": real}
 
 
 class AutoSetupIn(BaseModel):
@@ -1522,6 +2371,211 @@ def companion_enable():
 @app.post("/companion/disable", dependencies=[Depends(local_only)])
 def companion_disable():
     return companion.disable()
+
+
+# --------------------------------------------------------------------------- 7.2.0-dev.1: Data & Sync (manual, end-to-end encrypted; this computer only)
+import datasync_service as dsync  # noqa: E402
+from fastapi.responses import JSONResponse, Response  # noqa: E402
+
+
+@app.exception_handler(dsync.DataSyncError)
+async def _datasync_error(_request: Request, e: dsync.DataSyncError):
+    status = {"auth": 428, "rekey": 409, "exists": 409, "missing": 409, "no_vault": 409, "account": 409, "retry": 503}.get(e.code, 400)
+    return JSONResponse({"detail": str(e), "code": e.code}, status_code=status)
+
+
+class DsClientIn(BaseModel):
+    text: str = Field(..., max_length=20000)
+
+
+class DsRecoveryIn(BaseModel):
+    recovery_key: str = Field(..., max_length=200)
+
+
+class DsConfirmIn(BaseModel):
+    last_group: str = Field(..., max_length=10)
+
+
+class DsKindsIn(BaseModel):
+    kinds: list[Literal["conversation", "message", "memory", "pref"]] = Field(default_factory=list, max_length=4)
+
+
+class DsApplyIn(BaseModel):
+    direction: Literal["both", "upload", "download"] = "both"
+    approve_deletes: list[str] = Field(default_factory=list, max_length=100000)
+    keep_elsewhere: list[str] = Field(default_factory=list, max_length=100000)
+
+
+class DsResolveIn(BaseModel):
+    choice: Literal["keep_mine", "keep_theirs", "keep_both"]
+
+
+class DsDisconnectIn(BaseModel):
+    remove_remote: bool = False
+    confirm: str = Field("", max_length=40)
+
+
+class DsBackupIn(BaseModel):
+    passphrase: str = Field(..., max_length=1024)
+    categories: list[Literal["Conversations", "Personal memory", "Portable preferences"]] = Field(..., min_length=1, max_length=3)
+    to_drive: bool = False
+
+
+class DsRestoreIn(BaseModel):
+    token: str = Field(..., max_length=64)
+    kinds: list[Literal["conversation", "message", "memory", "pref"]] = Field(..., min_length=1, max_length=4)
+    replace_different: bool = False
+    confirm_replace: bool = False
+
+
+@app.get("/datasync/status", dependencies=[Depends(local_only)])
+def datasync_status():
+    return dsync.status()
+
+
+@app.put("/datasync/oauth-client", dependencies=[Depends(local_only)])
+def datasync_oauth_client(b: DsClientIn):
+    return dsync.import_client(b.text)
+
+
+@app.post("/datasync/connect", dependencies=[Depends(local_only)])
+def datasync_connect():
+    return dsync.connect()
+
+
+@app.post("/datasync/connect/finish", dependencies=[Depends(local_only)])
+def datasync_connect_finish():
+    return dsync.finish_connect()
+
+
+@app.post("/datasync/disconnect", dependencies=[Depends(local_only)])
+def datasync_disconnect(b: DsDisconnectIn):
+    return dsync.disconnect(b.remove_remote, b.confirm)
+
+
+@app.post("/datasync/interop-check", dependencies=[Depends(local_only)])
+def datasync_interop():
+    return dsync.interop_check()
+
+
+@app.get("/datasync/vault", dependencies=[Depends(local_only)])
+def datasync_vault():
+    return dsync.vault_probe()
+
+
+@app.post("/datasync/vault/create", dependencies=[Depends(local_only)])
+def datasync_vault_create():
+    return dsync.vault_create()
+
+
+@app.post("/datasync/vault/confirm", dependencies=[Depends(local_only)])
+def datasync_vault_confirm(b: DsConfirmIn):
+    return dsync.vault_confirm(b.last_group)
+
+
+@app.post("/datasync/vault/join", dependencies=[Depends(local_only)])
+def datasync_vault_join(b: DsRecoveryIn):
+    return dsync.vault_join(b.recovery_key)
+
+
+@app.put("/datasync/kinds", dependencies=[Depends(local_only)])
+def datasync_kinds(b: DsKindsIn):
+    return {"kinds": dsync.set_kinds(list(b.kinds))}
+
+
+@app.post("/datasync/preview", dependencies=[Depends(local_only)])
+def datasync_preview():
+    return dsync.preview()
+
+
+@app.post("/datasync/apply", dependencies=[Depends(local_only)])
+def datasync_apply(b: DsApplyIn):
+    return dsync.apply(b.direction, b.approve_deletes, b.keep_elsewhere)
+
+
+@app.get("/datasync/conflicts", dependencies=[Depends(local_only)])
+def datasync_conflicts():
+    return dsync.conflicts()
+
+
+@app.post("/datasync/conflicts/{cid}", dependencies=[Depends(local_only)])
+def datasync_resolve(cid: str, b: DsResolveIn):
+    return dsync.resolve(cid, b.choice)
+
+
+@app.get("/datasync/deleted", dependencies=[Depends(local_only)])
+def datasync_deleted():
+    return dsync.recently_deleted()
+
+
+@app.post("/datasync/deleted/{tid}/restore", dependencies=[Depends(local_only)])
+def datasync_restore_deleted(tid: str):
+    return dsync.restore_deleted(tid)
+
+
+@app.get("/datasync/history", dependencies=[Depends(local_only)])
+def datasync_history():
+    return dsync.history()
+
+
+@app.get("/datasync/devices", dependencies=[Depends(local_only)])
+def datasync_devices():
+    return dsync.devices()
+
+
+@app.post("/datasync/devices/{dev}/revoke", dependencies=[Depends(local_only)])
+def datasync_revoke(dev: str, b: DsRecoveryIn):
+    return dsync.revoke(dev, b.recovery_key)
+
+
+@app.post("/datasync/identity/reset", dependencies=[Depends(local_only)])
+def datasync_reset_identity():
+    return dsync.reset_identity()
+
+
+@app.get("/datasync/backups", dependencies=[Depends(local_only)])
+def datasync_backups():
+    return {"local": dsync.list_backups()}
+
+
+@app.get("/datasync/backups/drive", dependencies=[Depends(local_only)])
+def datasync_drive_backups():
+    return {"drive": dsync.drive_backups()}
+
+
+@app.post("/datasync/backups", dependencies=[Depends(local_only)])
+def datasync_backup_create(b: DsBackupIn):
+    return dsync.create_backup(b.passphrase, list(b.categories), b.to_drive)
+
+
+@app.get("/datasync/backups/{name}", dependencies=[Depends(local_only)])
+def datasync_backup_download(name: str):
+    p = dsync.backup_path(name)
+    return FileResponse(p, filename=p.name, media_type="application/octet-stream")
+
+
+@app.post("/datasync/backups/drive/{file_id}/fetch", dependencies=[Depends(local_only)])
+def datasync_backup_fetch(file_id: str):
+    return dsync.fetch_drive_backup(file_id)
+
+
+@app.post("/datasync/restore/preview", dependencies=[Depends(local_only)])
+async def datasync_restore_preview(passphrase: str = Form(..., max_length=1024), name: str | None = Form(None),
+                                   file: UploadFile | None = File(None)):
+    if file is not None:
+        data = await file.read(64 * 1024 * 1024 + 1)
+        if len(data) > 64 * 1024 * 1024:
+            raise HTTPException(413, "That backup file is too large (over 64 MB).")
+    elif name:
+        data = dsync.backup_path(name).read_bytes()
+    else:
+        raise HTTPException(400, "Choose a backup file.")
+    return await asyncio.to_thread(dsync.preview_restore, data, passphrase)
+
+
+@app.post("/datasync/restore/apply", dependencies=[Depends(local_only)])
+def datasync_restore_apply(b: DsRestoreIn):
+    return dsync.apply_restore(b.token, list(b.kinds), b.replace_different, b.confirm_replace)
 
 
 # --------------------------------------------------------------------------- updates & lifecycle

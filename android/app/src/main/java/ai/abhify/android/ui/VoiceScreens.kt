@@ -88,7 +88,8 @@ fun BoxScope.VoiceOverlay(vm: AppViewModel) {
             else -> null
         }
         text?.let { Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 6, modifier = Modifier.heightIn(max = 160.dp).verticalScroll(rememberScrollState())) }
-        vm.voiceError.value?.let { Text("⚠ $it", style = MaterialTheme.typography.bodySmall, color = x.warn) }
+        vm.voiceError.value?.let { Text("⚠ $it", style = MaterialTheme.typography.bodySmall, color = x.warn)
+            if (!vm.listening.value) TextButton({ vm.voiceError.value = null; v.listen() }) { Text("Try again") } }   // 7.1.1: retry without restarting
         v.pending.value?.let {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button({ v.confirm() }) { Text("Confirm") }; OutlinedButton({ v.cancel() }) { Text("Cancel") } }
         }
@@ -117,7 +118,7 @@ private fun Waveform(level: Float) {
 /** Settings → Voice & Conversation: the six voice characteristics and the conversation options (all saved at once). */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-fun VoiceSettingsGroup(vm: AppViewModel) {
+fun VoiceSettingsGroup(vm: AppViewModel, withMic: (() -> Unit) -> Unit = { it() }) {
     val s = vm.voiceSettings.value
     val x = LocalExtra.current
     fun set(n: VoiceSettings) = vm.setVoiceSettings(n)
@@ -128,23 +129,78 @@ fun VoiceSettingsGroup(vm: AppViewModel) {
     SettingsGroup("Voice & Conversation", accent = Accent.CHAT) {
         SwitchRow("Voice assistant", "Talk to Abhify with the 🗣 Talk button in the Assistant. Tap-to-talk; the microphone is used only while the listening indicator shows.",
             s.enabled) { set(s.copy(enabled = it)) }
+        // 7.1.0 (owner): one friendly, soft voice. Other voices are offered only when this phone really has more than one.
         Text("Voice", style = MaterialTheme.typography.labelLarge)
         val list = voices
-        when {
-            list == null -> Text("Loading the voices of this phone's speech engine…", style = MaterialTheme.typography.bodySmall, color = x.muted)
-            list.isEmpty() -> Text("No ${if (previewLang == "hi") "Hindi" else "English"} voice is installed in the speech engine. Install one in Android settings → Text-to-speech.",
-                style = MaterialTheme.typography.bodySmall, color = x.warn)
-            else -> FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                FilterChip(s.voiceName == null, { set(s.copy(voiceName = null)) }, { Text("Automatic" + if (list.any { it.female }) " (female)" else "") })
-                list.take(10).forEachIndexed { i, vi ->
-                    val tag = when { vi.female -> " · female"; vi.male -> " · male"; else -> "" } + if (vi.needsNetwork) " · online" else ""
-                    FilterChip(s.voiceName == vi.name, { set(s.copy(voiceName = vi.name)) }, { Text("Voice ${i + 1}$tag") })
+        if (list == null) Text("Checking this phone's speech voices…", style = MaterialTheme.typography.bodySmall, color = x.muted)
+        else if (list.isEmpty()) Text("No voice for this language is installed. Add one in Android Settings → Text-to-speech; answers are shown as text meanwhile.",
+            style = MaterialTheme.typography.bodySmall, color = x.warn)
+        else Text("A soft, friendly voice at a calm pace" + if (s.assistantVoice != null) " (your chosen voice)." else ".",
+            style = MaterialTheme.typography.bodySmall, color = x.muted)
+        var choosing by remember { mutableStateOf(false) }
+        if ((list?.size ?: 0) > 1) TextButton({ choosing = !choosing }) { Text(if (choosing) "Done" else "Try another voice (${list!!.size} on this phone)") }
+        if (choosing && list != null) Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            val sample = "Hi! I'm ${vm.assistantName.value}. It's lovely to talk with you."
+            FilterChip(s.assistantVoice == null, { set(s.copy(style = VoiceSettings.Style.ASSISTANT).withPicked(VoiceSettings.Style.ASSISTANT, null)) }, { Text("Automatic") })
+            list.take(24).forEachIndexed { i, vi ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    FilterChip(s.assistantVoice == vi.name, { set(s.copy(style = VoiceSettings.Style.ASSISTANT).withPicked(VoiceSettings.Style.ASSISTANT, vi.name)) },
+                        { Text("Voice ${i + 1}  (${vi.languageTag}${if (vi.needsNetwork) " · online" else ""})") }, modifier = Modifier.weight(1f))
+                    TextButton({ vm.voice.preview(sample, VoiceSettings.Style.ASSISTANT, s.rate, vi.name) }) { Text("▶") }
                 }
             }
         }
-        Text(if (list != null && list.none { it.female || it.male }) "This speech engine doesn't label voices as female or male, so Automatic uses its default voice; preview the others and pick the one you like."
-            else "Female is the default where the engine marks a voice as female.", style = MaterialTheme.typography.bodySmall, color = x.muted)
-        TextButton({ vm.voice.preview(if (previewLang == "hi") "नमस्ते, मैं अभिफ़ाई हूँ। मैं आपकी कैसे मदद कर सकती हूँ?" else "Hi, I'm Abhify. How can I help you today?", s.voiceName, s.rate) }) { Text("▶ Preview voice") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton({ vm.voice.preview(if (previewLang == "hi") "नमस्ते, मैं ${vm.assistantName.value} हूँ। मैं आपकी कैसे मदद कर सकती हूँ?"
+                else "Hi! I'm ${vm.assistantName.value}. It's lovely to talk with you. What shall we do today?", VoiceSettings.Style.ASSISTANT, s.rate) }, enabled = list?.isNotEmpty() == true) { Text("▶ Preview") }
+            TextButton({ vm.voice.stopSpeaking() }) { Text("■ Stop preview") }
+            TextButton({ set(s.copy(style = VoiceSettings.Style.ASSISTANT, speed = VoiceSettings.Speed.NATURAL, voiceName = null, maleVoice = null, femaleVoice = null, assistantVoice = null)) }) { Text("Restore defaults") }
+        }
+
+        var engineLine by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(previewLang) { vm.voice.engineInfo(previewLang) { engineLine = it } }
+        engineLine?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = x.muted) }
+        Row { TextButton({ withMic { vm.testMic() } }) { Text("🎙 Test microphone") } }
+        vm.micTest.value?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+
+        // 7.1.1: call the assistant by its name (foreground only, on-device recognition only, off by default)
+        Text("Wake word (optional, off by default)", style = MaterialTheme.typography.labelLarge)
+        val wakeWhy = vm.wakeSupport()
+        SwitchRow("Listen for \"${vm.assistantName.value}\" while Abhify is open",
+            wakeWhy ?: ("Say \"${vm.assistantName.value}\" or \"Hey ${vm.assistantName.value}\" to start talking. Only while Abhify is open on screen; " +
+                "stops when you leave the app. Speech is recognised on this phone (nothing is uploaded), and a pill at the top shows when the microphone listens. Uses more battery."),
+            s.wakeWord && wakeWhy == null) { on -> if (wakeWhy == null) { if (on) withMic { vm.setWake(true) } else vm.setWake(false) } }
+        vm.wakeNote.value?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = x.warn) }
+        // 7.1.0: offline wake word engine (Vosk), installed only on request
+        LaunchedEffect(Unit) { vm.refreshVosk() }
+        val prog = vm.voskProgress.value
+        when {
+            prog != null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Downloading the offline wake word… ${prog.first / 1_048_576} of ${prog.second / 1_048_576} MB", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                TextButton({ vm.cancelVoskInstall() }) { Text("Cancel") } }
+            vm.voskInstalled.value -> Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("✓ Offline wake word installed (Vosk, English). Works best with a name that is a common English word or name.", Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall, color = x.muted)
+                TextButton({ withMic { vm.testWake() } }) { Text("Test") }
+                TextButton({ vm.removeVosk() }) { Text("Remove") } }
+            else -> Column {
+                Text("Offline wake word for any phone: the Vosk speech engine with its English model (about 41 MB, downloaded once from alphacephei.com, " +
+                    "checked before it is installed). It runs on this phone; no audio is uploaded.", style = MaterialTheme.typography.bodySmall, color = x.muted)
+                TextButton({ vm.installVosk() }) { Text("Install offline wake word (41 MB)") } }
+        }
+        vm.wakeTest.value?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        Text("Not available: listening in the background or with the screen off (Android would need a permanent microphone notification and a new permission).",
+            style = MaterialTheme.typography.bodySmall, color = x.muted)
+
+        // 7.1.1: the last crash, if there was one (stored only on this phone; for troubleshooting)
+        val crash = remember { ai.abhify.android.device.CrashNote.last(vm.g.context.filesDir) }
+        if (crash != null) {
+            val clip = androidx.compose.ui.platform.LocalClipboardManager.current
+            Text("Last crash report (only on this phone)", style = MaterialTheme.typography.labelLarge)
+            Text(crash.lineSequence().take(3).joinToString("\n"), style = MaterialTheme.typography.bodySmall, color = x.muted, maxLines = 3)
+            Row { TextButton({ clip.setText(androidx.compose.ui.text.AnnotatedString(crash)) }) { Text("Copy report") }
+                TextButton({ ai.abhify.android.device.CrashNote.clear(vm.g.context.filesDir) }) { Text("Delete report") } }
+        }
 
         Text("Tone (how answers are worded; the engine's voice sound doesn't change)", style = MaterialTheme.typography.labelLarge)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { VoiceSettings.Tone.entries.forEach { t -> FilterChip(s.tone == t, { set(s.copy(tone = t)) }, { Text(t.label) }) } }
@@ -210,5 +266,17 @@ fun ConversationDataGroup(vm: AppViewModel) {
         "all" -> Confirm("Clear all conversational data?", "Deletes all chats and voice transcripts, all memories, the corrections history and dismissed suggestions. " +
             "Voice settings return to their defaults. Documents, projects, study, career data, models and keys are not touched. This can't be undone.",
             "Delete everything listed", { vm.clearConversationData(chats = true, memories = true, extras = true) }) { ask = null }
+    }
+}
+
+
+/** 7.1.1: shown on every screen while the microphone listens for the assistant's name, with an obvious Stop. */
+@Composable
+fun BoxScope.WakeIndicator(vm: AppViewModel) {
+    if (!vm.wakeListening.value) return
+    Row(Modifier.align(Alignment.TopCenter).padding(top = 6.dp).clip(RoundedCornerShape(50)).background(LocalExtra.current.glassStrong)
+        .padding(horizontal = 12.dp, vertical = 4.dp).semantics { liveRegion = LiveRegionMode.Polite }, verticalAlignment = Alignment.CenterVertically) {
+        Text("👂 Listening for \"${vm.assistantName.value}\"", style = MaterialTheme.typography.labelMedium)
+        TextButton({ vm.setWake(false) }) { Text("Stop") }
     }
 }

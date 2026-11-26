@@ -184,12 +184,39 @@ MIGRATIONS: list[tuple[str, str]] = [
         );
         CREATE INDEX idx_members_active ON members(revoked_at, role);
     """),
+    # v6 (7.0.0-dev.2): per-conversation model choice and the model that actually wrote each answer. Additive only
+    # (two nullable columns); migrate() backs the database up before it runs.
+    ("v6 conversation model and per-message model", """
+        ALTER TABLE conversations ADD COLUMN model TEXT;
+        ALTER TABLE messages ADD COLUMN model TEXT;
+    """),
+    # v7 (7.2.0-dev.1): manual encrypted Data & Sync bookkeeping. Additive only: three new tables, no existing table or
+    # row is changed; migrate() backs the database up before it runs. See datasync_local.py / sync_core.py.
+    ("v7 data sync bookkeeping", """
+        CREATE TABLE sync_map (
+            kind      TEXT NOT NULL,                 -- conversation | message | memory
+            local_id  TEXT NOT NULL,                 -- this computer's row id
+            rid       TEXT NOT NULL UNIQUE,          -- stable record id shared by every device
+            PRIMARY KEY (kind, local_id)
+        );
+        CREATE TABLE sync_meta (
+            key    TEXT PRIMARY KEY,
+            value  TEXT NOT NULL                     -- JSON
+        );
+        CREATE TABLE sync_stash (                    -- messages of a conversation removed by sync, restored with it
+            conv_rid  TEXT NOT NULL,
+            data      TEXT NOT NULL,                 -- JSON list of message records
+            at        TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+    """),
 ]
 
 SCHEMA_VERSION = len(MIGRATIONS)
 
 DEFAULT_PREFS: dict[str, Any] = {
     "user_name": "Abhi",
+    "assistant_name": "Abhify",
+    "voice_profile": {},             # 7.1.0-dev.2: style, voice, language, speed, pitch, volume for read-aloud (this computer)      # 7.1.0-dev.2: the assistant's personal name (identity.py); the product stays Abhify.AI
     "memory_enabled": True,          # long-term personal memory (injection + save_memory tool)
     "save_history": True,            # store chat conversations
     "history_retention_days": 0,     # 0 = keep forever
@@ -393,6 +420,12 @@ def upsert_document(path: str, source: str, sha256: str, size: int, chunks: int,
     """Backwards-compatible helper used by uploads (path doubles as path_key)."""
     save_document(source, path, path=path, sha256=sha256, size=size, chunks=chunks, status=status, error=error,
                   modified_at=modified_at, indexed_at=datetime.now().isoformat(timespec="seconds"))
+
+
+def delete_document(source: str, path_key: str) -> bool:
+    """Removes one document record (7.2.1: deleting an uploaded document). True if a row was removed."""
+    with connect() as c:
+        return c.execute("DELETE FROM documents WHERE source = ? AND path_key = ?", (source, path_key)).rowcount > 0
 
 
 def list_documents(source: str | None = None, status: str | None = None, limit: int = 500) -> list[dict[str, Any]]:

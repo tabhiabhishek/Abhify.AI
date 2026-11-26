@@ -8,6 +8,17 @@ BACKEND = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND))
 
 
+@pytest.fixture(autouse=True)
+def _never_open_a_real_browser(monkeypatch):
+    """Tests must never open the user's browser (7.2 OAuth sign-in calls webbrowser.open)."""
+    import webbrowser
+    opened = []
+    monkeypatch.setattr(webbrowser, "open", lambda url, *a, **k: opened.append(url) or True)
+    monkeypatch.setattr(webbrowser, "open_new", lambda url, *a, **k: opened.append(url) or True)
+    monkeypatch.setattr(webbrowser, "open_new_tab", lambda url, *a, **k: opened.append(url) or True)
+    yield opened
+
+
 @pytest.fixture
 def data_root(tmp_path, monkeypatch):
     """Point the app at an empty temp data root (never the real user data)."""
@@ -105,3 +116,18 @@ def _no_live_network(monkeypatch):
     realtime.reset()
     yield
     realtime.reset()
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "tool_routing: test the 7.1.0-dev.2 tool routing (agent.needs_tools) for real")
+
+
+@pytest.fixture(autouse=True)
+def _previous_tool_routing(request, monkeypatch):
+    """7.1.0-dev.2 offers the agent's tools only when a message asks for one (agent.needs_tools). Older agent tests stub the
+    TOOL agent for general questions and test other things (prompts, history, modes), so they keep the previous rule (tools
+    for everything except calculations and code). Tests of the routing itself use @pytest.mark.tool_routing."""
+    if "tool_routing" in request.keywords:
+        return
+    import agent
+    monkeypatch.setattr(agent, "needs_tools", lambda message, detection=None: not agent.self_solvable(message, detection))

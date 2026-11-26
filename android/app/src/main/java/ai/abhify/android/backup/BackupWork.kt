@@ -5,8 +5,6 @@ import ai.abhify.android.chat.addBackupRecord
 import ai.abhify.android.chat.backupRecords
 import ai.abhify.android.chat.setBackupStatus
 import ai.abhify.android.cloud.KeystoreBox
-import ai.abhify.android.drive.DriveApi
-import ai.abhify.android.drive.DriveUploadWorker
 import ai.abhify.android.graph
 import android.content.Context
 import android.net.Uri
@@ -15,7 +13,6 @@ import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
@@ -48,8 +45,8 @@ object BackupRecords {
 
 /**
  * Makes one backup from the user's schedule: the chosen categories only, encrypted with the stored passphrase
- * (always for Drive), written to the chosen folder and/or queued for Drive. Then the folder's retention runs; the
- * Drive retention runs after the upload succeeds. Never touches files Abhify didn't record as its own scheduled backups.
+ * (when set), written to the chosen folder on this phone. Then the folder's retention runs. 7.2: scheduled backups are
+ * never uploaded to Google Drive (Drive uploads only happen when the user starts them, always encrypted). Never touches files Abhify didn't record as its own scheduled backups.
  */
 class ScheduledBackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
@@ -77,10 +74,6 @@ class ScheduledBackupWorker(context: Context, params: WorkerParameters) : Corout
                     g.db.addBackupRecord("Folder: ${cfg.folderName ?: "chosen folder"}", cats, bytes.size.toLong(), sha, encrypted, auto = true, status = "failed", error = why)
                     problems += why
                 }
-            }
-            if (cfg.toDrive) {
-                val qid = DriveUploadWorker.queue(g, DriveUploadWorker.KIND_AUTO_BACKUP, name, DriveApi.BACKUPS, name, "application/json", bytes)
-                g.db.addBackupRecord("Google Drive", cats, bytes.size.toLong(), sha, encrypted, auto = true, uri = "drive-queue:$qid", status = "queued")
             }
             lastRun(g, problems.isEmpty(), problems.firstOrNull(), System.currentTimeMillis() - started)
             Result.success()
@@ -114,8 +107,8 @@ class ScheduledBackupWorker(context: Context, params: WorkerParameters) : Corout
         private fun lastRun(g: AppGraph, ok: Boolean, error: String?, ms: Long? = null) = g.prefs.edit().putLong("backup_last_run", System.currentTimeMillis())
             .putBoolean("backup_last_ok", ok).putString("backup_last_error", error).apply { ms?.let { putLong("backup_last_ms", it) } }.apply()
 
-        private fun constraints(cfg: BackupSchedule) = Constraints.Builder().setRequiresBatteryNotLow(true).setRequiresStorageNotLow(true)
-            .apply { if (cfg.toDrive) setRequiredNetworkType(if (cfg.wifiOnly) NetworkType.UNMETERED else NetworkType.CONNECTED) }.build()
+        @Suppress("UNUSED_PARAMETER")
+        private fun constraints(cfg: BackupSchedule) = Constraints.Builder().setRequiresBatteryNotLow(true).setRequiresStorageNotLow(true).build()
 
         /** Applies the user's schedule: one unique periodic job (UPDATE keeps a single schedule), or none when disabled. */
         fun apply(context: Context, cfg: BackupSchedule, now: ZonedDateTime = ZonedDateTime.now()) {
@@ -125,7 +118,7 @@ class ScheduledBackupWorker(context: Context, params: WorkerParameters) : Corout
                 PeriodicWorkRequestBuilder<ScheduledBackupWorker>(cfg.periodHours, TimeUnit.HOURS)
                     .setInitialDelay(cfg.initialDelay(now).toMinutes(), TimeUnit.MINUTES).setConstraints(constraints(cfg)).build())
         }
-        /** "Back up now" with the scheduled settings (still waits for the network if Drive is a destination). */
+        /** "Back up now" with the scheduled settings (local folder only). */
         fun runNow(context: Context, cfg: BackupSchedule) = WorkManager.getInstance(context).enqueueUniqueWork(NOW, ExistingWorkPolicy.KEEP,
             OneTimeWorkRequestBuilder<ScheduledBackupWorker>().setConstraints(constraints(cfg)).build())
     }

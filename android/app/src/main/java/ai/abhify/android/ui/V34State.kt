@@ -447,6 +447,8 @@ class BackupState(private val vm: AppViewModel) {
     fun toDrive(memoryOnly: Boolean = false) = scope.launch {
         val cats = if (memoryOnly) listOf("Personal memory") else selected.toList()
         if (cats.isEmpty()) { message.value = "Choose what to back up."; return@launch }
+        // 7.2: a backup for Google Drive is always encrypted; an empty passphrase is refused, never uploaded as plaintext
+        ai.abhify.android.backup.BackupPolicy.passphraseProblem(passphrase.value)?.let { message.value = it; return@launch }
         val (name, bytes) = try { create(cats) } catch (e: IllegalArgumentException) { message.value = e.message; return@launch }
         val qid = vm.drive.enqueue("backup", name, DriveApi.BACKUPS, if (memoryOnly) name.replace("abhify-backup", "abhify-memory") else name,
             "application/json", bytes) ?: return@launch
@@ -476,7 +478,6 @@ class BackupState(private val vm: AppViewModel) {
     }
     fun forgetSchedulePassphrase() {
         ai.abhify.android.backup.SchedulePassphrase.set(g, null); schedulePassSet.value = false
-        if (schedule.value.enabled && schedule.value.toDrive) saveSchedule(schedule.value.copy(enabled = false), null)
     }
     fun backupNow() {
         val cfg = schedule.value

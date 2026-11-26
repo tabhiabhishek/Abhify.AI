@@ -17,6 +17,8 @@ data class DeviceInfo(
     val cpuFeatures: Set<String>,   // from /proc/cpuinfo: asimddp (dot product), i8mm, sve, sve2, fphp ...
     val vulkanVersion: String?,     // from PackageManager features, null if none
     val thermalStatus: Int,         // PowerManager.THERMAL_STATUS_* (0 = none)
+    val batteryPercent: Int? = null,  // 7.0.2: BatteryManager; null = not reported
+    val charging: Boolean? = null,
 )
 
 sealed class Compatibility {
@@ -29,6 +31,8 @@ object ModelSelector {
     const val PRIMARY_ABI = "arm64-v8a"
     private const val STORAGE_HEADROOM_MB = 300L     // keep the phone usable after the download
     private const val OS_MEMORY_MARGIN_MB = 600      // what Android and other apps need on top of the model
+    /** 7.0.2: RAM that must stay for Android and other apps after the model is loaded, for a model to be RECOMMENDED. */
+    const val STABLE_RESERVE_MB = 3500
 
     /** Can the app itself work on this phone (independent of any model)? null = yes, else the reason. */
     fun appUnsupportedReason(d: DeviceInfo): String? = when {
@@ -53,13 +57,32 @@ object ModelSelector {
                 warn += "Only ${d.availRamMb} MB of memory is free right now; close other apps before starting the AI."
             if (d.lowMemory) warn += "Android reports low memory right now."
             if (d.thermalStatus >= 3) warn += "The phone is hot; answers will be slow until it cools down."
+            if (d.batteryPercent != null && d.batteryPercent < 20 && d.charging == false)
+                warn += "Battery is at ${d.batteryPercent} %: downloading and running the AI use a lot of power; plug in the charger."
         }
         return if (no.isEmpty()) Compatibility.Ok(m, warn) else Compatibility.No(m, no)
     }
 
-    /** The largest compatible model is recommended; the user can still pick any other compatible one. */
-    fun recommend(catalog: ModelCatalog, d: DeviceInfo): Compatibility? =
-        catalog.models.map { check(it, d) }.filterIsInstance<Compatibility.Ok>().maxByOrNull { it.model.minTotalRamMb }
+    /**
+     * 7.0.2: a STABLE model is recommended, not simply the largest that fits: the best compatible model that still leaves
+     * [STABLE_RESERVE_MB] of RAM for Android and other apps, fits in the memory free right now (plus a margin), and only
+     * while the phone isn't overheating. If none is comfortable, the smallest compatible model. The user can still pick
+     * any other compatible model.
+     */
+    fun comfortable(m: CatalogModel, d: DeviceInfo): Boolean =
+        d.totalRamMb - m.estimatedRuntimeMb >= STABLE_RESERVE_MB && d.availRamMb >= m.estimatedRuntimeMb + OS_MEMORY_MARGIN_MB && d.thermalStatus < 3
+
+    fun recommend(catalog: ModelCatalog, d: DeviceInfo): Compatibility? {
+        val ok = catalog.models.map { check(it, d) }.filterIsInstance<Compatibility.Ok>()
+        return ok.filter { comfortable(it.model, d) }.maxByOrNull { it.model.minTotalRamMb } ?: ok.minByOrNull { it.model.minTotalRamMb }
+    }
+
+    /** 7.0.2: how the model will run. GPU (Vulkan) only after that model passed the on-phone GPU test (GpuPolicy); else CPU. */
+    fun executionMode(d: DeviceInfo, gpuValidated: Boolean): String = when {
+        gpuValidated -> "GPU (Vulkan ${d.vulkanVersion ?: ""}), validated for this model".replace("  ", " ")
+        d.vulkanVersion != null -> "CPU (${threads(d.cpuCores)} threads); this phone reports Vulkan ${d.vulkanVersion}, used only after a per-model GPU test passes"
+        else -> "CPU (${threads(d.cpuCores)} threads); no Vulkan reported"
+    }
 
     /** Memory check right before loading (state changes after the download). null = fine. */
     fun loadBlocker(m: CatalogModel, availRamMb: Int): String? =

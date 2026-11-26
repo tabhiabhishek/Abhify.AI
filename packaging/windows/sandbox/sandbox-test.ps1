@@ -42,7 +42,12 @@ if ($cfg.previous_installer) {
     $h0 = WaitHealth 120
     Step "upgrade_old_version_runs" ($h0 -and $h0.version -eq $cfg.upgrade_from) "version=$($h0.version)"
     Invoke-RestMethod "http://127.0.0.1:8000/memory" -Method Post -ContentType "application/json" -Body '{"content":"memory from the previous version","category":"fact"}' | Out-Null
+    # 7.2.1-dev.2: a stray process from the install folder that the run file doesn't know (seen on a real laptop:
+    # "Error opening file for writing: ...\runtime\_asyncio.pyd"); it keeps the runtime's files locked
+    $stray = Start-Process "$inst\runtime\pythonw.exe" -ArgumentList '-c "import asyncio, time; time.sleep(900)"' -PassThru
+    Start-Sleep 2
     $t = Measure-Command { Start-Process $setup.FullName -ArgumentList "/S" -Wait }      # app still running
+    Step "upgrade_clears_stray_process" (-not (Get-Process -Id $stray.Id -ErrorAction SilentlyContinue)) "stray pid $($stray.Id)"
     $reg = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Abhify.AI" -ErrorAction SilentlyContinue
     Step "upgrade_installs_new_version" ($reg.DisplayVersion -eq $cfg.version) ("{0} -> {1} in {2:N0}s" -f $cfg.upgrade_from, $reg.DisplayVersion, $t.TotalSeconds)
     Step "upgrade_backup_created" ((Get-ChildItem "$data\data\backups\abhify-backup-pre-upgrade-*.zip" -ErrorAction SilentlyContinue).Count -ge 1) ""

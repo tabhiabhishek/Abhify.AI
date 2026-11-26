@@ -1,0 +1,2067 @@
+{
+ "taxonomy_size": 133,
+ "extract": {
+  "ml_engineer": {
+   "jd": "Machine Learning Engineer\nRequirements:\n- 3+ years of Python and SQL\n- Experience with PyTorch or TensorFlow, and deploying models (MLOps)\n- Strong knowledge of machine learning and deep learning\nNice to have:\n- AWS or Google Cloud, Docker, Kubernetes\n- Experience with LLMs and RAG",
+   "expect": {
+    "required": [
+     "Machine Learning",
+     "Python",
+     "SQL",
+     "PyTorch",
+     "TensorFlow",
+     "MLOps",
+     "Deep Learning"
+    ],
+    "preferred": [
+     "AWS",
+     "Google Cloud",
+     "Cloud Computing",
+     "Docker",
+     "Kubernetes",
+     "Large Language Models",
+     "RAG"
+    ]
+   }
+  },
+  "cloud_engineer": {
+   "jd": "CLOUD ENGINEER\nWhat you'll need:\n* Hands-on AWS (EC2, S3, IAM) and Terraform\n* CI/CD with GitHub Actions; Linux and Bash scripting\n* Docker and Kubernetes in production\nBonus: Azure certification, Python",
+   "expect": {
+    "required": [
+     "AWS",
+     "Terraform",
+     "CI/CD",
+     "Git",
+     "GitHub Actions",
+     "Linux",
+     "Bash",
+     "Docker",
+     "Kubernetes"
+    ],
+    "preferred": [
+     "Azure",
+     "Python"
+    ]
+   }
+  },
+  "data_analyst": {
+   "jd": "Data Analyst - we're looking for someone with SQL, Excel and Tableau or Power BI.\nYou know statistics and A/B testing. Python (pandas) is a plus.",
+   "expect": {
+    "required": [
+     "SQL",
+     "Excel",
+     "Tableau",
+     "Power BI",
+     "Statistics",
+     "Testing"
+    ],
+    "preferred": [
+     "Python",
+     "Pandas"
+    ]
+   }
+  }
+ },
+ "gaps": {
+  "jd": "ml_engineer",
+  "resume_skills": [
+   "Python",
+   "SQL",
+   "Docker",
+   "Git"
+  ],
+  "expect": [
+   {
+    "skill": "Machine Learning",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "PyTorch",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "TensorFlow",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "MLOps",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "Deep Learning",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "AWS",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Google Cloud",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Cloud Computing",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Kubernetes",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Large Language Models",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "RAG",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Python",
+    "why": "required: refresh"
+   }
+  ]
+ },
+ "plan": {
+  "gaps": [
+   {
+    "skill": "Machine Learning",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "PyTorch",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "TensorFlow",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "MLOps",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "Deep Learning",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "AWS",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Google Cloud",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Cloud Computing",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Kubernetes",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Large Language Models",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "RAG",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Python",
+    "why": "required: refresh"
+   }
+  ],
+  "today": "2026-12-01",
+  "interview": "2026-12-06",
+  "minutes": 60,
+  "expect": [
+   {
+    "date": "2026-12-01",
+    "day": 1,
+    "items": [
+     {
+      "type": "lesson",
+      "skill": "Machine Learning",
+      "minutes": 27,
+      "title": "Learn: Machine Learning"
+     },
+     {
+      "type": "mcq",
+      "skill": "Machine Learning",
+      "minutes": 15,
+      "title": "Practice MCQs: Machine Learning"
+     }
+    ]
+   },
+   {
+    "date": "2026-12-02",
+    "day": 2,
+    "items": [
+     {
+      "type": "lesson",
+      "skill": "PyTorch",
+      "minutes": 27,
+      "title": "Learn: PyTorch"
+     },
+     {
+      "type": "mcq",
+      "skill": "PyTorch",
+      "minutes": 15,
+      "title": "Practice MCQs: PyTorch"
+     },
+     {
+      "type": "story",
+      "skill": "Behavioural",
+      "minutes": 12,
+      "title": "Write or improve one STAR story"
+     },
+     {
+      "type": "review",
+      "skill": "Missed questions",
+      "minutes": 6,
+      "title": "Review questions you missed"
+     }
+    ]
+   },
+   {
+    "date": "2026-12-03",
+    "day": 3,
+    "items": [
+     {
+      "type": "lesson",
+      "skill": "TensorFlow",
+      "minutes": 27,
+      "title": "Learn: TensorFlow"
+     },
+     {
+      "type": "mcq",
+      "skill": "TensorFlow",
+      "minutes": 15,
+      "title": "Practice MCQs: TensorFlow"
+     },
+     {
+      "type": "review",
+      "skill": "Missed questions",
+      "minutes": 6,
+      "title": "Review questions you missed"
+     }
+    ]
+   },
+   {
+    "date": "2026-12-04",
+    "day": 4,
+    "items": [
+     {
+      "type": "lesson",
+      "skill": "MLOps",
+      "minutes": 27,
+      "title": "Learn: MLOps"
+     },
+     {
+      "type": "mcq",
+      "skill": "MLOps",
+      "minutes": 15,
+      "title": "Practice MCQs: MLOps"
+     },
+     {
+      "type": "story",
+      "skill": "Behavioural",
+      "minutes": 12,
+      "title": "Write or improve one STAR story"
+     },
+     {
+      "type": "review",
+      "skill": "Missed questions",
+      "minutes": 6,
+      "title": "Review questions you missed"
+     }
+    ]
+   },
+   {
+    "date": "2026-12-05",
+    "day": 5,
+    "items": [
+     {
+      "type": "mcq",
+      "skill": "All skills",
+      "minutes": 30,
+      "title": "Mixed MCQs across all your plan skills"
+     },
+     {
+      "type": "story",
+      "skill": "Behavioural",
+      "minutes": 18,
+      "title": "Rehearse your STAR stories out loud"
+     },
+     {
+      "type": "review",
+      "skill": "All skills",
+      "minutes": 12,
+      "title": "Review everything you missed"
+     }
+    ]
+   }
+  ],
+  "no_date_days": 14,
+  "past_date_days": 1
+ },
+ "readiness": [
+  {
+   "answered": 0,
+   "correct": 0,
+   "lessons_done": 0,
+   "lessons_total": 0,
+   "score": 0,
+   "level": "Not ready"
+  },
+  {
+   "answered": 4,
+   "correct": 4,
+   "lessons_done": 0,
+   "lessons_total": 3,
+   "score": 24,
+   "level": "Not ready"
+  },
+  {
+   "answered": 10,
+   "correct": 7,
+   "lessons_done": 2,
+   "lessons_total": 4,
+   "score": 62,
+   "level": "Getting there"
+  },
+  {
+   "answered": 25,
+   "correct": 25,
+   "lessons_done": 5,
+   "lessons_total": 5,
+   "score": 100,
+   "level": "Ready"
+  },
+  {
+   "answered": 12,
+   "correct": 3,
+   "lessons_done": 0,
+   "lessons_total": 10,
+   "score": 15,
+   "level": "Not ready"
+  }
+ ],
+ "review": [
+  {
+   "times_right": 0,
+   "answered_on": "2026-12-01",
+   "correct": false,
+   "lapses": 0,
+   "expect": {
+    "due": "2026-12-02",
+    "times_right": 0,
+    "done": false,
+    "lapses": 1
+   }
+  },
+  {
+   "times_right": 0,
+   "answered_on": "2026-12-01",
+   "correct": true,
+   "lapses": 0,
+   "expect": {
+    "due": "2026-12-04",
+    "times_right": 1,
+    "done": false,
+    "lapses": 0
+   }
+  },
+  {
+   "times_right": 2,
+   "answered_on": "2026-12-01",
+   "correct": true,
+   "lapses": 0,
+   "expect": {
+    "due": "2026-12-15",
+    "times_right": 3,
+    "done": false,
+    "lapses": 0
+   }
+  },
+  {
+   "times_right": 4,
+   "answered_on": "2026-12-01",
+   "correct": true,
+   "lapses": 0,
+   "expect": {
+    "due": null,
+    "times_right": 5,
+    "done": true,
+    "lapses": 0
+   }
+  },
+  {
+   "times_right": 3,
+   "answered_on": "2026-12-01",
+   "correct": false,
+   "lapses": 0,
+   "expect": {
+    "due": "2026-12-02",
+    "times_right": 0,
+    "done": false,
+    "lapses": 1
+   }
+  },
+  {
+   "times_right": 0,
+   "answered_on": "2026-12-01",
+   "correct": false,
+   "lapses": 1,
+   "expect": {
+    "due": "2026-12-01",
+    "times_right": 0,
+    "done": false,
+    "lapses": 2
+   }
+  },
+  {
+   "times_right": 0,
+   "answered_on": "2026-12-01",
+   "correct": false,
+   "lapses": 3,
+   "expect": {
+    "due": "2026-12-01",
+    "times_right": 0,
+    "done": false,
+    "lapses": 4
+   }
+  },
+  {
+   "times_right": 1,
+   "answered_on": "2026-12-01",
+   "correct": true,
+   "lapses": 2,
+   "expect": {
+    "due": "2026-12-08",
+    "times_right": 2,
+    "done": false,
+    "lapses": 2
+   }
+  }
+ ],
+ "streak": [
+  {
+   "days": [],
+   "today": "2026-12-01",
+   "expect": 0
+  },
+  {
+   "days": [
+    "2026-12-01"
+   ],
+   "today": "2026-12-01",
+   "expect": 1
+  },
+  {
+   "days": [
+    "2026-11-30",
+    "2026-11-29"
+   ],
+   "today": "2026-12-01",
+   "expect": 2
+  },
+  {
+   "days": [
+    "2026-12-01",
+    "2026-11-30",
+    "2026-11-28"
+   ],
+   "today": "2026-12-01",
+   "expect": 2
+  }
+ ],
+ "readiness_overall": {
+  "skills": [
+   "Python",
+   "AWS",
+   "SQL"
+  ],
+  "mcq": {
+   "Python": {
+    "answered": 20,
+    "correct": 16
+   },
+   "SQL": {
+    "answered": 5,
+    "correct": 2
+   }
+  },
+  "lessons": {
+   "Python": {
+    "done": 3,
+    "total": 5
+   },
+   "AWS": {
+    "done": 0,
+    "total": 6
+   }
+  },
+  "expect": {
+   "overall": 28,
+   "level": "Not ready",
+   "skills": [
+    {
+     "skill": "Python",
+     "score": 72,
+     "level": "Ready",
+     "answered": 20,
+     "lessons_done": 3,
+     "lessons_total": 5
+    },
+    {
+     "skill": "AWS",
+     "score": 0,
+     "level": "Not ready",
+     "answered": 0,
+     "lessons_done": 0,
+     "lessons_total": 6
+    },
+    {
+     "skill": "SQL",
+     "score": 12,
+     "level": "Not ready",
+     "answered": 5,
+     "lessons_done": 0,
+     "lessons_total": 0
+    }
+   ],
+   "weak": [
+    "AWS",
+    "SQL"
+   ]
+  }
+ },
+ "adapt": {
+  "gaps": [
+   {
+    "skill": "Machine Learning",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "PyTorch",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "TensorFlow",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "MLOps",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "Deep Learning",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "AWS",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Google Cloud",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Cloud Computing",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Kubernetes",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Large Language Models",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "RAG",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Python",
+    "why": "required: refresh"
+   }
+  ],
+  "rows": [
+   {
+    "skill": "Machine Learning",
+    "score": 82
+   },
+   {
+    "skill": "PyTorch",
+    "score": 69
+   },
+   {
+    "skill": "Python",
+    "score": 70
+   }
+  ],
+  "expect": [
+   {
+    "skill": "PyTorch",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "TensorFlow",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "MLOps",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "Deep Learning",
+    "why": "required, not on your resume"
+   },
+   {
+    "skill": "AWS",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Google Cloud",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Cloud Computing",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Kubernetes",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Large Language Models",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "RAG",
+    "why": "preferred, not on your resume"
+   },
+   {
+    "skill": "Machine Learning",
+    "why": "already Ready: light refresh"
+   },
+   {
+    "skill": "Python",
+    "why": "already Ready: light refresh"
+   }
+  ]
+ },
+ "schedule": [
+  {
+   "modules": [
+    {
+     "id": "a",
+     "lessons": [
+      {
+       "id": "a1"
+      },
+      {
+       "id": "a2"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "lessons": [
+      {
+       "id": "b1"
+      },
+      {
+       "id": "b2"
+      },
+      {
+       "id": "b3"
+      }
+     ]
+    },
+    {
+     "id": "c",
+     "lessons": [
+      {
+       "id": "c1"
+      },
+      {
+       "id": "c2"
+      },
+      {
+       "id": "c3"
+      },
+      {
+       "id": "c4"
+      },
+      {
+       "id": "c5"
+      },
+      {
+       "id": "c6"
+      },
+      {
+       "id": "c7"
+      },
+      {
+       "id": "c8"
+      }
+     ]
+    }
+   ],
+   "minutes": 30,
+   "start": "2026-12-01",
+   "optional": [],
+   "done": [],
+   "expect": {
+    "per_day": 1,
+    "days": [
+     {
+      "date": "2026-12-01",
+      "kind": "learn",
+      "lessons": [
+       "a1"
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "kind": "learn",
+      "lessons": [
+       "a2"
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "kind": "learn",
+      "lessons": [
+       "b1"
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "kind": "learn",
+      "lessons": [
+       "b2"
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "kind": "learn",
+      "lessons": [
+       "b3"
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "kind": "learn",
+      "lessons": [
+       "c1"
+      ]
+     },
+     {
+      "date": "2026-12-07",
+      "kind": "revision",
+      "lessons": []
+     },
+     {
+      "date": "2026-12-08",
+      "kind": "learn",
+      "lessons": [
+       "c2"
+      ]
+     },
+     {
+      "date": "2026-12-09",
+      "kind": "learn",
+      "lessons": [
+       "c3"
+      ]
+     },
+     {
+      "date": "2026-12-10",
+      "kind": "learn",
+      "lessons": [
+       "c4"
+      ]
+     },
+     {
+      "date": "2026-12-11",
+      "kind": "learn",
+      "lessons": [
+       "c5"
+      ]
+     },
+     {
+      "date": "2026-12-12",
+      "kind": "learn",
+      "lessons": [
+       "c6"
+      ]
+     },
+     {
+      "date": "2026-12-13",
+      "kind": "learn",
+      "lessons": [
+       "c7"
+      ]
+     },
+     {
+      "date": "2026-12-14",
+      "kind": "revision",
+      "lessons": []
+     },
+     {
+      "date": "2026-12-15",
+      "kind": "learn",
+      "lessons": [
+       "c8"
+      ]
+     }
+    ],
+    "weeks": [
+     {
+      "week": 1,
+      "from": "2026-12-01",
+      "to": "2026-12-07",
+      "lessons": 6,
+      "modules_completed": [
+       "a",
+       "b"
+      ]
+     },
+     {
+      "week": 2,
+      "from": "2026-12-08",
+      "to": "2026-12-14",
+      "lessons": 6,
+      "modules_completed": []
+     },
+     {
+      "week": 3,
+      "from": "2026-12-15",
+      "to": "2026-12-15",
+      "lessons": 1,
+      "modules_completed": [
+       "c"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "modules": [
+    {
+     "id": "a",
+     "lessons": [
+      {
+       "id": "a1"
+      },
+      {
+       "id": "a2"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "lessons": [
+      {
+       "id": "b1"
+      },
+      {
+       "id": "b2"
+      },
+      {
+       "id": "b3"
+      }
+     ]
+    },
+    {
+     "id": "c",
+     "lessons": [
+      {
+       "id": "c1"
+      },
+      {
+       "id": "c2"
+      },
+      {
+       "id": "c3"
+      },
+      {
+       "id": "c4"
+      },
+      {
+       "id": "c5"
+      },
+      {
+       "id": "c6"
+      },
+      {
+       "id": "c7"
+      },
+      {
+       "id": "c8"
+      }
+     ]
+    }
+   ],
+   "minutes": 60,
+   "start": "2026-12-01",
+   "optional": [
+    "a"
+   ],
+   "done": [
+    "b1"
+   ],
+   "expect": {
+    "per_day": 2,
+    "days": [
+     {
+      "date": "2026-12-01",
+      "kind": "learn",
+      "lessons": [
+       "b2",
+       "b3"
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "kind": "learn",
+      "lessons": [
+       "c1",
+       "c2"
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "kind": "learn",
+      "lessons": [
+       "c3",
+       "c4"
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "kind": "learn",
+      "lessons": [
+       "c5",
+       "c6"
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "kind": "learn",
+      "lessons": [
+       "c7",
+       "c8"
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "kind": "learn",
+      "lessons": [
+       "a1",
+       "a2"
+      ]
+     }
+    ],
+    "weeks": [
+     {
+      "week": 1,
+      "from": "2026-12-01",
+      "to": "2026-12-06",
+      "lessons": 12,
+      "modules_completed": [
+       "b",
+       "c",
+       "a"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "modules": [
+    {
+     "id": "a",
+     "lessons": [
+      {
+       "id": "a1"
+      },
+      {
+       "id": "a2"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "lessons": [
+      {
+       "id": "b1"
+      },
+      {
+       "id": "b2"
+      },
+      {
+       "id": "b3"
+      }
+     ]
+    },
+    {
+     "id": "c",
+     "lessons": [
+      {
+       "id": "c1"
+      },
+      {
+       "id": "c2"
+      },
+      {
+       "id": "c3"
+      },
+      {
+       "id": "c4"
+      },
+      {
+       "id": "c5"
+      },
+      {
+       "id": "c6"
+      },
+      {
+       "id": "c7"
+      },
+      {
+       "id": "c8"
+      }
+     ]
+    }
+   ],
+   "minutes": 90,
+   "start": "2026-12-01",
+   "optional": [],
+   "done": [
+    "a1",
+    "a2"
+   ],
+   "expect": {
+    "per_day": 3,
+    "days": [
+     {
+      "date": "2026-12-01",
+      "kind": "learn",
+      "lessons": [
+       "b1",
+       "b2",
+       "b3"
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "kind": "learn",
+      "lessons": [
+       "c1",
+       "c2",
+       "c3"
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "kind": "learn",
+      "lessons": [
+       "c4",
+       "c5",
+       "c6"
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "kind": "learn",
+      "lessons": [
+       "c7",
+       "c8"
+      ]
+     }
+    ],
+    "weeks": [
+     {
+      "week": 1,
+      "from": "2026-12-01",
+      "to": "2026-12-04",
+      "lessons": 11,
+      "modules_completed": [
+       "a",
+       "b",
+       "c"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "modules": [
+    {
+     "id": "a",
+     "lessons": [
+      {
+       "id": "a1"
+      },
+      {
+       "id": "a2"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "lessons": [
+      {
+       "id": "b1"
+      },
+      {
+       "id": "b2"
+      },
+      {
+       "id": "b3"
+      }
+     ]
+    },
+    {
+     "id": "c",
+     "lessons": [
+      {
+       "id": "c1"
+      },
+      {
+       "id": "c2"
+      },
+      {
+       "id": "c3"
+      },
+      {
+       "id": "c4"
+      },
+      {
+       "id": "c5"
+      },
+      {
+       "id": "c6"
+      },
+      {
+       "id": "c7"
+      },
+      {
+       "id": "c8"
+      }
+     ]
+    }
+   ],
+   "minutes": 10,
+   "start": "2026-12-01",
+   "optional": [
+    "c"
+   ],
+   "done": [],
+   "expect": {
+    "per_day": 1,
+    "days": [
+     {
+      "date": "2026-12-01",
+      "kind": "learn",
+      "lessons": [
+       "a1"
+      ]
+     },
+     {
+      "date": "2026-12-02",
+      "kind": "learn",
+      "lessons": [
+       "a2"
+      ]
+     },
+     {
+      "date": "2026-12-03",
+      "kind": "learn",
+      "lessons": [
+       "b1"
+      ]
+     },
+     {
+      "date": "2026-12-04",
+      "kind": "learn",
+      "lessons": [
+       "b2"
+      ]
+     },
+     {
+      "date": "2026-12-05",
+      "kind": "learn",
+      "lessons": [
+       "b3"
+      ]
+     },
+     {
+      "date": "2026-12-06",
+      "kind": "learn",
+      "lessons": [
+       "c1"
+      ]
+     },
+     {
+      "date": "2026-12-07",
+      "kind": "revision",
+      "lessons": []
+     },
+     {
+      "date": "2026-12-08",
+      "kind": "learn",
+      "lessons": [
+       "c2"
+      ]
+     },
+     {
+      "date": "2026-12-09",
+      "kind": "learn",
+      "lessons": [
+       "c3"
+      ]
+     },
+     {
+      "date": "2026-12-10",
+      "kind": "learn",
+      "lessons": [
+       "c4"
+      ]
+     },
+     {
+      "date": "2026-12-11",
+      "kind": "learn",
+      "lessons": [
+       "c5"
+      ]
+     },
+     {
+      "date": "2026-12-12",
+      "kind": "learn",
+      "lessons": [
+       "c6"
+      ]
+     },
+     {
+      "date": "2026-12-13",
+      "kind": "learn",
+      "lessons": [
+       "c7"
+      ]
+     },
+     {
+      "date": "2026-12-14",
+      "kind": "revision",
+      "lessons": []
+     },
+     {
+      "date": "2026-12-15",
+      "kind": "learn",
+      "lessons": [
+       "c8"
+      ]
+     }
+    ],
+    "weeks": [
+     {
+      "week": 1,
+      "from": "2026-12-01",
+      "to": "2026-12-07",
+      "lessons": 6,
+      "modules_completed": [
+       "a",
+       "b"
+      ]
+     },
+     {
+      "week": 2,
+      "from": "2026-12-08",
+      "to": "2026-12-14",
+      "lessons": 6,
+      "modules_completed": []
+     },
+     {
+      "week": 3,
+      "from": "2026-12-15",
+      "to": "2026-12-15",
+      "lessons": 1,
+      "modules_completed": [
+       "c"
+      ]
+     }
+    ]
+   }
+  }
+ ],
+ "mastery": [
+  {
+   "module": {
+    "id": "b",
+    "lessons": [
+     {
+      "id": "b1"
+     },
+     {
+      "id": "b2"
+     },
+     {
+      "id": "b3"
+     }
+    ]
+   },
+   "done": [],
+   "stats": {},
+   "expect": {
+    "module": "b",
+    "score": 0,
+    "level": "Not ready",
+    "answered": 0,
+    "correct": 0,
+    "lessons_done": 0,
+    "lessons_total": 3,
+    "weak": false
+   }
+  },
+  {
+   "module": {
+    "id": "b",
+    "lessons": [
+     {
+      "id": "b1"
+     },
+     {
+      "id": "b2"
+     },
+     {
+      "id": "b3"
+     }
+    ]
+   },
+   "done": [
+    "b1",
+    "b2"
+   ],
+   "stats": {
+    "b": {
+     "answered": 4,
+     "correct": 1
+    }
+   },
+   "expect": {
+    "module": "b",
+    "score": 33,
+    "level": "Not ready",
+    "answered": 4,
+    "correct": 1,
+    "lessons_done": 2,
+    "lessons_total": 3,
+    "weak": true
+   }
+  },
+  {
+   "module": {
+    "id": "b",
+    "lessons": [
+     {
+      "id": "b1"
+     },
+     {
+      "id": "b2"
+     },
+     {
+      "id": "b3"
+     }
+    ]
+   },
+   "done": [
+    "b1",
+    "b2",
+    "b3"
+   ],
+   "stats": {
+    "b": {
+     "answered": 12,
+     "correct": 11
+    }
+   },
+   "expect": {
+    "module": "b",
+    "score": 95,
+    "level": "Ready",
+    "answered": 12,
+    "correct": 11,
+    "lessons_done": 3,
+    "lessons_total": 3,
+    "weak": false
+   }
+  }
+ ],
+ "next_lesson": [
+  {
+   "modules": [
+    {
+     "id": "a",
+     "lessons": [
+      {
+       "id": "a1"
+      },
+      {
+       "id": "a2"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "lessons": [
+      {
+       "id": "b1"
+      },
+      {
+       "id": "b2"
+      },
+      {
+       "id": "b3"
+      }
+     ]
+    },
+    {
+     "id": "c",
+     "lessons": [
+      {
+       "id": "c1"
+      },
+      {
+       "id": "c2"
+      },
+      {
+       "id": "c3"
+      },
+      {
+       "id": "c4"
+      },
+      {
+       "id": "c5"
+      },
+      {
+       "id": "c6"
+      },
+      {
+       "id": "c7"
+      },
+      {
+       "id": "c8"
+      }
+     ]
+    }
+   ],
+   "done": [],
+   "optional": [],
+   "expect": "a1"
+  },
+  {
+   "modules": [
+    {
+     "id": "a",
+     "lessons": [
+      {
+       "id": "a1"
+      },
+      {
+       "id": "a2"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "lessons": [
+      {
+       "id": "b1"
+      },
+      {
+       "id": "b2"
+      },
+      {
+       "id": "b3"
+      }
+     ]
+    },
+    {
+     "id": "c",
+     "lessons": [
+      {
+       "id": "c1"
+      },
+      {
+       "id": "c2"
+      },
+      {
+       "id": "c3"
+      },
+      {
+       "id": "c4"
+      },
+      {
+       "id": "c5"
+      },
+      {
+       "id": "c6"
+      },
+      {
+       "id": "c7"
+      },
+      {
+       "id": "c8"
+      }
+     ]
+    }
+   ],
+   "done": [],
+   "optional": [
+    "a"
+   ],
+   "expect": "b1"
+  },
+  {
+   "modules": [
+    {
+     "id": "a",
+     "lessons": [
+      {
+       "id": "a1"
+      },
+      {
+       "id": "a2"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "lessons": [
+      {
+       "id": "b1"
+      },
+      {
+       "id": "b2"
+      },
+      {
+       "id": "b3"
+      }
+     ]
+    },
+    {
+     "id": "c",
+     "lessons": [
+      {
+       "id": "c1"
+      },
+      {
+       "id": "c2"
+      },
+      {
+       "id": "c3"
+      },
+      {
+       "id": "c4"
+      },
+      {
+       "id": "c5"
+      },
+      {
+       "id": "c6"
+      },
+      {
+       "id": "c7"
+      },
+      {
+       "id": "c8"
+      }
+     ]
+    }
+   ],
+   "done": [
+    "b1",
+    "b2",
+    "b3",
+    "c1",
+    "c2",
+    "c3",
+    "c4",
+    "c5",
+    "c6",
+    "c7",
+    "c8"
+   ],
+   "optional": [
+    "a"
+   ],
+   "expect": "a1"
+  },
+  {
+   "modules": [
+    {
+     "id": "a",
+     "lessons": [
+      {
+       "id": "a1"
+      },
+      {
+       "id": "a2"
+      }
+     ]
+    },
+    {
+     "id": "b",
+     "lessons": [
+      {
+       "id": "b1"
+      },
+      {
+       "id": "b2"
+      },
+      {
+       "id": "b3"
+      }
+     ]
+    },
+    {
+     "id": "c",
+     "lessons": [
+      {
+       "id": "c1"
+      },
+      {
+       "id": "c2"
+      },
+      {
+       "id": "c3"
+      },
+      {
+       "id": "c4"
+      },
+      {
+       "id": "c5"
+      },
+      {
+       "id": "c6"
+      },
+      {
+       "id": "c7"
+      },
+      {
+       "id": "c8"
+      }
+     ]
+    }
+   ],
+   "done": [
+    "a1",
+    "a2",
+    "b1",
+    "b2",
+    "b3",
+    "c1",
+    "c2",
+    "c3",
+    "c4",
+    "c5",
+    "c6",
+    "c7",
+    "c8"
+   ],
+   "optional": [],
+   "expect": null
+  }
+ ],
+ "fact_guard": [
+  {
+   "source": "Built REST APIs in Python and FastAPI serving 10k users; cut latency 30% with Redis caching.",
+   "rewritten": "Designed Python REST APIs (FastAPI) for 10k users and reduced latency by 30% using Redis.",
+   "expect": {
+    "ok": true,
+    "new_numbers": [],
+    "new_skills": []
+   }
+  },
+  {
+   "source": "Built REST APIs in Python and FastAPI serving 10k users; cut latency 30% with Redis caching.",
+   "rewritten": "Led Kubernetes migration of Python APIs serving 50k users.",
+   "expect": {
+    "ok": false,
+    "new_numbers": [
+     "50"
+    ],
+    "new_skills": [
+     "Kubernetes"
+    ]
+   }
+  },
+  {
+   "source": "Built REST APIs in Python and FastAPI serving 10k users; cut latency 30% with Redis caching.",
+   "rewritten": "Built APIs; improved latency 30.5% with caching.",
+   "expect": {
+    "ok": false,
+    "new_numbers": [
+     "30.5"
+    ],
+    "new_skills": []
+   }
+  },
+  {
+   "source": "Built REST APIs in Python and FastAPI serving 10k users; cut latency 30% with Redis caching.",
+   "rewritten": "",
+   "expect": {
+    "ok": true,
+    "new_numbers": [],
+    "new_skills": []
+   }
+  }
+ ],
+ "mock_plan": [
+  {
+   "skills": [
+    "Python",
+    "SQL",
+    "AWS"
+   ],
+   "competencies": [
+    {
+     "id": "leadership",
+     "question": "Tell me about a time you led."
+    },
+    {
+     "id": "conflict",
+     "question": "A disagreement?"
+    }
+   ],
+   "count": 6,
+   "expect": [
+    {
+     "kind": "technical",
+     "skill": "Python"
+    },
+    {
+     "kind": "behavioural",
+     "competency": "leadership",
+     "question": "Tell me about a time you led."
+    },
+    {
+     "kind": "technical",
+     "skill": "SQL"
+    },
+    {
+     "kind": "behavioural",
+     "competency": "conflict",
+     "question": "A disagreement?"
+    },
+    {
+     "kind": "technical",
+     "skill": "AWS"
+    }
+   ]
+  },
+  {
+   "skills": [],
+   "competencies": [
+    {
+     "id": "leadership",
+     "question": "Tell me about a time you led."
+    },
+    {
+     "id": "conflict",
+     "question": "A disagreement?"
+    }
+   ],
+   "count": 4,
+   "expect": [
+    {
+     "kind": "behavioural",
+     "competency": "leadership",
+     "question": "Tell me about a time you led."
+    },
+    {
+     "kind": "behavioural",
+     "competency": "conflict",
+     "question": "A disagreement?"
+    }
+   ]
+  },
+  {
+   "skills": [
+    "Python"
+   ],
+   "competencies": [
+    {
+     "id": "leadership",
+     "question": "Tell me about a time you led."
+    },
+    {
+     "id": "conflict",
+     "question": "A disagreement?"
+    }
+   ],
+   "count": 2,
+   "expect": [
+    {
+     "kind": "technical",
+     "skill": "Python"
+    },
+    {
+     "kind": "behavioural",
+     "competency": "leadership",
+     "question": "Tell me about a time you led."
+    },
+    {
+     "kind": "behavioural",
+     "competency": "conflict",
+     "question": "A disagreement?"
+    }
+   ]
+  },
+  {
+   "skills": [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K"
+   ],
+   "competencies": [
+    {
+     "id": "leadership",
+     "question": "Tell me about a time you led."
+    },
+    {
+     "id": "conflict",
+     "question": "A disagreement?"
+    }
+   ],
+   "count": 20,
+   "expect": [
+    {
+     "kind": "technical",
+     "skill": "A"
+    },
+    {
+     "kind": "behavioural",
+     "competency": "leadership",
+     "question": "Tell me about a time you led."
+    },
+    {
+     "kind": "technical",
+     "skill": "B"
+    },
+    {
+     "kind": "behavioural",
+     "competency": "conflict",
+     "question": "A disagreement?"
+    },
+    {
+     "kind": "technical",
+     "skill": "C"
+    },
+    {
+     "kind": "technical",
+     "skill": "D"
+    },
+    {
+     "kind": "technical",
+     "skill": "E"
+    },
+    {
+     "kind": "technical",
+     "skill": "F"
+    },
+    {
+     "kind": "technical",
+     "skill": "G"
+    },
+    {
+     "kind": "technical",
+     "skill": "H"
+    },
+    {
+     "kind": "technical",
+     "skill": "I"
+    },
+    {
+     "kind": "technical",
+     "skill": "J"
+    }
+   ]
+  }
+ ],
+ "feedback": [
+  {
+   "answer": "I used Redis to cache the hot queries, and latency dropped a lot. First I measured, then I fixed the slowest endpoint.",
+   "o": {
+    "scores": {
+     "relevance": 4,
+     "depth": 3,
+     "structure": 5
+    },
+    "evidence": [
+     "used Redis to cache the hot queries",
+     "I led a team of 12",
+     "ab"
+    ],
+    "tips": [
+     "Give a number."
+    ]
+   },
+   "expect": {
+    "scores": {
+     "relevance": 4,
+     "depth": 3,
+     "structure": 5
+    },
+    "total": 12,
+    "evidence": [
+     "used Redis to cache the hot queries"
+    ],
+    "tips": [
+     "Give a number."
+    ]
+   }
+  },
+  {
+   "answer": "I used Redis to cache the hot queries, and latency dropped a lot. First I measured, then I fixed the slowest endpoint.",
+   "o": {
+    "scores": {
+     "relevance": 6,
+     "depth": 3,
+     "structure": 5
+    }
+   },
+   "expect": null
+  },
+  {
+   "answer": "I used Redis to cache the hot queries, and latency dropped a lot. First I measured, then I fixed the slowest endpoint.",
+   "o": {
+    "scores": {
+     "relevance": 4.4,
+     "depth": 2.6,
+     "structure": true
+    }
+   },
+   "expect": null
+  },
+  {
+   "answer": "I used Redis to cache the hot queries, and latency dropped a lot. First I measured, then I fixed the slowest endpoint.",
+   "o": {
+    "scores": {
+     "relevance": 4.4,
+     "depth": 2.6,
+     "structure": 1
+    },
+    "evidence": "not a list",
+    "tips": []
+   },
+   "expect": {
+    "scores": {
+     "relevance": 4,
+     "depth": 3,
+     "structure": 1
+    },
+    "total": 8,
+    "evidence": [],
+    "tips": []
+   }
+  }
+ ],
+ "mock_summary": [
+  {
+   "rows": [
+    {
+     "skill": "Python",
+     "feedback": {
+      "scores": {
+       "relevance": 4,
+       "depth": 3,
+       "structure": 5
+      },
+      "total": 12,
+      "evidence": [],
+      "tips": []
+     }
+    },
+    {
+     "competency": "conflict",
+     "feedback": {
+      "scores": {
+       "relevance": 2,
+       "depth": 2,
+       "structure": 3
+      },
+      "total": 7,
+      "evidence": [],
+      "tips": []
+     }
+    },
+    {
+     "skill": "SQL",
+     "feedback": null
+    }
+   ],
+   "expect": {
+    "answered": 2,
+    "percent": 63,
+    "means": {
+     "relevance": 3.0,
+     "depth": 2.5,
+     "structure": 4.0
+    },
+    "weakest": "depth"
+   }
+  },
+  {
+   "rows": [],
+   "expect": {
+    "answered": 0,
+    "percent": null,
+    "means": {},
+    "weakest": null
+   }
+  }
+ ],
+ "quality": [
+  {
+   "probes": {
+    "json_mcq": true,
+    "lesson_sections": true,
+    "fact": true
+   },
+   "expect": "good"
+  },
+  {
+   "probes": {
+    "json_mcq": true,
+    "lesson_sections": false,
+    "fact": true
+   },
+   "expect": "weak"
+  },
+  {
+   "probes": {
+    "fact": true
+   },
+   "expect": "poor"
+  },
+  {
+   "probes": {},
+   "expect": "poor"
+  }
+ ]
+}

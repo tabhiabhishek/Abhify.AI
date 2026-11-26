@@ -82,10 +82,10 @@ fun LiveInfoSettingsGroup(vm: AppViewModel) {
             "with information retrieved now, with sources. Only the question's topic is sent to the news search (Google News); your documents, " +
             "memories and records never leave the phone for this.", s.enabled) { vm.setRealtime("rt_enabled", it) }
         if (s.enabled) {
-            SwitchRow("Weather (Open-Meteo)", "Sends only the place name below to Open-Meteo.com (free, no account; data CC BY 4.0). No device location is used.", s.weather) { vm.setRealtime("rt_weather", it) }
+            SwitchRow("Weather (Open-Meteo)", "When you ask about the weather, only the city name (from your question or below) goes to Open-Meteo.com (free, no account; data CC BY 4.0). No device location is used.", s.weather) { vm.setRealtime("rt_weather", it) }
             if (s.weather) {
                 var place by remember { mutableStateOf(s.place) }
-                OutlinedTextField(place, { place = it.take(80); vm.setRealtime("rt_place", place) }, singleLine = true, label = { Text("Place for weather (e.g. Pune)") })
+                OutlinedTextField(place, { place = it.take(80); vm.setRealtime("rt_place", place) }, singleLine = true, label = { Text("Your city (e.g. Pune, Maharashtra)") })
             }
             SwitchRow("Exchange rates (ECB via Frankfurter)", "Daily reference rates from the European Central Bank (frankfurter.dev, free, no account). Not live market prices.", s.fx) { vm.setRealtime("rt_fx", it) }
             Text("General web search isn't available on the phone: it needs a search provider (for example Brave or Tavily) with an API key, " +

@@ -107,9 +107,14 @@ def test_package_check_rejects_user_data_and_secrets(tmp_path):
 def test_build_allowlist_excludes_dev_and_user_files():
     sys.path.insert(0, str(PKG))
     import build
-    assert build.APP_ALLOW["backend"] == ["*.py", "requirements.txt", "news_sources.json"]  # no tests/, data/, .venv, .env
+    assert build.APP_ALLOW["backend"] == ["*.py", "requirements.txt", "news_sources.json", "model_catalog.json",
+                                          "study_tracks.json", "skills_taxonomy.json"]  # no tests/, data/, .venv, .env
+    import study                                                          # 7.2: the Study files the backend reads are packaged
+    assert study.TRACKS_PATH.name in build.APP_ALLOW["backend"]
     import news_center                                                    # 6.1: the runtime data file the backend reads is packaged
     assert news_center.CATALOG_FILE.name in build.APP_ALLOW["backend"]
+    import hardware_advisor                                               # 7.0.2: the model catalog the advisor reads is packaged
+    assert hardware_advisor.CATALOG_PATH.name in build.APP_ALLOW["backend"]
     assert {"pytest", "pip"} <= build.DEV_ONLY
 
 
@@ -181,3 +186,21 @@ def test_staged_runtime_has_no_unmet_dlls():
     sys.path.insert(0, str(PKG))
     from dll_check import unmet_dependencies
     assert unmet_dependencies(rt) == {}
+
+
+def test_every_data_file_the_backend_loads_is_packaged():
+    """7.0.2 regression: the first 7.0.2 installer lacked model_catalog.json (/setup/advice 500 in the packaged app), as
+    2.0.0-dev.8 lacked news_sources.json. Any file a backend module opens next to itself must be in APP_ALLOW."""
+    import fnmatch
+    import re
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2]
+    text = (root / "packaging" / "windows" / "build.py").read_text(encoding="utf-8")
+    allow = re.search(r'APP_ALLOW = \{"backend": \[(.*?)\]', text, re.S).group(1)
+    patterns = re.findall(r'"([^"]+)"', allow)
+    loaded = set()
+    for f in (root / "backend").glob("*.py"):
+        loaded |= set(re.findall(r'with_name\("([^"]+)"\)', f.read_text(encoding="utf-8")))
+    assert loaded >= {"model_catalog.json", "news_sources.json"}
+    missing = [n for n in loaded if not any(fnmatch.fnmatch(n, p) for p in patterns)]
+    assert not missing, f"backend data files not packaged: {missing}"

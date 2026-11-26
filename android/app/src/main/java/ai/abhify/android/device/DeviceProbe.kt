@@ -39,6 +39,9 @@ object DeviceProbe {
             cpuFeatures = features,
             vulkanVersion = vulkan,
             thermalStatus = context.getSystemService(PowerManager::class.java).currentThermalStatus,
+            batteryPercent = runCatching { context.getSystemService(android.os.BatteryManager::class.java)
+                .getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY).takeIf { it in 0..100 } }.getOrNull(),
+            charging = runCatching { context.getSystemService(android.os.BatteryManager::class.java).isCharging }.getOrNull(),
         )
     }
 

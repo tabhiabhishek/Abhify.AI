@@ -49,7 +49,7 @@ def test_news_audio_controls_pause_resume_skip_speed_replay(r):
 
 
 def test_news_audio_failures_are_reported(r):
-    assert r["audio_error"] == {"state": "error", "error": "synthesis-failed"}
+    assert r["audio_error"] == {"state": "error", "error": "The speech engine couldn’t read this. Try again, or choose another voice."}   # 7.1.0-dev.2: a sentence, not a code
     assert r["audio_unavailable"] == {"ok": False, "state": "error", "error": "Read aloud is not available in this browser."}
     assert r["audio_nothing"]["error"] == "Nothing to read."
 

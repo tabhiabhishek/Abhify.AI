@@ -79,7 +79,7 @@ def test_offline_fallback_content_present():
         assert key in mock
     app = (FRONT / "app.js").read_text(encoding="utf-8")
     assert "Offline Mode" in (FRONT / "index.html").read_text(encoding="utf-8")
-    assert "window.MOCK.news" in app and "store.json(LS.news" in app
+    assert "window.MOCK?.news" in app and "store.json(LS.news" in app
 
 
 def test_no_secrets_in_frontend():

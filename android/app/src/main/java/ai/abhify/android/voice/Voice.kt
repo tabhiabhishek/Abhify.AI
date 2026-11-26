@@ -32,49 +32,71 @@ class Voice(private val context: Context) {
     }
 
     private var recognizer: SpeechRecognizer? = null
+    /** 7.1.1: every session gets a number; callbacks of an older (stopped) recogniser are ignored, so a late result can't
+     *  land in the next session or touch a destroyed recogniser. */
+    private var session = 0
+    /** 7.1.1: the on-device recogniser failed on this phone (language pack missing, service crashed): use the standard one. */
+    @Volatile private var onDeviceBroken = false
+    /** The configured assistant name, given to the recogniser as a hint so it is recognised (Android 13+ biasing). */
+    @Volatile var nameHint: String? = null
 
-    /** Calls [onPartial] while you speak and [onResult] / [onError] at the end. Main thread only. */
     /** 5.4: the microphone level (0..1) while listening, from the recogniser's real RMS; drives the waveform. */
     var onLevel: (Float) -> Unit = {}
+    /** 7.1.1: true while a recogniser is open (the microphone may be in use). */
+    val isListening get() = recognizer != null
 
+    /** Calls [onPartial] while you speak and exactly one of [onResult] / [onError] at the end. Main thread only. Never throws. */
     fun listen(onPartial: (String) -> Unit, onResult: (String) -> Unit, onError: (String) -> Unit, languageTag: String = Locale.getDefault().toLanguageTag()) {
-        stopListening()
-        val r = when (mode) {
-            Mode.ON_DEVICE -> if (Build.VERSION.SDK_INT >= 31) SpeechRecognizer.createOnDeviceSpeechRecognizer(context) else return onError("unavailable")
-            Mode.PREFER_OFFLINE -> SpeechRecognizer.createSpeechRecognizer(context)
-            Mode.NONE -> return onError("This phone has no speech recognizer.")
+        cancelListening()
+        val my = ++session
+        val onDevice = mode == Mode.ON_DEVICE && !onDeviceBroken && Build.VERSION.SDK_INT >= 31
+        if (mode == Mode.NONE) { onError(VoiceErrors.NO_RECOGNIZER); return }
+        val r = try {
+            if (onDevice) SpeechRecognizer.createOnDeviceSpeechRecognizer(context) else SpeechRecognizer.createSpeechRecognizer(context)
+        } catch (e: Exception) {
+            if (onDevice) { onDeviceBroken = true; listen(onPartial, onResult, onError, languageTag); return }
+            onError(VoiceErrors.START_FAILED); return
         }
         recognizer = r
+        var finished = false
+        fun end(block: () -> Unit) { if (my != session || finished) return; finished = true; release(r); block() }
+        fun retryStandard() { finished = true; release(r); onDeviceBroken = true; listen(onPartial, onResult, onError, languageTag) }
         r.setRecognitionListener(object : RecognitionListener {
-            override fun onResults(b: Bundle?) { onResult(b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()); stopListening() }
-            override fun onPartialResults(b: Bundle?) { b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.let(onPartial) }
+            override fun onResults(b: Bundle?) { end { onResult(b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()) } }
+            override fun onPartialResults(b: Bundle?) { if (my == session && !finished) b?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.let(onPartial) }
             override fun onError(error: Int) {
-                onError(when (error) {
-                    SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Didn't catch that. Try again."
-                    SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission is needed."
-                    SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Speech recognition needs the internet on this phone (no offline speech pack)."
-                    else -> "Speech recognition error ($error)."
-                })
-                stopListening()
+                if (my != session || finished) return
+                // the on-device recogniser can't do this language or broke: try once more with Android's standard recogniser
+                if (onDevice && error in VoiceErrors.ON_DEVICE_FALLBACK) { retryStandard(); return }
+                end { onError(VoiceErrors.message(error)) }
             }
             override fun onReadyForSpeech(p: Bundle?) {}
             override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(v: Float) { onLevel(((v + 2f) / 12f).coerceIn(0f, 1f)) }
+            override fun onRmsChanged(v: Float) { if (my == session) onLevel(((v + 2f) / 12f).coerceIn(0f, 1f)) }
             override fun onBufferReceived(b: ByteArray?) {}
             override fun onEndOfSpeech() {}
             override fun onEvent(t: Int, p: Bundle?) {}
         })
-        r.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
-        })
+        try {
+            r.startListening(Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
+                nameHint?.takeIf { it.isNotBlank() && Build.VERSION.SDK_INT >= 33 }?.let { putStringArrayListExtra(RecognizerIntent.EXTRA_BIASING_STRINGS, arrayListOf(it)) }
+            })
+        } catch (e: Exception) {
+            if (onDevice) { retryStandard(); return }
+            end { onError(VoiceErrors.START_FAILED) }
+        }
     }
 
-    fun stopListening() { recognizer?.let { runCatching { it.stopListening(); it.destroy() } }; recognizer = null }
-    /** Abandons the recording without a result. */
-    fun cancelListening() { recognizer?.let { runCatching { it.cancel(); it.destroy() } }; recognizer = null }
+    private fun release(r: SpeechRecognizer) { if (recognizer === r) recognizer = null; runCatching { r.destroy() } }
+
+    /** Stops listening; what was heard so far is still recognised (a result or error follows). */
+    fun stopListening() { recognizer?.let { runCatching { it.stopListening() } } }
+    /** Abandons the recording without a result and releases the microphone at once. */
+    fun cancelListening() { session++; recognizer?.let { r -> recognizer = null; runCatching { r.cancel() }; runCatching { r.destroy() } } }
 
     // ------------------------------------------------------------------ text to speech
     private var tts: TextToSpeech? = null
@@ -137,12 +159,13 @@ class Voice(private val context: Context) {
                 engine.setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_ASSISTANT)
                     .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build())
                 engine.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
-                    override fun onStart(id: String?) { id?.removePrefix("abhify-")?.toIntOrNull()?.let { reader = reader.started(it); onProgress(it, reader.parts.size) }; onSpeaking(true) }
+                    override fun onStart(id: String?) { id?.removePrefix("abhify-")?.toIntOrNull()?.let { reader = reader.started(it); onProgress(it, reader.parts.size) }; onSpeaking(true)
+                        if (id == "abhify-0" || id == "abhify-preview") ai.abhify.android.device.VoiceLog.add("tts", "speaking ($id, voice ${runCatching { tts?.voice?.name }.getOrNull() ?: "default"})") }
                     override fun onDone(id: String?) {
                         if (id == "abhify-preview") { releaseFocus(); onSpeaking(false); return }
                         if (id?.removePrefix("abhify-")?.toIntOrNull() == reader.parts.lastIndex) { reader = Reader(); releaseFocus(); onSpeaking(false) } }
                     override fun onStop(id: String?, interrupted: Boolean) { releaseFocus(); onSpeaking(false) }
-                    @Deprecated("API compatibility") override fun onError(id: String?) { onSpeaking(false); onSpeakError("Text-to-speech failed.") }
+                    @Deprecated("API compatibility") override fun onError(id: String?) { ai.abhify.android.device.VoiceLog.add("tts", "error"); onSpeaking(false); onSpeakError("Text-to-speech failed.") }
                 })
                 if (engine.setLanguage(Locale.getDefault()) < TextToSpeech.LANG_AVAILABLE) engine.setLanguage(Locale.US)
                 waiting.toList().forEach { it(engine) }; waiting.clear()
@@ -152,36 +175,59 @@ class Voice(private val context: Context) {
     }
 
     // ------------------------------------------------------------------ 5.4 voice choice (only the engine's real voices)
-    data class VoiceInfo(val name: String, val languageTag: String, val female: Boolean, val male: Boolean, val needsNetwork: Boolean, val quality: Int)
+    data class VoiceInfo(val name: String, val languageTag: String, val female: Boolean, val male: Boolean, val needsNetwork: Boolean, val quality: Int,
+                         val isDefault: Boolean = false) {
+        fun candidate() = VoiceChoice.Candidate(name, languageTag, female, male, needsNetwork, quality, isDefault)
+    }
 
     /** The engine's installed voices for [language] ("en" / "hi"), best first. Gender only where the engine marks it. */
     fun voicesFor(language: String, then: (List<VoiceInfo>) -> Unit) = withEngine { t ->
-        val list = runCatching { t.voices.orEmpty() }.getOrDefault(emptySet())
-            .filter { it.locale.language == language && !it.features.orEmpty().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) }
-            .map { v -> val f = v.features.orEmpty()
-                VoiceInfo(v.name, v.locale.toLanguageTag(), VoiceSettings.marksFemale(v.name, f), VoiceSettings.marksMale(v.name, f), v.isNetworkConnectionRequired, v.quality) }
+        val list = installed(t, language)
             .sortedWith(compareByDescending<VoiceInfo> { it.female }.thenBy { it.needsNetwork }.thenByDescending { it.quality }.thenBy { it.name })
         then(list)
     }
 
-    /** The voice chosen in Settings (null = automatic: a female-marked voice for the language if the engine has one, else its default). */
-    @Volatile var preferredVoice: String? = null
-
-    private fun applyVoice(t: TextToSpeech, hindi: Boolean) {
-        val lang = if (hindi) "hi" else (Locale.getDefault().language.takeIf { it == "en" || it == "hi" } ?: "en")
-        val voices = runCatching { t.voices.orEmpty() }.getOrDefault(emptySet()).filter { it.locale.language == lang &&
-            !it.features.orEmpty().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) }
-        val chosen = voices.firstOrNull { it.name == preferredVoice }
-            ?: VoiceSettings.autoVoice(voices.sortedBy { it.isNetworkConnectionRequired }, { it.name }, { it.features.orEmpty() })
-        if (chosen != null) runCatching { t.voice = chosen }
+    /** 7.1.0: which speech engine the phone uses and how many voices it has for [language] (shown in Voice settings). */
+    fun engineInfo(language: String, then: (String) -> Unit) = withEngine { t ->
+        val name = runCatching { t.engines.firstOrNull { it.name == t.defaultEngine }?.label ?: t.defaultEngine }.getOrNull() ?: "unknown"
+        val v = installed(t, language)
+        then("Speech engine: $name · ${v.size} ${if (language == "hi") "Hindi" else "English"} voices installed (${v.count { !it.needsNetwork }} work offline" +
+            (if (v.none { it.male || it.female }) "; the engine doesn't label them male or female" else "") + ")")
     }
 
-    /** Speaks a short sample with [voiceName] (or automatic) at [rate], without changing the saved choice. */
-    fun preview(sample: String, voiceName: String?, rate: Float) = withEngine { t ->
-        val keep = preferredVoice; preferredVoice = voiceName
-        t.setLanguage(if (isHindi(sample)) Locale("hi", "IN") else Locale.getDefault()); applyVoice(t, isHindi(sample))
-        t.setSpeechRate(rate.coerceIn(0.5f, 2f)); t.speak(sample, TextToSpeech.QUEUE_FLUSH, null, "abhify-preview")
-        preferredVoice = keep; t.setSpeechRate(this.rate)
+    /** Unused since 7.1.1 (the three choices decide); kept so older callers compile. */
+    @Volatile var preferredVoice: String? = null
+    /** 7.1.1: Male, Female or Assistant. */
+    @Volatile var preferredStyle: VoiceSettings.Style = VoiceSettings.Style.ASSISTANT
+    /** 7.1.0: the voice the user picked for each choice (null = automatic). */
+    @Volatile var picked: Map<VoiceSettings.Style, String?> = emptyMap()
+    var pitch = 1.0f; private set
+    fun setPitch(p: Float) { pitch = p.coerceIn(0.5f, 2f); runCatching { tts?.setPitch(pitch) } }
+
+    private fun installed(t: TextToSpeech, lang: String): List<VoiceInfo> {
+        val def = runCatching { t.defaultVoice?.name }.getOrNull()
+        return runCatching { t.voices.orEmpty() }.getOrDefault(emptySet()).filter { it.locale.language == lang &&
+            !it.features.orEmpty().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) }
+            .map { v -> val f = v.features.orEmpty()
+                VoiceInfo(v.name, v.locale.toLanguageTag(), VoiceSettings.marksFemale(v.name, f), VoiceSettings.marksMale(v.name, f), v.isNetworkConnectionRequired, v.quality, v.name == def) }
+            .sortedWith(compareBy<VoiceInfo> { it.needsNetwork }.thenByDescending { it.quality }.thenBy { it.name })
+    }
+
+    private fun applyVoice(t: TextToSpeech, hindi: Boolean, style: VoiceSettings.Style = preferredStyle, exact: String? = null) {
+        val lang = if (hindi) "hi" else (Locale.getDefault().language.takeIf { it == "en" || it == "hi" } ?: "en")
+        val r = VoiceChoice.resolve(style, installed(t, lang).map { it.candidate() }, exact ?: picked[style])
+        r.voiceName?.let { name -> runCatching { t.voices.orEmpty().firstOrNull { it.name == name }?.let { t.voice = it } } }
+        runCatching { t.setPitch(pitch) }
+    }
+
+    /** Speaks a short sample with [style] at [rate], without changing the saved choice. Stop with [stopSpeaking]. */
+    fun preview(sample: String, style: VoiceSettings.Style, rate: Float, voiceName: String? = null) = withEngine { t ->
+        runCatching {
+            t.setLanguage(if (isHindi(sample)) Locale("hi", "IN") else Locale.getDefault()); applyVoice(t, isHindi(sample), style, voiceName)
+            t.setSpeechRate(rate.coerceIn(0.5f, 2f)); takeFocus()
+            if (t.speak(sample, TextToSpeech.QUEUE_FLUSH, null, "abhify-preview") != TextToSpeech.SUCCESS) onSpeakError("The preview couldn't be played.")
+            t.setSpeechRate(this.rate)
+        }.onFailure { onSpeaking(false); onSpeakError("The preview couldn't be played.") }
     }
 
     // ------------------------------------------------------------------ 5.4 audio focus while speaking (other audio ducks briefly)

@@ -25,14 +25,22 @@ object SetupPolicy {
 
     /** What the device check shows. Only facts read from this phone; a model is called suitable only after the compatibility check. */
     fun deviceReport(release: String, sdk: Int, totalMb: Int, mem: MemorySnapshot, freeStorageMb: Long, abis: List<String>,
-                     recommendation: Compatibility?, installedModel: String?, online: Boolean, ocrBundled: Boolean): List<Line> = listOf(
+                     recommendation: Compatibility?, installedModel: String?, online: Boolean, ocrBundled: Boolean,
+                     device: ai.abhify.android.model.DeviceInfo? = null, executionMode: String? = null): List<Line> = listOfNotNull(
+        device?.let { Line("Phone", "${it.manufacturer} ${it.model}".trim(), null) },
+        device?.let { Line("Chip (SoC)", it.socModel.ifBlank { "not reported" }, null) },
+        device?.let { Line("CPU", DeviceProbe.cpuSummary(it), null) },
+        device?.let { Line("Graphics (GPU)", it.vulkanVersion?.let { v -> "Vulkan $v reported" } ?: "no Vulkan reported", null) },
+        device?.batteryPercent?.let { b -> Line("Battery", "$b %" + if (device.charging == true) " · charging" else "", b >= 20 || device.charging == true) },
+        executionMode?.let { Line("AI would run on", it, null) },
         Line("Android", "$release (API $sdk)", sdk >= 29),
         Line("Memory", "%.1f GB total · %,d MB free now".format(totalMb / 1024.0, mem.availMb), !mem.lowMemory && !mem.lowRamDevice),
         Line("Storage free", "%,d MB".format(freeStorageMb), freeStorageMb > 1500),
         Line("Processor", abis.firstOrNull() ?: "unknown", abis.any { it == "arm64-v8a" || it == "x86_64" }),
         Line("AI model on this phone", installedModel ?: "none yet", if (installedModel != null) true else null),
         Line("Recommended model", when (recommendation) {
-            is Compatibility.Ok -> recommendation.model.name + " (" + "%.1f GB download".format(recommendation.model.sizeBytes / 1e9) + ")"
+            is Compatibility.Ok -> recommendation.model.name + " (" + recommendation.model.quantization + ", " +
+                "%.1f GB download, about %,d MB of memory while running".format(recommendation.model.sizeBytes / 1e9, recommendation.model.estimatedRuntimeMb) + ")"
             is Compatibility.No -> "none fits: " + recommendation.reasons.firstOrNull().orEmpty()
             null -> "none fits this phone"
         }, recommendation is Compatibility.Ok),

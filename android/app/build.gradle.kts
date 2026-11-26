@@ -19,8 +19,8 @@ android {
         applicationId = "ai.abhify.android"      // permanent once released: updates need the same id and signing key
         minSdk = 29                              // Android 10, see docs/ANDROID_APP.md "Minimum Android version"
         targetSdk = 36
-        versionCode = 5040099                    // major*1000000 + minor*10000 + patch*100 + stage (rc.N = N, final = 99)
-        versionName = "5.4"                      // owner's request (2026-11-18): "make next build" (Personal Voice Companion)
+        versionCode = 7020199                    // major*1000000 + minor*10000 + patch*100 + stage (dev.N = N, rc.N = 50+N, final = 99)
+        versionName = "7.2.1"                    // 7.2.1 final, 2026-11-25; 7.2.1-dev.2 = 7020102, 7.2.1-dev.1 = 7020101
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Signed-update source and trusted public key(s) "keyId=base64,...". Empty = updates not configured
         // (the owner decides the host and creates the production key; nothing is preset here).
@@ -47,9 +47,9 @@ android {
     buildTypes {
         debug {
             ndk { abiFilters += listOf("arm64-v8a", "x86_64") }   // x86_64 only so emulators can run UI tests
-            // Internal development identifier (2026-11-18): the app version stays 5.4 / 5040099 (no version change without
-            // the owner's approval); internal builds read "5.4-dev.1" and are written only to build/internal/.
-            versionNameSuffix = "-internal.6.2-dev.1"   // 6.2 internal milestone (real-time intelligence; no 6.1.1 maintenance build existed); versionCode unchanged (an official 6.x version needs owner approval)
+            // 7.0.0 is the released version name. An internal build adds a suffix with -Pabhify.versionSuffix=-internal.7.1-dev.1
+            // (written only to build/internal/); the release build passes nothing, so the APK reads exactly "7.0.0".
+            versionNameSuffix = (findProperty("abhify.versionSuffix") as String?) ?: ""
         }
         release {
             isMinifyEnabled = false
@@ -97,6 +97,8 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.play.services.auth)      // Google Drive sign-in: official Authorization API, scope drive.file only
+    implementation("com.alphacephei:vosk-android:0.3.47@aar")   // 7.1.0 offline wake word (owner-approved; Apache-2.0); model downloaded only on request
+    implementation("net.java.dev.jna:jna:5.13.0@aar")            // required by Vosk (Apache-2.0/LGPL dual licence)
     implementation(libs.mlkit.text.recognition)  // on-device OCR, Latin script, bundled model (images never leave the phone)
     implementation(libs.pdfbox.android) {       // PDF text extraction on the phone (Apache-2.0)
         exclude(group = "org.bouncycastle")      // only for certificate-encrypted PDFs; v1.72 has known CVEs. Such PDFs get a clear message.

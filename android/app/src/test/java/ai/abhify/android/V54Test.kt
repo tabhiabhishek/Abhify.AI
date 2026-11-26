@@ -18,19 +18,19 @@ private fun src(path: String) = File("src/main/java/ai/abhify/android/$path").re
 class VoiceSettingsTest {
     @Test fun defaultsAreTheOwnersDecisions() {
         val d = VoiceSettings()
-        assertNull(d.voiceName)                                                              // automatic = female-marked voice where available
-        assertEquals(VoiceSettings.Tone.WARM, d.tone); assertEquals(VoiceSettings.Speed.NATURAL, d.speed); assertEquals(1.0f, d.rate)
+        assertNull(d.voiceName); assertEquals(VoiceSettings.Style.ASSISTANT, d.style); assertFalse(d.wakeWord)   // 7.1.1: Assistant voice, wake word off by default
+        assertEquals(VoiceSettings.Tone.WARM, d.tone); assertEquals(VoiceSettings.Speed.NATURAL, d.speed); assertEquals(VoiceSettings.SOFT_RATE, d.rate, 1e-4f)
         assertEquals(Language.BOTH, d.language); assertEquals(VoiceSettings.ResponseMode.SPOKEN_AND_TEXT, d.responseMode)
         assertTrue(d.interruptions && d.enabled && d.autoListen && d.screenHelp); assertFalse(d.spokenNotifications)
     }
 
     @Test fun settingsPersistAndDamagedDataFallsBackSafely() {
-        val s = VoiceSettings(voiceName = "hi-in-x-hid-local", tone = VoiceSettings.Tone.CALM, speed = VoiceSettings.Speed.CUSTOM, customRate = 1.4f,
+        val s = VoiceSettings(voiceName = null, tone = VoiceSettings.Tone.CALM, speed = VoiceSettings.Speed.CUSTOM, customRate = 1.4f,
             language = Language.HINDI, responseMode = VoiceSettings.ResponseMode.VOICE_ONLY, interruptions = false, spokenNotifications = true, quietFrom = 23, quietTo = 6)
         assertEquals(s, VoiceSettings.fromJson(s.toJson()))
         assertEquals(VoiceSettings(), VoiceSettings.fromJson("{not json"))
         assertEquals(VoiceSettings(), VoiceSettings.fromJson("""{"tone":"SHOUTY"}"""))      // unknown values → defaults
-        assertEquals(1.25f, VoiceSettings.fromJson(null, legacyRate = 1.25f).rate)           // the old reading speed is kept
+        assertEquals(1.25f * VoiceSettings.SOFT_RATE, VoiceSettings.fromJson(null, legacyRate = 1.25f).rate, 1e-4f)           // the old reading speed is kept
         assertEquals(2.0f, VoiceSettings(speed = VoiceSettings.Speed.CUSTOM, customRate = 9f).rate)
         assertFalse(VoiceSettings(responseMode = VoiceSettings.ResponseMode.TEXT_ONLY).speaks)
     }
@@ -132,7 +132,7 @@ class VoiceCompanionTest {
             && a.contains("vm.voiceState.interrupted.value -> OrbState.INTERRUPTED"))
         val ui = src("ui/VoiceScreens.kt")
         assertTrue(ui.contains("if (vm.listening.value) Waveform(v.level.floatValue)"))           // waveform only while listening, from the real level
-        assertTrue(src("voice/Voice.kt").contains("override fun onRmsChanged(v: Float) { onLevel("))
+        assertTrue(src("voice/Voice.kt").contains("override fun onRmsChanged(v: Float) { if (my == session) onLevel("))   // 7.1.1: only the current session
     }
 
     @Test fun conversationTurnsAreSpokenAndTypedChatIsUnchanged() {

@@ -63,6 +63,7 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -103,6 +104,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // next build: Personal AI Brain data side, Agent 2.0, briefing
     val brain by lazy { BrainState(this) }
     val agent by lazy { AgentState(this) }
+    /** 7.2 Study: courses, interview plan, STAR stories (filesDir/study.json; AI on this phone). */
+    val study by lazy { StudyState(this) }
     val briefingOpen = mutableStateOf(false)
     fun openBriefing() { briefingOpen.value = true }
     val backup = BackupState(this)
@@ -406,7 +409,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         modelRev.intValue++
     }
 
-    private suspend fun readyDevice(): Boolean {
+    internal suspend fun readyDevice(): Boolean {
         if (g.engine.loaded == null) engine.value = Engine.Loading
         val err = g.ensureModel()
         engine.value = if (err == null) Engine.Ready(g.backendLabel()) else Engine.Error(err)
@@ -500,6 +503,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun send(textIn: String) {
         val text = textIn.trim()
         if (text.isEmpty() || generating.value) return
+        if (attachment.value == null) ai.abhify.android.chat.Identity.answer(text, g.assistantName)?.let { answerByApp(text, it); return }   // 7.1.0-dev.2
         attachment.value?.let { d -> if (nextIsOnline() && docKey(d) !in docConsent) { consentAsk.value = text; return } }
         if ((chatDocs.isNotEmpty() || chatWorkspace.value != null) && nextIsOnline() && contextKey() !in docConsent) {
             val what = listOfNotNull(if (chatDocs.isNotEmpty()) "the best-matching sections of ${chatDocs.size} selected document(s)" else null,
@@ -535,21 +539,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         answer(shownText, regenerate = false, question = text)
     }
 
+    /** 7.1.0-dev.2: "what is your name?" answered by the app with the current name (no model), shown, saved and spoken like an answer. */
+    private fun answerByApp(question: String, reply: String) {
+        tab.value = Tab.CHAT
+        voice.stopSpeaking()
+        messages += UiMsg(null, "user", question)
+        messages += UiMsg(null, "assistant", reply, note = "Answered by the app")
+        val voiceTurn = voiceState.active.value && voiceState.awaitingAnswer
+        if (!privateChat.value) viewModelScope.launch {
+            val c = withContext(Dispatchers.IO) {
+                val c = conversationId.value ?: g.db.newConversation(question.take(60))
+                g.db.addMessage(c, "user", question); g.db.addMessage(c, "assistant", reply); c
+            }
+            conversationId.value = c; g.prefs.edit().putLong("conversation", c).apply()
+        }
+        if (voiceTurn) voiceState.onAnswerDone(reply, true) else if (g.readAloud) voice.speak(reply)
+    }
+
     /** 6.2: re-asks the last question with fresh live information (the cache is bypassed once). */
     fun refreshLive() { if (generating.value) return; refreshLiveNext = true; regenerate() }
     private var refreshLiveNext = false
 
-    /** 6.2 live-information settings (Settings → Live information). News uses the existing news search; weather and exchange
-     *  rates are new external services and stay off until the user turns them on. */
+    /** 6.2 live-information settings (Settings → Live information). News uses the existing news search; weather is on when
+     *  asked (only the city name goes to Open-Meteo); exchange rates stay off until the user turns them on. */
     fun realtimeSettings() = ai.abhify.android.intel.RealtimeEngine.Settings(g.prefs.getBoolean("rt_enabled", true),
-        g.prefs.getBoolean("rt_weather", false), g.prefs.getBoolean("rt_fx", false), g.prefs.getString("rt_place", "").orEmpty(),
+        g.prefs.getBoolean("rt_weather", true), g.prefs.getBoolean("rt_fx", false), g.prefs.getString("rt_place", "").orEmpty(),
         g.prefs.getString("rt_home", "INR").orEmpty().ifBlank { "INR" })
     fun setRealtime(key: String, value: Any) { g.prefs.edit { when (value) { is Boolean -> putBoolean(key, value); else -> putString(key, value.toString().take(80)) } }
         realtimeVersion.intValue++ }
     val realtimeVersion = androidx.compose.runtime.mutableIntStateOf(0)
     val realtime by lazy { ai.abhify.android.intel.RealtimeEngine(http = ::realtimeHttp, news = { q ->
         g.newsCenter.search(q, newsCenter.prefs.value).articles.map { a -> ai.abhify.android.intel.RealtimeEngine.NewsItem(a.title, a.publisher, a.url, a.publishedAt, a.summary) } },
-        local = realtimeLocal) }
+        local = realtimeLocal).also { e -> e.onPlaceLearned = { p -> setRealtime("rt_place", p) } } }
     private val realtimeHosts = setOf("geocoding-api.open-meteo.com", "api.open-meteo.com", "api.frankfurter.dev")
     /** Only the fixed provider hosts, https, short timeouts, at most 256 KB (never a URL taken from retrieved content). */
     private suspend fun realtimeHttp(url: String): String = withContext(Dispatchers.IO) {
@@ -613,6 +634,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             var fact: String? = null; var attempt: Source? = null; var finish: String? = null; var finished = false
             var memUsed: List<String> = emptyList(); var srcs: List<String> = emptyList()
             var links: List<LiveLink> = emptyList(); var liveLine: String? = null; var webLinks: List<LiveLink> = emptyList()
+            var citeSources: List<ai.abhify.android.intel.Citations.Src> = emptyList()      // 7.0.1: this answer's source registry
             val refreshLive = refreshLiveNext.also { refreshLiveNext = false }
             val voiceTurn = voiceState.active.value && voiceState.awaitingAnswer
             try {
@@ -694,6 +716,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     finally { searching.value = false }
                 }
                 val liveExternal = live?.external.orEmpty()
+                // 7.1.0: current information was needed but none could be retrieved: the app answers honestly and the
+                // model is not asked (an offline model would invent today's weather or news from old knowledge)
+                val externalNeeded = liveNeeds.filter { it.external }
+                if (externalNeeded.isNotEmpty() && liveExternal.isEmpty() && webItems.isEmpty()) {
+                    sb.append(ai.abhify.android.intel.Realtime.unavailableReply(externalNeeded, live?.notes.orEmpty(), online.value))
+                    source = Source(Source.Kind.DEVICE, "Abhify (live information unavailable)"); finished = true
+                    liveLine = "⚠ Current information unavailable"
+                    ai.abhify.android.device.VoiceLog.add("live", "unavailable: ${externalNeeded.joinToString { it.name }}")
+                    return@launch
+                }
+                citeSources = webItems.mapIndexed { i, a -> ai.abhify.android.intel.Citations.Src("W${i + 1}", a.title, a.publisher, ai.abhify.android.intel.Realtime.validUrl(a.url), a.summary,
+                        a.publishedAt.takeIf { it > 0 }, webNow) } +
+                    live?.items.orEmpty().map { e -> ai.abhify.android.intel.Citations.Src(e.id, e.title, e.publisher, e.url, e.snippet, e.publishedAt, e.retrievedAt) }
                 webLinks = webItems.mapIndexed { i, a -> LiveLink("[W${i + 1}] ${a.publisher}", ai.abhify.android.intel.Realtime.validUrl(a.url), a.title + " · " +
                     (if (a.publishedAt > 0) "published ${ai.abhify.android.intel.Realtime.age(System.currentTimeMillis() - a.publishedAt)} ago" else "date not given") + " · Research") }
                 brainPlan.notices.filter { n -> !(liveExternal.isNotEmpty() && n.startsWith("🌐 This may need current information")) }
@@ -747,12 +782,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         (if (r.local.isNotEmpty()) "(The user's own records and phone status were used on the phone only and are not shown here.)" else "")
                         else ai.abhify.android.intel.Realtime.assemble(r, liveNow, max) }?.ifBlank { null }).joinToString("\n\n").ifBlank { null }
                 val companionLocal = listOf(ai.abhify.android.chat.Companion.turn(question, history, win), stale).filter { it.isNotBlank() }.joinToString("\n")
-                val companionOnline = listOf(ai.abhify.android.chat.Companion.turn(question, if (g.prefs.getBoolean("online_history", true)) history else emptyList(), win), stale)
+                val companionOnline = listOf(ai.abhify.android.chat.Companion.turn(question, if (g.prefs.getBoolean("online_history", ai.abhify.android.settings.PrivacyDefaults.ONLINE_HISTORY_NEW_INSTALL)) history else emptyList(), win), stale)
                     .filter { it.isNotBlank() }.joinToString("\n")
-                val local = PromptBuilder.build(question, history, mems, g.userName, custom = listOf(custom, companionLocal).filter { it.isNotBlank() }.joinToString("\n\n"),
+                val local = PromptBuilder.buildNamed(g.assistantName, question, history, mems, g.userName, custom = listOf(custom, companionLocal).filter { it.isNotBlank() }.joinToString("\n\n"),
                     doc = withWeb(ragDoc(localCtx, wsLocal) ?: doc(g.memoryProfile().first.localDocChars), evidenceCtx(900, online = false)), historyMessages = win)
                 // what may leave the phone: recent chat only if allowed, memories only if allowed, documents only after consent
-                val onlinePrompt = PromptBuilder.build(question, if (g.prefs.getBoolean("online_history", true)) history else emptyList(),
+                val onlinePrompt = PromptBuilder.buildNamed(g.assistantName, question, if (g.prefs.getBoolean("online_history", ai.abhify.android.settings.PrivacyDefaults.ONLINE_HISTORY_NEW_INSTALL)) history else emptyList(),
                     if (g.shareMemoriesOnline) mems else emptyList(), g.userName, onDevice = false,
                     custom = listOf(custom, companionOnline).filter { it.isNotBlank() }.joinToString("\n\n"),
                     // private material only after consent (unchanged); the public web evidence is added on top
@@ -762,6 +797,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     notice = listOfNotNull(notice, "🔒 Your knowledge stayed on this phone (online answers can't use it: Knowledge Center)").joinToString(" · ")
                 // 6.0: the mode's settings for the phone's model (length, creativity); which AI answers is unchanged
                 g.hybrid.tuneNext(ai.abhify.android.ai.HybridAi.Tuning(brainPlan.profile.deviceMaxTokens, brainPlan.profile.temperature))
+                ai.abhify.android.device.VoiceLog.add("model", "generate (route ${if (force != null) force.javaClass.simpleName else "auto"})")
                 val flow = if (force != null) g.hybrid.generateOn(force, local, onlinePrompt) else g.hybrid.generate(local, onlinePrompt, routeInputs())
                 flow.collect { e ->
                     when (e) {
@@ -781,9 +817,23 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         is ChatEvent.Failed -> { failure = e.message; source = e.source }
                     }
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e
+            } catch (e: Throwable) {
+                ai.abhify.android.device.VoiceLog.add("answer", "failed: ${e.javaClass.simpleName}")
+                // 7.1.1: any unexpected failure while preparing or receiving the answer is shown as a message, never a crash
+                android.util.Log.w("AbhifyChat", "answer failed: ${e.javaClass.simpleName}")
+                failure = "The answer couldn't be completed (${e.javaClass.simpleName}${e.message?.let { ": " + it.take(120) } ?: ""}). Try again."
             } finally {
-                // the complete text received, whatever happened: nothing is dropped or shortened before storing
-                val answer = sb.toString().trim()
+                // the complete text received, whatever happened: nothing is dropped or shortened before storing, except that
+                // 7.0.1 citation integrity keeps only citations backed by this answer's sources (and removes invented links)
+                val raw = sb.toString().trim()
+                // 7.1.0: this runs in `finally`, outside the catch above: it must never throw (an Android-only regex error here crashed every answer)
+                val (checked, cite) = runCatching { if (citeSources.isNotEmpty() || ai.abhify.android.intel.Citations.MARK.containsMatchIn(raw))
+                    ai.abhify.android.intel.Citations.check(raw, citeSources) else raw to null }.getOrElse { raw to null }
+                cite?.summary()?.let { s -> notice = listOfNotNull(notice, s).joinToString(" · ") }
+                val (answer, unverified) = runCatching { if (citeSources.isEmpty()) ai.abhify.android.intel.Citations.labelUnverified(checked) else checked to emptyList() }
+                    .getOrElse { checked to emptyList() }
+                if (unverified.isNotEmpty()) notice = listOfNotNull(notice, "🔎 ${unverified.size} source link${if (unverified.size > 1) "s" else ""} from the model's memory marked unverified").joinToString(" · ")
                 val status = ai.abhify.android.chat.Continuation.statusOf(answer.isEmpty(), failure != null, finished, finish)
                 val by = source ?: attempt
                 val shown = answer.ifEmpty { failure?.let { "⚠️ $it" } ?: "…" }
@@ -798,6 +848,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 if (voiceTurn) voiceState.onAnswerDone(answer, status == null && failure == null && source != null)     // conversation: speak, then listen
                 else if (status == null && failure == null && source != null && g.readAloud) voice.speak(answer)
                 generating.value = false
+                if (!voiceState.active.value && !speaking.value) resumeWakeSoon()
                 g.localChanged(); refreshPending()
             }
         }
@@ -951,7 +1002,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     /** Where the next answer goes and what goes with it (shown in chat; reads the unchanged routing rules). */
     fun routeExplanation() = ai.abhify.android.intel.RouteExplain.explain(routeInputs(), focus.value, g.shareMemoriesOnline && g.memoriesEnabled,
-        knowledgeOnline.value, g.prefs.getBoolean("online_history", true))
+        knowledgeOnline.value, g.prefs.getBoolean("online_history", ai.abhify.android.settings.PrivacyDefaults.ONLINE_HISTORY_NEW_INSTALL))
     /** A project's recorded status as a context part (null when nothing was recorded). */
     private fun projectBriefPart(w: ai.abhify.android.chat.Workspace, tasks: List<ai.abhify.android.chat.Task>): ai.abhify.android.workspace.ContextOrchestrator.Part? {
         val now = System.currentTimeMillis(); val open = tasks.filter { !it.done }
@@ -970,7 +1021,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             studio.message.value = "Saved as a note in \"${ws.name}\" (Knowledge → Workspaces → Notes)."
         }
     }
-    val onlineHistory = mutableStateOf(g.prefs.getBoolean("online_history", true))
+    val onlineHistory = mutableStateOf(g.prefs.getBoolean("online_history", ai.abhify.android.settings.PrivacyDefaults.ONLINE_HISTORY_NEW_INSTALL))
     fun setOnlineHistory(on: Boolean) { g.prefs.edit().putBoolean("online_history", on).apply(); onlineHistory.value = on }
 
     /** The provider a failed local answer could be retried with (only when online AI is allowed and a key is ready). */
@@ -1023,9 +1074,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 val history = rows.takeWhile { it.id != m.dbId }.map { PromptBuilder.Msg(it.role, it.content) }
                 val memories = if (g.memoriesEnabled) withContext(Dispatchers.IO) { relevantMemories(history.lastOrNull { it.role == "user" }?.content.orEmpty()) } else emptyList()
                 val instr = ai.abhify.android.chat.Continuation.INSTRUCTION
-                val local = PromptBuilder.build(instr, history + PromptBuilder.Msg("assistant", ai.abhify.android.chat.Continuation.tail(m.text, 1500)),
+                val local = PromptBuilder.buildNamed(g.assistantName, instr, history + PromptBuilder.Msg("assistant", ai.abhify.android.chat.Continuation.tail(m.text, 1500)),
                     memories, g.userName, custom = g.effectiveInstructions())
-                val onlinePrompt = PromptBuilder.build(instr, history + PromptBuilder.Msg("assistant", m.text),
+                val onlinePrompt = PromptBuilder.buildNamed(g.assistantName, instr, history + PromptBuilder.Msg("assistant", m.text),
                     if (g.shareMemoriesOnline) memories else emptyList(), g.userName, onDevice = false, custom = g.effectiveInstructions())
                 messages[idx] = m.copy(streaming = true)
                 g.hybrid.generateOn(route, local, onlinePrompt).collect { e ->
@@ -1294,7 +1345,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val personality = mutableStateOf(g.personality)
     fun setPersonality(p: PromptBuilder.Personality) { g.personality = p; personality.value = p }
     /** Exactly the instructions an online provider would receive (no memories, no chat), for the preview. */
-    fun instructionsPreview(): String = PromptBuilder.build("(your question)", emptyList(), emptyList(), g.userName, onDevice = false, custom = g.effectiveInstructions())[0].content
+    fun instructionsPreview(): String = PromptBuilder.buildNamed(g.assistantName, "(your question)", emptyList(), emptyList(), g.userName, onDevice = false, custom = g.effectiveInstructions())[0].content
     fun clearAllMemories() = viewModelScope.launch {
         withContext(Dispatchers.IO) { g.db.memories().forEach { g.db.deleteMemory(it.id) } }       // soft deletes, so the removal also syncs
         loadMemories(); g.localChanged()
@@ -1312,16 +1363,158 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val listening = mutableStateOf(false)
     val heard = mutableStateOf("")
     val voiceError = mutableStateOf<String?>(null)
+    /** 7.1.1: what the last voice attempt was for, so Retry can start it again without restarting the app. */
+    private var lastVoiceRequest: Pair<String, (String) -> Unit>? = null
+
+    /** Tap-to-talk. Independent of the AI: listening works (and shows its own errors) whether or not an AI is set up. Never throws. */
     fun startVoice(languageTag: String = java.util.Locale.getDefault().toLanguageTag(), onText: (String) -> Unit) {
+        if (listening.value) return                                            // one microphone session at a time
+        if (wakeListening.value) stopWake()                                    // tap-to-talk takes the microphone from name listening
+        if (voice.isListening) return
         voiceError.value = null; heard.value = ""; listening.value = true
+        lastVoiceRequest = languageTag to onText
         val t0 = System.currentTimeMillis()
-        warmForVoice()
-        voice.listen(onPartial = { heard.value = it }, onResult = { listening.value = false
-                android.util.Log.i("AbhifyVoice", "speech recognised in ${System.currentTimeMillis() - t0} ms after the mic started")   // timing only, no text
-                if (it.isNotBlank()) onText(it) else if (voiceState.active.value) voiceState.onSpeechFinished() },
-            onError = { listening.value = false; voiceError.value = it; voiceState.level.floatValue = 0f },
-            languageTag = languageTag)
+        runCatching { warmForVoice() }
+        voice.nameHint = g.assistantName
+        ai.abhify.android.device.VoiceLog.add("mic", "tap-to-talk start (recognizer ${voice.mode})")
+        try {
+            voice.listen(onPartial = { heard.value = it }, onResult = { text -> listening.value = false; voiceState.level.floatValue = 0f
+                    ai.abhify.android.device.VoiceLog.add("recognizer", if (text.isBlank()) "result: empty" else "result: ${text.length} chars")
+                    android.util.Log.i("AbhifyVoice", "speech recognised in ${System.currentTimeMillis() - t0} ms after the mic started")   // timing only, no text
+                    if (!voiceState.active.value) resumeWakeSoon()
+                    if (text.isNotBlank()) runCatching { onText(text) }.onFailure { voiceError.value = "Something went wrong with what was heard. Your words: \"${text.take(200)}\""; pendingInput.value = text }
+                    else { voiceError.value = ai.abhify.android.voice.VoiceErrors.NOT_HEARD; if (voiceState.active.value) voiceState.onSpeechFinished() } },
+                onError = { listening.value = false; voiceError.value = it; voiceState.level.floatValue = 0f; ai.abhify.android.device.VoiceLog.add("recognizer", "error"); if (!voiceState.active.value) resumeWakeSoon() },
+                languageTag = languageTag)
+        } catch (e: Exception) {
+            listening.value = false; voiceError.value = ai.abhify.android.voice.VoiceErrors.START_FAILED
+        }
     }
+    // ------------------------------------------------------------------ 7.1.1 wake word (foreground only, off by default)
+    /** True while the microphone listens for the assistant's name (a pill on every screen shows it, with Stop). */
+    val wakeListening = mutableStateOf(false)
+    val wakeNote = mutableStateOf<String?>(null)
+    private var foreground = false
+    private var wakeErrors = 0
+
+    /** 7.1.0: the offline Vosk wake-word engine (installed only when the user taps Install). */
+    val vosk by lazy { ai.abhify.android.voice.VoskWake(getApplication()) }
+    val voskInstalled = mutableStateOf(false)
+    val voskProgress = mutableStateOf<Pair<Long, Long>?>(null)
+    fun refreshVosk() { voskInstalled.value = runCatching { vosk.installed() }.getOrDefault(false) }
+    fun installVosk() {
+        if (voskProgress.value != null) return
+        voskProgress.value = 0L to ai.abhify.android.voice.VoskWake.BYTES; wakeNote.value = null
+        viewModelScope.launch {
+            val err = withContext(Dispatchers.IO) { runCatching { vosk.install { got, total -> voskProgress.value = got to total } }.getOrElse { "Install failed: ${it.message}" } }
+            voskProgress.value = null; refreshVosk()
+            wakeNote.value = err ?: "✓ Offline wake word installed. Turn on \"Listen for…\" to use it."
+        }
+    }
+    fun removeVosk() { stopWake(); runCatching { vosk.remove() }; refreshVosk() }
+    fun cancelVoskInstall() { vosk.cancel = true }
+    /** 7.1.0: "Test wake word": listens up to 10 s for the name with the offline engine and says whether it heard it. */
+    val wakeTest = mutableStateOf<String?>(null)
+    fun testWake() {
+        if (!voskInstalled.value || !micGranted()) { wakeTest.value = "Install the offline wake word and allow the microphone first."; return }
+        stopWake(); wakeTest.value = "Say \"Hey ${g.assistantName}\" now…"
+        viewModelScope.launch {
+            val err = withContext(Dispatchers.IO) { vosk.prepare() }
+            if (err != null) { wakeTest.value = err; return@launch }
+            var done = false
+            vosk.start(g.assistantName, onHit = { heard -> done = true; wakeTest.value = "✓ Heard \"$heard\". The wake word works." },
+                onError = { msg -> done = true; wakeTest.value = msg })
+            delay(10_000)
+            if (!done) { vosk.stop(); wakeTest.value = "Didn't hear \"${g.assistantName}\" in 10 seconds. Speak clearly, closer to the phone; or choose a name that is a common English word or name." }
+            resumeWakeSoon()
+        }
+    }
+    /** 7.1.0: "Test microphone": 3 s of real input level (nothing is recorded or kept). */
+    val micTest = mutableStateOf<String?>(null)
+    fun testMic() {
+        if (!micGranted()) { micTest.value = "Allow the microphone first (tap the microphone in the Assistant once)."; return }
+        if (listening.value) { micTest.value = "Stop listening first."; return }
+        stopWake(); micTest.value = "Listening for 3 seconds: say something…"
+        viewModelScope.launch {
+            micTest.value = withContext(Dispatchers.IO) { runCatching {
+                val rate = 16000
+                val size = maxOf(android.media.AudioRecord.getMinBufferSize(rate, android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT), 4096)
+                @Suppress("MissingPermission")
+                val rec = android.media.AudioRecord(android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION, rate, android.media.AudioFormat.CHANNEL_IN_MONO,
+                    android.media.AudioFormat.ENCODING_PCM_16BIT, size)
+                var peak = 0
+                try {
+                    rec.startRecording(); val buf = ShortArray(size / 2); val end = System.currentTimeMillis() + 3000
+                    while (System.currentTimeMillis() < end) { val n = rec.read(buf, 0, buf.size); for (i in 0 until maxOf(n, 0)) peak = maxOf(peak, kotlin.math.abs(buf[i].toInt())) }
+                } finally { runCatching { rec.stop() }; rec.release() }
+                when { peak < 300 -> "No sound reached the app. Check that no other app uses the microphone and that it isn't blocked in Android's privacy settings."
+                    peak < 2000 -> "The microphone works but is quiet. Speak closer to the phone."
+                    else -> "✓ The microphone works and picks up your voice." }
+            }.getOrElse { "The microphone couldn't be opened (${it.javaClass.simpleName})." } }
+            resumeWakeSoon()
+        }
+    }
+
+    /** Why name listening can't be used on this phone (null = it can). Audio never leaves the phone: Vosk, or the on-device recogniser. */
+    fun wakeSupport(): String? = when {
+        !voiceSettings.value.enabled -> "Turn on the voice assistant above first."
+        voskInstalled.value -> null
+        voice.mode == ai.abhify.android.voice.Voice.Mode.ON_DEVICE -> null
+        else -> "Install the offline wake word below (about 41 MB). This phone has no on-device speech recognizer, and its own recognizer may send audio to Google, so Abhify doesn't use it for this."
+    }
+    private fun micGranted() = androidx.core.content.ContextCompat.checkSelfPermission(getApplication(), android.Manifest.permission.RECORD_AUDIO) ==
+        android.content.pm.PackageManager.PERMISSION_GRANTED
+    private fun wakeAllowed() = foreground && voiceSettings.value.wakeWord && wakeSupport() == null && micGranted() &&
+        !listening.value && !voiceState.active.value && !speaking.value && !generating.value
+    fun setWake(on: Boolean) {
+        setVoiceSettings(voiceSettings.value.copy(wakeWord = on)); wakeNote.value = null
+        if (on) resumeWake() else stopWake()
+    }
+    fun onAppForeground() { foreground = true; refreshVosk(); resumeWakeSoon() }
+    /** Leaving the app: every microphone use stops (tap-to-talk, conversation, name listening). */
+    fun releaseMicrophone() {
+        foreground = false
+        stopWake()
+        if (listening.value) cancelVoice()
+        if (voiceState.active.value) voiceState.stop()
+    }
+    fun resumeWakeSoon() { viewModelScope.launch { delay(600); resumeWake() } }
+    fun resumeWake() { if (!wakeAllowed() || wakeListening.value) return; wakeErrors = 0; wakeLoop() }
+    fun stopWake() { if (wakeListening.value) { wakeListening.value = false; runCatching { vosk.stop() }; voice.cancelListening() } }
+    private fun wakeLoop() {
+        if (!wakeAllowed()) { wakeListening.value = false; return }
+        wakeListening.value = true
+        if (voskInstalled.value) {                                            // 7.1.0: offline Vosk engine (any phone)
+            viewModelScope.launch {
+                val err = withContext(Dispatchers.IO) { vosk.prepare() }
+                if (!wakeListening.value) return@launch
+                if (err != null) { wakeListening.value = false; wakeNote.value = err; return@launch }
+                vosk.start(g.assistantName, onHit = { wakeListening.value = false; voiceState.startFromWake("") },
+                    onError = { msg -> if (wakeListening.value) { if (++wakeErrors >= 5) { wakeListening.value = false; wakeNote.value = "Stopped listening for the name: $msg" } else wakeAgain(3000) } })
+            }
+            return
+        }
+        voice.nameHint = g.assistantName
+        runCatching {
+            voice.listen(onPartial = {}, onResult = { text ->
+                val hit = ai.abhify.android.voice.WakeMatcher.match(text, g.assistantName)
+                if (hit != null) { wakeListening.value = false; voiceState.startFromWake(hit.command) } else wakeAgain(250)
+            }, onError = { msg ->
+                if (msg == ai.abhify.android.voice.VoiceErrors.NOT_HEARD) wakeAgain(250)
+                else if (++wakeErrors >= 5) { wakeListening.value = false; wakeNote.value = "Stopped listening for the name: $msg" }
+                else wakeAgain(3000)
+            }, languageTag = voiceSettings.value.recognitionTag(java.util.Locale.getDefault().toLanguageTag()))
+        }.onFailure { wakeListening.value = false; wakeNote.value = "Couldn't listen for the name on this phone." }
+    }
+    private fun wakeAgain(ms: Long) { viewModelScope.launch { delay(ms); if (wakeListening.value) wakeLoop() } }
+
+    /** 7.1.1: the Retry button after a voice error: the same request again. */
+    fun retryVoice() { val (tag, cb) = lastVoiceRequest ?: return; voiceError.value = null; startVoice(tag, cb) }
+
+    /** 7.1.1: why a question can't be answered right now (no AI model, no provider, offline…), or null when it can. */
+    fun assistantProblem(): String? = runCatching {
+        (ai.abhify.android.ai.RoutePolicy.plan(routeInputs()).singleOrNull() as? ai.abhify.android.ai.Route.Unavailable)?.reason
+    }.getOrElse { "The AI isn't ready (${it.message ?: "unknown problem"})." }
 
     // ------------------------------------------------------------------ 5.4 Personal Voice Companion
     val voiceState by lazy { VoiceState(this) }
@@ -1331,7 +1524,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         voiceSettings.value = s; g.prefs.edit().putString("voice_settings", s.toJson()).apply(); applyVoiceSettings()
         if (!s.enabled && voiceState.active.value) voiceState.stop()
     }
-    private fun applyVoiceSettings() { val s = voiceSettings.value; voice.preferredVoice = s.voiceName; voice.setRate(s.rate); speechRate.value = s.rate }
+    private fun applyVoiceSettings() {
+        val s = voiceSettings.value; voice.preferredVoice = null; voice.preferredStyle = ai.abhify.android.voice.VoiceSettings.Style.ASSISTANT   // 7.1.0: one voice
+        voice.picked = ai.abhify.android.voice.VoiceSettings.Style.entries.associateWith { s.picked(it) }
+        voice.setRate(s.rate); voice.setPitch(s.pitch); speechRate.value = s.rate
+    }
+    /** 7.1.0-dev.2: the assistant's name on this phone (Settings → AI personalization). */
+    val assistantName = mutableStateOf(g.assistantName)
+    fun setAssistantName(name: String): String? = runCatching { g.assistantName = name; assistantName.value = g.assistantName; null }
+        .getOrElse { it.message ?: "That name can't be used." }
 
     /**
      * Voice warm-up: when the next answer comes from the phone's model and it isn't loaded yet, it is loaded while the
@@ -1340,6 +1541,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun warmForVoice() {
         if (g.engine.loaded != null || g.store.active() == null || generating.value || taskBusy.value != null) return
+        // 7.1.1: on a low-memory phone, loading the model (~1 GB) while the speech recogniser runs can get the app killed;
+        // there the model loads when the question is sent instead
+        if (g.memoryProfile().first == ai.abhify.android.device.MemoryProfile.LOW) return
         if (ai.abhify.android.ai.RoutePolicy.plan(routeInputs()).first() !is ai.abhify.android.ai.Route.Device) return
         viewModelScope.launch {
             val t0 = System.currentTimeMillis()
@@ -1351,7 +1555,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun cancelVoice() { voice.cancelListening(); listening.value = false; heard.value = "" }
     val speaking = mutableStateOf(false)
     init {
-        voice.onSpeaking = { on -> viewModelScope.launch(Dispatchers.Main) { speaking.value = on; if (!on && voiceState.active.value) voiceState.onSpeechFinished() } }
+        voice.onSpeaking = { on -> viewModelScope.launch(Dispatchers.Main) { speaking.value = on; if (!on && voiceState.active.value) voiceState.onSpeechFinished()
+            if (!on && !voiceState.active.value) resumeWakeSoon() } }
         voice.onLevel = { l -> viewModelScope.launch(Dispatchers.Main) { voiceState.level.floatValue = l } }
         voice.onSpeakError = { m -> viewModelScope.launch(Dispatchers.Main) { speaking.value = false; voiceError.value = m } }
         voice.onProgress = { i, n -> viewModelScope.launch(Dispatchers.Main) { speechProgress.value = i to n } }
@@ -1381,7 +1586,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setReadAloud(on: Boolean) { g.readAloud = on; if (!on) voice.stopSpeaking() }
 
     // ------------------------------------------------------------------ learn (interview + quiz), offline on the phone
-    val learnMode = mutableStateOf(0)                              // index into LEARN_SECTIONS
+    val learnMode = mutableStateOf(8)                              // index into LEARN_SECTIONS (7.2: opens on Prepare)
     val knowledgeSection = mutableIntStateOf(0)                    // Knowledge tab: 0 My Knowledge, 1 Workspaces (v4.0: search can open either)
     val category = mutableStateOf("all")
     val interview = mutableStateListOf<InterviewQuestion>().apply { addAll(g.bank.questions.shuffled()) }

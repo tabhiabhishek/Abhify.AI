@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Abhify</string>
+    <string name="study_widget_title">Abhify Study</string>
+    <string name="study_widget_description">Your study streak, what is due today and your next lesson.</string>
 </resources>

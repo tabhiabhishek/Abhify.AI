@@ -1,0 +1,119 @@
+{
+ "spec": "docs/specs/ABHIFY_SYNC_PROTOCOL_V1.md §6. Each case runs devices a/b/c (ids 'a'*16 …) against one shared folder; vault key {1: bytes 0..31}, vault_id '0'*31+'1'. Clock starts 1763900000000 and ticks +1 per call. Every port must pass every case.",
+ "steps_doc": {
+  "set": "dev's local record rid := (kind, data)",
+  "del": "remove dev's local record rid",
+  "kinds": "dev's selected categories",
+  "sync": "Engine.apply(direction, approve_deletes, keep_elsewhere); 'expect' = subset of the result counts; 'error' = substring of the SyncError",
+  "rows": "dev's local records of kind must equal rows (rid -> data)",
+  "conflicts": "number of open conflicts on dev",
+  "resolve": "resolve dev's conflict #index with choice",
+  "restore": "restore dev's newest Recently-deleted item",
+  "deleted": "dev's Recently-deleted contents (list of data, newest last)",
+  "redownload": "Engine.redownload_all()",
+  "revoke": "dev revokes target device",
+  "pending_deletions": "preview().local_deletions rids",
+  "contents": "sorted 'content' values of dev's records of kind"
+ },
+ "cases": [
+  {"name": "upload, download, no duplicates", "steps": [
+   {"dev": "a", "op": "set", "rid": "conv-00000001", "kind": "conversation", "data": {"title": "Trip", "created": 5}},
+   {"dev": "a", "op": "set", "rid": "msg-00000001", "kind": "message", "data": {"conv": "conv-00000001", "role": "user", "content": "hi ✓", "created": 6}},
+   {"dev": "a", "op": "set", "rid": "mem-00000001", "kind": "memory", "data": {"content": "Likes tea", "created": 1}},
+   {"dev": "a", "op": "sync", "expect": {"uploaded": 3}},
+   {"dev": "b", "op": "sync", "expect": {"added": 3}},
+   {"dev": "b", "op": "sync", "expect": {"added": 0}},
+   {"dev": "b", "op": "redownload"},
+   {"dev": "b", "op": "sync", "expect": {"added": 0}},
+   {"dev": "b", "op": "rows", "kind": "memory", "rows": {"mem-00000001": {"content": "Likes tea", "created": 1}}},
+   {"dev": "b", "op": "rows", "kind": "message", "rows": {"msg-00000001": {"conv": "conv-00000001", "role": "user", "content": "hi ✓", "created": 6}}}
+  ]},
+  {"name": "concurrent edit -> conflict -> keep mine converges", "steps": [
+   {"dev": "a", "op": "set", "rid": "mem-00000001", "kind": "memory", "data": {"content": "v1", "created": 1}},
+   {"dev": "a", "op": "sync"}, {"dev": "b", "op": "sync"},
+   {"dev": "a", "op": "set", "rid": "mem-00000001", "kind": "memory", "data": {"content": "A", "created": 1}},
+   {"dev": "b", "op": "set", "rid": "mem-00000001", "kind": "memory", "data": {"content": "B", "created": 1}},
+   {"dev": "a", "op": "sync"}, {"dev": "b", "op": "sync", "expect": {"conflicts": 1}},
+   {"dev": "b", "op": "rows", "kind": "memory", "rows": {"mem-00000001": {"content": "B", "created": 1}}},
+   {"dev": "b", "op": "resolve", "index": 0, "choice": "keep_mine"},
+   {"dev": "b", "op": "sync"}, {"dev": "a", "op": "sync", "expect": {"updated": 1, "conflicts": 0}},
+   {"dev": "a", "op": "rows", "kind": "memory", "rows": {"mem-00000001": {"content": "B", "created": 1}}},
+   {"dev": "a", "op": "conflicts", "n": 0}
+  ]},
+  {"name": "keep theirs keeps the replaced version recoverable; keep both", "steps": [
+   {"dev": "a", "op": "set", "rid": "mem-00000001", "kind": "memory", "data": {"content": "base", "created": 1}},
+   {"dev": "a", "op": "sync"}, {"dev": "b", "op": "sync"},
+   {"dev": "a", "op": "set", "rid": "mem-00000001", "kind": "memory", "data": {"content": "A", "created": 1}},
+   {"dev": "b", "op": "set", "rid": "mem-00000001", "kind": "memory", "data": {"content": "B", "created": 1}},
+   {"dev": "a", "op": "sync"}, {"dev": "b", "op": "sync"},
+   {"dev": "b", "op": "resolve", "index": 0, "choice": "keep_theirs"},
+   {"dev": "b", "op": "rows", "kind": "memory", "rows": {"mem-00000001": {"content": "A", "created": 1}}},
+   {"dev": "b", "op": "deleted", "data": [{"content": "B", "created": 1}]},
+   {"dev": "b", "op": "sync"}, {"dev": "a", "op": "sync"},
+   {"dev": "a", "op": "set", "rid": "mem-00000001", "kind": "memory", "data": {"content": "A2", "created": 1}},
+   {"dev": "b", "op": "set", "rid": "mem-00000001", "kind": "memory", "data": {"content": "B2", "created": 1}},
+   {"dev": "a", "op": "sync"}, {"dev": "b", "op": "sync"},
+   {"dev": "b", "op": "resolve", "index": 0, "choice": "keep_both"},
+   {"dev": "b", "op": "sync"}, {"dev": "a", "op": "sync"},
+   {"dev": "a", "op": "contents", "kind": "memory", "values": ["A2", "B2"]},
+   {"dev": "b", "op": "contents", "kind": "memory", "values": ["A2", "B2"]}
+  ]},
+  {"name": "deletion needs approval, lands in Recently deleted, restore undeletes everywhere", "steps": [
+   {"dev": "a", "op": "set", "rid": "mem-00000001", "kind": "memory", "data": {"content": "keep", "created": 1}},
+   {"dev": "a", "op": "set", "rid": "mem-00000002", "kind": "memory", "data": {"content": "delete me", "created": 1}},
+   {"dev": "a", "op": "sync"}, {"dev": "b", "op": "sync"},
+   {"dev": "a", "op": "del", "rid": "mem-00000002"},
+   {"dev": "a", "op": "pending_deletions", "rids": ["mem-00000002"]},
+   {"dev": "a", "op": "sync"}, {"dev": "b", "op": "sync", "expect": {"deleted": 0}},
+   {"dev": "a", "op": "sync", "approve": ["mem-00000002"]},
+   {"dev": "b", "op": "sync", "expect": {"deleted": 1}},
+   {"dev": "b", "op": "rows", "kind": "memory", "rows": {"mem-00000001": {"content": "keep", "created": 1}}},
+   {"dev": "b", "op": "deleted", "data": [{"content": "delete me", "created": 1}]},
+   {"dev": "b", "op": "restore"}, {"dev": "b", "op": "sync"}, {"dev": "a", "op": "sync"},
+   {"dev": "a", "op": "rows", "kind": "memory", "rows": {"mem-00000001": {"content": "keep", "created": 1}, "mem-00000002": {"content": "delete me", "created": 1}}}
+  ]},
+  {"name": "message waits for its conversation", "steps": [
+   {"dev": "a", "op": "set", "rid": "msg-00000001", "kind": "message", "data": {"conv": "conv-00000009", "role": "assistant", "content": "orphan", "created": 2}},
+   {"dev": "a", "op": "sync"}, {"dev": "b", "op": "sync", "expect": {"held": 1, "added": 0}},
+   {"dev": "a", "op": "set", "rid": "conv-00000009", "kind": "conversation", "data": {"title": "late", "created": 3}},
+   {"dev": "a", "op": "sync"}, {"dev": "b", "op": "sync", "expect": {"added": 2}},
+   {"dev": "b", "op": "rows", "kind": "message", "rows": {"msg-00000001": {"conv": "conv-00000009", "role": "assistant", "content": "orphan", "created": 2}}}
+  ]},
+  {"name": "same memory on two devices is not duplicated", "steps": [
+   {"dev": "a", "op": "set", "rid": "mem-aaaaaaaa", "kind": "memory", "data": {"content": "Lives in Pune", "created": 1}},
+   {"dev": "b", "op": "set", "rid": "mem-bbbbbbbb", "kind": "memory", "data": {"content": "  lives in   PUNE ", "created": 2}},
+   {"dev": "a", "op": "sync"}, {"dev": "b", "op": "sync", "expect": {"added": 0}}, {"dev": "a", "op": "sync", "expect": {"added": 0}},
+   {"dev": "a", "op": "rows", "kind": "memory", "rows": {"mem-aaaaaaaa": {"content": "Lives in Pune", "created": 1}}}
+  ]},
+  {"name": "categories and redownload; preferences", "steps": [
+   {"dev": "a", "op": "set", "rid": "mem-00000001", "kind": "memory", "data": {"content": "m", "created": 1}},
+   {"dev": "a", "op": "set", "rid": "pref:theme", "kind": "pref", "data": {"key": "theme", "value": "dark"}},
+   {"dev": "a", "op": "sync"},
+   {"dev": "b", "op": "kinds", "kinds": ["pref"]}, {"dev": "b", "op": "sync"},
+   {"dev": "b", "op": "rows", "kind": "memory", "rows": {}},
+   {"dev": "b", "op": "rows", "kind": "pref", "rows": {"pref:theme": {"key": "theme", "value": "dark"}}},
+   {"dev": "b", "op": "kinds", "kinds": ["pref", "memory"]}, {"dev": "b", "op": "redownload"}, {"dev": "b", "op": "sync"},
+   {"dev": "b", "op": "rows", "kind": "memory", "rows": {"mem-00000001": {"content": "m", "created": 1}}},
+   {"dev": "b", "op": "kinds", "kinds": []}, {"dev": "b", "op": "sync", "error": "category"}
+  ]},
+  {"name": "revoked device: told, and its later files ignored", "steps": [
+   {"dev": "c", "op": "set", "rid": "mem-0000000c", "kind": "memory", "data": {"content": "from c", "created": 1}},
+   {"dev": "c", "op": "sync"}, {"dev": "a", "op": "sync"},
+   {"dev": "a", "op": "revoke", "target": "c"}, {"dev": "a", "op": "sync"},
+   {"dev": "c", "op": "set", "rid": "mem-000000c2", "kind": "memory", "data": {"content": "after", "created": 1}},
+   {"dev": "c", "op": "sync", "error": "removed"},
+   {"dev": "b", "op": "sync"},
+   {"dev": "b", "op": "rows", "kind": "memory", "rows": {"mem-0000000c": {"content": "from c", "created": 1}}}
+  ]},
+  {"name": "deleted here, edited elsewhere is a conflict", "steps": [
+   {"dev": "a", "op": "set", "rid": "mem-00000001", "kind": "memory", "data": {"content": "x", "created": 1}},
+   {"dev": "a", "op": "sync"}, {"dev": "b", "op": "sync"},
+   {"dev": "b", "op": "del", "rid": "mem-00000001"},
+   {"dev": "a", "op": "set", "rid": "mem-00000001", "kind": "memory", "data": {"content": "edited", "created": 1}},
+   {"dev": "a", "op": "sync"}, {"dev": "b", "op": "sync", "expect": {"conflicts": 1}},
+   {"dev": "b", "op": "rows", "kind": "memory", "rows": {}},
+   {"dev": "b", "op": "resolve", "index": 0, "choice": "keep_theirs"},
+   {"dev": "b", "op": "rows", "kind": "memory", "rows": {"mem-00000001": {"content": "edited", "created": 1}}}
+  ]}
+ ]
+}

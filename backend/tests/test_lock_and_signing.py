@@ -57,7 +57,10 @@ def test_lock_matches_the_verified_dev4_build():
         if line and not line.startswith("#"):
             n, v = line.split("==")
             built[norm(n)] = v
-    assert {n: v for n, (v, _) in lock_entries().items()} == built
+    lock = {n: v for n, (v, _) in lock_entries().items()}
+    added_72 = {"cryptography": "46.0.3", "cffi": "2.1.1", "pycparser": "3.12"}    # 7.2 Data & Sync (owner-approved); every dev.4 pin unchanged
+    assert {n: v for n, v in lock.items() if n not in added_72} == built
+    assert {n: lock.get(n) for n in added_72} == added_72
 
 
 def test_lock_has_no_machine_paths():

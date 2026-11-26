@@ -152,15 +152,17 @@ fun Badge(size: Int) {
 fun Glass(modifier: Modifier = Modifier, padding: Int = 16, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
     val x = LocalExtra.current
     val src = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    // 7.0 Synapse card: the surface with a faint top-light (white 4 % → 1 %) and a violet-tinted hairline
     Column(modifier.fillMaxWidth().let { if (onClick != null) it.pressScale(src) else it }.clip(RoundedCornerShape(Brand.Radius)).background(x.glass)
+        .let { if (x.dark) it.background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.04f), Color.White.copy(alpha = 0.012f)))) else it }
         .border(1.dp, x.line, RoundedCornerShape(Brand.Radius))
         .let { if (onClick != null) it.clickable(src, indication = androidx.compose.material3.ripple(), onClick = onClick) else it }.padding(padding.dp),
         verticalArrangement = Arrangement.spacedBy(Dimens.cardGap), content = content)
 }
 
 @Composable
-fun SectionTitle(text: String) = Text(text, style = MaterialTheme.typography.titleSmall, color = LocalExtra.current.muted,
-    modifier = Modifier.padding(top = Dimens.small, start = 2.dp).semantics { heading() })
+fun SectionTitle(text: String) = Text(text.uppercase(), style = EyebrowStyle, color = LocalExtra.current.muted,      // 7.0 Synapse eyebrow
+    modifier = Modifier.padding(top = Dimens.small, start = 2.dp).semantics { heading(); contentDescription = text })
 
 @Composable
 fun Pill(text: String, color: Color = MaterialTheme.colorScheme.tertiary) {

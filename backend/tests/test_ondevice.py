@@ -156,7 +156,7 @@ def test_device_chat_never_calls_the_computer():
 def test_pc_mode_paths_unchanged():
     assert "if (state.engine === 'device') return checkDevice();" in _fn("checkConnection")
     assert "if (state.engine === 'device') return deviceChat(" in _fn("sendChat")
-    assert "engine: store.get(LS.engine) === 'device' ? 'device' : 'pc'" in APP_JS               # default stays the computer
+    assert "engine: PLATFORM === 'web' || store.get(LS.engine) === 'device' ? 'device' : 'pc'" in APP_JS               # default stays the computer
     assert "AI ready · runs on your computer" in _fn("connectionStatus")         # PC statuses not touched
     assert "runs on this device" not in _fn("connectionStatus")
 

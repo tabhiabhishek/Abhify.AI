@@ -10,7 +10,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Signed app updates: Android still asks the user to allow it and to confirm every install. -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Voice input, only while the mic button is active; asked for at that moment. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
@@ -67,5 +66,15 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/shared_files" />
         </provider>
+        <!-- 7.2.0-dev.2: Study home-screen widget (streak, items due, next lesson from study.json); no permission -->
+        <receiver
+            android:name=".learn.StudyWidget"
+            android:exported="true"
+            android:label="@string/study_widget_title">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/study_widget_info" />
+        </receiver>
     </application>
 </manifest>

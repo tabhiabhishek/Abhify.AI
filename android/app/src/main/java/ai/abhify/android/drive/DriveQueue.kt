@@ -39,6 +39,10 @@ class DriveQueue(private val store: QueueStore, private val maxAttempts: Int = 6
     fun process(api: DriveApi, f: DriveFile, progress: (Long, Long) -> Unit = { _, _ -> }): Outcome {
         val bytes = store.bytes(f.id) ?: run {
             store.save(f.copy(status = DriveStatus.FAILED, error = "The data for this upload is gone; upload it again from its screen.")); return Outcome.Missing }
+        // 7.2: plaintext backups and scheduled backups never go to Drive (the row and its bytes are kept, not deleted)
+        ai.abhify.android.backup.BackupPolicy.driveProblem(f.kind, DriveApi.canonical(f.folder), bytes)?.let { why ->
+            val status = if (f.kind == ai.abhify.android.backup.BackupPolicy.AUTO_KIND) DriveStatus.CANCELLED else DriveStatus.FAILED
+            store.save(f.copy(status = status, error = why, session = null)); return Outcome.Failed(why) }
         var cur = f
         return try {
             val res = api.upload(f.folder, f.name, f.mime ?: "application/octet-stream", bytes,

@@ -167,7 +167,8 @@ def test_populated_v4_database_upgrades_to_v5_without_changing_data(data_root, m
     tables = ["events", "conversations", "messages", "memories", "documents"]
     with db.connect() as c:
         before = {t: c.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in tables}
-    monkeypatch.setattr(db, "MIGRATIONS", full); monkeypatch.setattr(db, "SCHEMA_VERSION", len(full))
+    # the v4 -> v5 step itself (7.0 added v6; test_model_switching checks v5 -> v6)
+    monkeypatch.setattr(db, "MIGRATIONS", full[:5]); monkeypatch.setattr(db, "SCHEMA_VERSION", 5)
     r = db.migrate()
     assert (r["from"], r["to"]) == (4, 5) and r["backup"] and "pre-schema-v5" in r["backup"]
     with db.connect() as c:

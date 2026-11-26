@@ -25,21 +25,55 @@ export const MODELS = {
 };
 
 /** Pure: choose a model from what the browser reports. deviceMemory is in GB, rounded and capped at 8
- *  by Chrome; Safari and Firefox don't report it (undefined). */
-export function chooseModel({ webgpu, deviceMemory }) {
+ *  by Chrome; Safari and Firefox don't report it (undefined). storageFreeMB (7.0.2): what the browser says this site
+ *  may still store (StorageManager.estimate); a model is only offered when it fits with 10 % headroom. */
+export function chooseModel({ webgpu, deviceMemory, storageFreeMB }) {
   if (!webgpu) {
     return { ok: false, reason: 'This browser can\'t run the AI on this device (no WebGPU). Use Chrome on Android 12+, or Safari on iOS 26+, or connect to your computer instead.' };
   }
   if (deviceMemory !== undefined && deviceMemory < 4) {
     return { ok: false, reason: `This device reports about ${deviceMemory} GB of memory, too little for an on-device AI model. Connect to your computer instead.` };
   }
-  const id = deviceMemory !== undefined && deviceMemory >= 6 ? 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC' : 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
+  let id = deviceMemory !== undefined && deviceMemory >= 6 ? 'Qwen2.5-1.5B-Instruct-q4f16_1-MLC' : 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
+  const known = storageFreeMB !== undefined && storageFreeMB !== null;
+  if (known && storageFreeMB < MODELS[id].downloadMB * 1.1) id = 'Llama-3.2-1B-Instruct-q4f16_1-MLC';
+  if (known && storageFreeMB < MODELS[id].downloadMB * 1.1) {
+    return { ok: false, reason: `This browser lets the site store about ${storageFreeMB} MB; the smallest model needs about ${Math.ceil(MODELS[id].downloadMB * 1.1)} MB. Free some space or connect to your computer instead.` };
+  }
   return { ok: true, modelId: id, ...MODELS[id] };
 }
 
+/** 7.0.2: what this browser can tell about the device, each fact labelled. Browsers can't see the real CPU, RAM or GPU
+ *  model: navigator.deviceMemory is a rounded estimate that browsers may cap, hardwareConcurrency is the number of
+ *  logical processors the browser exposes, and the GPU adapter's info is what the browser chooses to reveal. */
+export async function capabilities(nav = navigator, win = globalThis) {
+  const facts = [];
+  const fact = (label, value, source) => facts.push({ label, value: value ?? 'not reported', source: value == null ? 'unavailable' : source });
+  fact('Secure context (HTTPS or localhost)', win.isSecureContext ? 'yes' : 'no (WebGPU and storage need it)', 'verified');
+  fact('WebAssembly', typeof win.WebAssembly === 'object' ? 'supported' : 'not supported', 'verified');
+  let adapter = null;
+  if (nav.gpu) adapter = await nav.gpu.requestAdapter().catch(() => null);
+  fact('WebGPU', nav.gpu ? (adapter ? 'available' : 'API present, but no usable GPU adapter') : 'not supported by this browser', 'verified');
+  if (adapter) {
+    const info = adapter.info || {};
+    const name = [info.vendor, info.architecture, info.description].filter(Boolean).join(' · ');
+    fact('GPU adapter (as reported by the browser)', name || null, 'estimate');
+    fact('GPU max buffer size', adapter.limits?.maxBufferSize ? `${Math.round(adapter.limits.maxBufferSize / 1048576)} MB` : null, 'verified');
+  }
+  fact('Logical processors', nav.hardwareConcurrency || null, 'estimate');
+  fact('Device memory', nav.deviceMemory !== undefined ? `about ${nav.deviceMemory} GB (rounded and possibly capped by the browser)` : null, 'estimate');
+  let storageFreeMB = null;
+  const est = await nav.storage?.estimate?.().catch(() => null);
+  if (est?.quota) storageFreeMB = Math.floor((est.quota - (est.usage || 0)) / 1e6);
+  fact('Storage this site may use', storageFreeMB !== null ? `about ${storageFreeMB} MB` : null, 'estimate');
+  fact('Cross-origin isolated', win.crossOriginIsolated ? 'yes' : 'no (not needed for WebGPU)', 'verified');
+  return { facts, webgpu: Boolean(adapter), deviceMemory: nav.deviceMemory, storageFreeMB };
+}
+
 /** Pure: the messages sent to the on-device model (system prompt + memories + recent history). */
-export function buildMessages(userText, history = [], memories = [], userName = '') {
-  let system = 'You are Abhify.AI, a friendly AI/ML learning companion running entirely on the user\'s own device. '
+export function buildMessages(userText, history = [], memories = [], userName = '', assistantName = 'Abhify') {
+  const who = assistantName && assistantName !== 'Abhify' ? `${assistantName}, the user's AI assistant in the Abhify.AI app (the user chose the name ${assistantName})` : 'Abhify, the AI assistant of the Abhify.AI app';
+  let system = `You are ${who}, a friendly AI/ML learning companion running entirely on the user's own device. `
     + 'Be concise and clear; use short paragraphs or bullet points. If you are not sure, say so instead of inventing facts. '
     + 'You have no internet access and no access to documents on this device.';
   if (userName) system += ` The user's name is ${userName}.`;
@@ -72,8 +106,15 @@ async function appConfig(modelId) {
 }
 
 export async function support() {
-  const webgpu = 'gpu' in navigator && Boolean(await navigator.gpu.requestAdapter().catch(() => null));
-  return { webgpu, deviceMemory: navigator.deviceMemory, ...chooseModel({ webgpu, deviceMemory: navigator.deviceMemory }) };
+  const c = await capabilities();
+  return { ...c, ...chooseModel(c) };
+}
+
+/** 7.0.2: a real answer from the loaded model before the app calls it ready. */
+export async function selfTest() {
+  const t = Date.now();
+  const reply = await chat([{ role: 'user', content: 'Reply with exactly: OK' }]);
+  return { ok: Boolean(reply && reply !== '…'), reply: String(reply).slice(0, 40), seconds: Math.round((Date.now() - t) / 100) / 10 };
 }
 
 export async function isDownloaded(modelId) {
@@ -94,9 +135,10 @@ export async function load(modelId, onProgress = () => {}) {
 export function ready() { return Boolean(engine); }
 export function loadedModel() { return loadedId; }
 
-export async function chat(messages) {
+export async function chat(messages, { maxTokens = 600, json = false } = {}) {   // 7.2 Study: longer lessons, JSON answers
   if (!engine) throw new Error('The on-device AI isn\'t loaded yet.');
-  const r = await engine.chat.completions.create({ messages, temperature: 0.3, max_tokens: 600 });
+  const r = await engine.chat.completions.create({ messages, temperature: 0.3, max_tokens: Math.min(2000, maxTokens),
+    ...(json ? { response_format: { type: 'json_object' } } : {}) });
   return r.choices[0]?.message?.content?.trim() || '…';
 }
 

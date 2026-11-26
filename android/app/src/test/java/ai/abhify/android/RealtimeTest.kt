@@ -45,6 +45,18 @@ class RealtimeTest {
         assertTrue(cases.length() >= 30)
     }
 
+    /** 7.1: the same place cases as the desktop (realtime_intents.json place_cases): "my location" / "here" / "near me" name no place. */
+    @Test fun sharedPlaceCasesMatchTheDesktop() {
+        val cases = JSONObject(File("../../backend/tests/data/realtime_intents.json").readText()).getJSONArray("place_cases")
+        val wrong = (0 until cases.length()).map { cases.getJSONObject(it) }.mapNotNull { c ->
+            val got = Realtime.placeIn(c.getString("q"))
+            if (got == c.getString("place")) null else "${c.getString("q")} → \"$got\" (want \"${c.getString("place")}\")"
+        }
+        assertTrue(wrong.joinToString("\n"), wrong.isEmpty())
+        assertTrue(cases.length() >= 14)
+        assertEquals("", Realtime.savedPlace("location")); assertEquals("Pune", Realtime.savedPlace("Pune"))
+    }
+
     @Test fun aloneAiMeansArtificialIntelligenceInTheNewsQuery() {
         assertEquals("What's happening in artificial intelligence today?", Realtime.newsQuery("What's happening in AI today?"))
         assertEquals("explain the plain words", Realtime.newsQuery("explain the plain words"))                  // "ai" inside words untouched
@@ -75,16 +87,18 @@ class RealtimeTest {
         assertTrue(Realtime.assemble(r, now).contains("could NOT be retrieved for: web search"))
     }
 
-    @Test fun weatherAndFxAreOffByDefaultAndParsedFromTheProvidersOwnData() = runBlocking {
+    @Test fun weatherIsOnWhenAskedFxIsOffAndBothAreParsedFromTheProvidersOwnData() = runBlocking {
         val off = engine().gather("weather now", setOf(Category.WEATHER, Category.FX), RealtimeEngine.Settings(), online = true)
-        assertTrue(off.items.isEmpty() && off.notes.any { it.startsWith("weather is off") } && off.notes.any { it.startsWith("exchange rates are off") })
+        assertTrue(off.items.isEmpty() && off.notes.any { it.startsWith("which city?") } && off.notes.any { it.startsWith("exchange rates are off") })
+        val blocked = engine().gather("weather in Pune", setOf(Category.WEATHER), RealtimeEngine.Settings(weather = false), online = true)
+        assertTrue(blocked.items.isEmpty() && blocked.notes.single().startsWith("weather is turned off"))
         val urls = mutableListOf<String>()
         val http: suspend (String) -> String = { u -> urls += u; when {
             u.contains("geocoding-api.open-meteo.com") -> """{"results":[{"name":"Pune","country":"India","latitude":18.52,"longitude":73.86}]}"""
             u.contains("api.open-meteo.com") -> """{"utc_offset_seconds":19800,"current":{"time":"2027-01-15T14:30","temperature_2m":27.4,"relative_humidity_2m":40,"weather_code":2,"wind_speed_10m":11.0}}"""
             u.contains("api.frankfurter.dev") -> """{"amount":1.0,"base":"USD","date":"2027-01-15","rates":{"INR":86.12}}"""
             else -> error("unexpected host $u") } }
-        val s = RealtimeEngine.Settings(weather = true, fx = true, place = "Pune")
+        val s = RealtimeEngine.Settings(fx = true, place = "Pune")
         val w = engine(http).gather("weather now", setOf(Category.WEATHER), s, online = true).items.single()
         assertTrue(w.snippet.contains("27.4 °C") && w.snippet.contains("partly cloudy"))
         assertEquals(java.time.LocalDateTime.of(2027, 1, 15, 14, 30).toEpochSecond(java.time.ZoneOffset.ofHoursMinutes(5, 30)) * 1000, w.publishedAt)
@@ -95,6 +109,29 @@ class RealtimeTest {
         assertTrue(urls.all { it.startsWith("https://") && listOf("geocoding-api.open-meteo.com", "api.open-meteo.com", "api.frankfurter.dev").any { h -> it.contains(h) } })
         assertEquals(Realtime.FxAsk("EUR", "INR", 100.0), Realtime.fxAsk("convert 100 euro to rupees"))
         assertEquals(Realtime.FxAsk("INR", "USD", 1.0), Realtime.fxAsk("rupee exchange rate today"))
+    }
+
+    @Test fun cityFromTheQuestionAnyCaseWithStateIsFoundAndRemembered() = runBlocking {
+        assertEquals("pune maharashtra", Realtime.placeIn("weather forecast for pune maharashtra today"))
+        assertEquals("Pune, Maharashtra", Realtime.placeIn("how is the weather in Pune, Maharashtra tomorrow"))
+        assertEquals("pune", Realtime.placeIn("pune weather"))
+        assertEquals("", Realtime.placeIn("today weather forecast"))
+        listOf("today weather forecast", "weather forecast for pune maharashtra", "pune weather", "weather in mumbai")
+            .forEach { assertTrue(it, Category.WEATHER in Realtime.resolve(it)) }
+        listOf("sales forecast for next quarter", "explain weather").forEach { assertTrue(it, Category.WEATHER !in Realtime.resolve(it)) }
+        val urls = mutableListOf<String>()
+        val http: suspend (String) -> String = { u -> urls += u; when {
+            u.contains("geocoding-api") && !u.contains("name=pune&") && !u.endsWith("name=pune") -> """{"generationtime_ms":0.2}"""
+            u.contains("geocoding-api") -> """{"results":[{"name":"Pune","admin1":"Other","country":"Elsewhere","latitude":1.0,"longitude":1.0},""" +
+                """{"name":"Pune","admin1":"Maharashtra","country":"India","latitude":18.52,"longitude":73.86}]}"""
+            else -> """{"utc_offset_seconds":19800,"current":{"time":"2027-01-15T14:30","temperature_2m":27.4,"weather_code":0},""" +
+                """"daily":{"weather_code":[0,61],"temperature_2m_max":[30.1,29.0],"temperature_2m_min":[17.9,17.0],"precipitation_probability_max":[5,60]}}""" } }
+        var learned = ""
+        val e = engine(http).also { it.onPlaceLearned = { p -> learned = p } }
+        val w = e.gather("weather forecast for pune maharashtra tomorrow", setOf(Category.WEATHER), RealtimeEngine.Settings(), online = true).items.single()
+        assertTrue(urls.last().contains("latitude=18.52"))                                               // the Maharashtra hit, not the first
+        assertTrue(w.title.contains("Maharashtra") && w.snippet.contains("tomorrow: 17–29 °C, light rain, chance of rain 60 %"))
+        assertEquals("pune maharashtra", learned)
     }
 
     @Test fun personalRecordsAndPhoneStatusComeFromTheStoresAndAreLocal() = runBlocking {
@@ -153,7 +190,8 @@ class RealtimeTest {
         assertTrue(vm.contains("assemble(r.copy(items = r.external), liveNow, max)"))                // online: public evidence only
         assertTrue(vm.contains("(if (docsConsented) ragDoc(onlineCtx, wsOnline) else null)"))          // private documents: consent, unchanged
         assertTrue(vm.contains("require(u.protocol == \"https\" && u.host in realtimeHosts)"))      // fixed hosts only (no SSRF)
-        assertTrue(vm.contains("g.prefs.getBoolean(\"rt_weather\", false), g.prefs.getBoolean(\"rt_fx\", false)"))   // new services off by default
+        assertTrue(vm.contains("g.prefs.getBoolean(\"rt_weather\", true), g.prefs.getBoolean(\"rt_fx\", false)"))   // weather when asked; fx off
+        assertTrue(vm.contains("e.onPlaceLearned = { p -> setRealtime(\"rt_place\", p) }"))                       // the city the user told is kept
         assertTrue(File("src/main/java/ai/abhify/android/ui/VoiceState.kt").readText().contains("vm.send(text)"))   // voice = the same pipeline
         val speech = SpeechStream(7, minChars = 10)
         val spoken = speech.finish("The rate is 86 rupees [W1]. Details at https://frankfurter.dev/ today [L2].")

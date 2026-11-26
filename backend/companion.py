@@ -72,11 +72,62 @@ def register_api_routes(paths: Iterable[str]) -> None:
             API_PREFIXES.add(seg)
 
 
+LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def host_name(value: str | None) -> str:
+    """The name part of a Host header or URL authority, lower-case, without port or IPv6 brackets."""
+    v = (value or "").strip().lower()
+    if v.startswith("["):                                       # [::1]:8000
+        return v[1:v.find("]")] if "]" in v else v
+    return v.rsplit(":", 1)[0] if v.count(":") == 1 else v
+
+
 def is_local_request(request: Request) -> bool:
-    host = request.client.host if request.client else ""
-    if host not in LOOPBACK:
+    """This computer's own owner: a loopback connection, no proxy/tunnel headers, AND a loopback Host header.
+    7.1 security: the Host check stops DNS rebinding (a web page whose own domain resolves to 127.0.0.1 reached the API
+    as the owner and could read and write memories). Such a request is now treated as remote, so it needs a paired token."""
+    peer = request.client.host if request.client else ""
+    if peer not in LOOPBACK:
         return False
-    return not any(h in request.headers for h in FORWARD_HEADERS)
+    if any(h in request.headers for h in FORWARD_HEADERS):
+        return False
+    host = host_name(request.headers.get("host"))
+    # no Host header at all: not a browser (browsers always send one), so not a rebinding vector
+    return peer == "testclient" or host == "" or host in LOOPBACK_HOSTS
+
+
+def _norm_origin(o: str) -> str:
+    o = (o or "").strip().lower().rstrip("/")
+    for scheme, port in (("http://", ":80"), ("https://", ":443")):
+        if o.startswith(scheme) and o.endswith(port):
+            o = o[: -len(port)]
+    return o
+
+
+def cross_site_reason(request: Request, trusted_origins: Iterable[str]) -> str | None:
+    """7.1 security (CSRF / cross-origin protection, independent of CORS and never used as authentication): a browser
+    request to the API made by ANOTHER website is refused. Browsers mark them with an Origin header and Sec-Fetch-Site;
+    "simple" requests (form posts, multipart uploads, no-cors fetches) reach the server without any CORS preflight, so
+    CORS alone can't stop them (a cross-site page could upload a document into the knowledge base).
+    Allowed: the page's own origin (same host as the request), origins listed explicitly in CORS_ORIGINS, and clients that
+    send neither header (the Android app, the desktop launcher, scripts), which then pass the normal authentication.
+    Returns the reason to refuse, or None."""
+    if request.method == "OPTIONS" or not is_api(request.url.path):
+        return None
+    trusted = {_norm_origin(o) for o in trusted_origins}
+    if "*" in trusted:                                           # explicit testing opt-in (documented in config.py)
+        return None
+    origin = request.headers.get("origin")
+    if origin is not None:
+        o = _norm_origin(origin)
+        own = o.split("://", 1)[-1] == _norm_origin("http://" + (request.headers.get("host") or "")).split("://", 1)[-1]
+        if o and o != "null" and (own or o in trusted):
+            return None
+        return "Cross-site request refused: this page's origin isn't trusted by Abhify.AI."
+    if (request.headers.get("sec-fetch-site") or "").lower() == "cross-site":
+        return "Cross-site request refused."
+    return None
 
 
 def is_api(path: str) -> bool:

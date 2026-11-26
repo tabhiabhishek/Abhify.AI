@@ -46,6 +46,9 @@ class AbhifyApp : Application() {
     lateinit var graph: AppGraph; private set
     override fun onCreate() {
         super.onCreate()
+        ai.abhify.android.device.CrashNote.install(filesDir, ai.abhify.android.BuildConfig.VERSION_NAME)   // 7.1.1: local crash report (never uploaded)
+        ai.abhify.android.device.CrashNote.recordLastExit(this, ai.abhify.android.BuildConfig.VERSION_NAME) // 7.1.0: native crashes / low-memory closes too
+        ai.abhify.android.device.VoiceLog.init(filesDir)
         graph = AppGraph(this)
         ai.abhify.android.docs.PdfText.install(this)       // PDF text extraction (on the phone)
         runCatching { assets.open("skills_taxonomy.json").use { ai.abhify.android.career.SkillTaxonomy.current = ai.abhify.android.career.SkillTaxonomy.parse(it.readBytes().toString(Charsets.UTF_8)) } }
@@ -75,6 +78,11 @@ class AppGraph(val context: Context) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val setup = SetupController(this)
     val runtimeLabel get() = "${catalog.runtime.name} ${catalog.runtime.version} (${catalog.runtime.commit.take(8)})"
+
+    /** 7.1.0-dev.2: the assistant's personal name on this phone (chat/Identity.kt); the product name stays Abhify.AI. */
+    var assistantName: String
+        get() = ai.abhify.android.chat.Identity.saved(prefs.getString("assistant_name", null))
+        set(v) { prefs.edit().putString("assistant_name", ai.abhify.android.chat.Identity.validate(v)).apply() }
 
     /** The local profile's display name (works with no account). */
     var userName: String
@@ -233,6 +241,9 @@ class AppGraph(val context: Context) {
     init {
         // v3.4: an existing install that never chose a mode used Auto; keep it Auto (only fresh installs default to the phone)
         if (!prefs.contains("ai_mode") && prefs.getBoolean("onboarded", false)) prefs.edit().putString("ai_mode", "AUTO").apply()
+        // 7.2.1: online chat history is off for new installs; an existing install keeps the old default (on) until changed
+        ai.abhify.android.settings.PrivacyDefaults.onlineHistoryToWrite(prefs.contains(ai.abhify.android.settings.PrivacyDefaults.ONLINE_HISTORY),
+            prefs.getBoolean("onboarded", false))?.let { prefs.edit().putBoolean(ai.abhify.android.settings.PrivacyDefaults.ONLINE_HISTORY, it).apply() }
         // documents imported before v3.4 get their retrieval index in the background (text only, small, sequential)
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             kotlinx.coroutines.delay(8_000)

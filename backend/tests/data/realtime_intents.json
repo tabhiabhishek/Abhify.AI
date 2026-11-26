@@ -14,6 +14,15 @@
     {"q": "What is the weather now?", "needs": ["weather"]},
     {"q": "will it rain today in Pune", "needs": ["weather"]},
     {"q": "temperature outside right now", "needs": ["weather"]},
+    {"q": "today weather forecast", "needs": ["weather"]},
+    {"q": "weather forecast for pune maharashtra", "needs": ["weather"]},
+    {"q": "pune weather", "needs": ["weather"]},
+    {"q": "weather in mumbai", "needs": ["weather"]},
+    {"q": "sales forecast for next quarter", "needs": []},
+    {"q": "What's new in artificial intelligence this week?", "needs": ["news"]},
+    {"q": "what is new in python today", "needs": ["news"]},
+    {"q": "What is new in this version?", "needs": []},
+    {"q": "explain weather", "needs": []},
     {"q": "What's the current USD to INR rate?", "needs": ["fx"]},
     {"q": "convert 100 euro to rupees", "needs": ["fx"]},
     {"q": "dollar exchange rate today", "needs": ["fx"]},
@@ -36,5 +45,22 @@
     {"q": "explain the weather cycle for my exam", "needs": []},
     {"q": "how do exchange rates work", "needs": []},
     {"q": "summarise my notes on Kotlin", "needs": []}
+  ],
+  "_place_about": "7.1: the place each question names (placeIn on both platforms); \"\" = none: my location / here / near me use the saved city or ask.",
+  "place_cases": [
+    {"q": "What is today's weather in my location?", "place": ""},
+    {"q": "weather near me", "place": ""},
+    {"q": "weather here today", "place": ""},
+    {"q": "my location weather", "place": ""},
+    {"q": "weather in my area", "place": ""},
+    {"q": "what's the weather where I am", "place": ""},
+    {"q": "weather at the current location", "place": ""},
+    {"q": "weather in my city", "place": ""},
+    {"q": "weather in Pune today", "place": "Pune"},
+    {"q": "pune maharashtra weather", "place": "pune maharashtra"},
+    {"q": "What is the weather in Pune, Maharashtra?", "place": "Pune, Maharashtra"},
+    {"q": "weather in Salt Lake City", "place": "Salt Lake City"},
+    {"q": "weather for Mexico City tomorrow", "place": "Mexico City"},
+    {"q": "temperature near Mumbai now", "place": "Mumbai"}
   ]
 }

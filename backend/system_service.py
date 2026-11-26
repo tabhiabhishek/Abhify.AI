@@ -253,13 +253,83 @@ async def chat_models() -> dict[str, Any]:
         return {"ollama": False, "default": active, "default_installed": False, "locked": locked, "models": [],
                 "error": f"Ollama isn't reachable ({type(e).__name__}). Start Ollama and try again."}
     names = [t["name"] for t in tags]
+    loaded = await _loaded_models(url)
+    chat = [t for t in tags if is_chat_model(t)]
+    caps = await asyncio.gather(*[_capabilities(url, t["name"], t.get("digest", "")) for t in chat])
     models = [{"name": t["name"], "size_gb": round(t.get("size", 0) / GB, 2),
                "parameter_size": (t.get("details") or {}).get("parameter_size"),
                "quantization": (t.get("details") or {}).get("quantization_level"),
                "family": (t.get("details") or {}).get("family"),
-               "default": model_installed(active, [t["name"]])}
-              for t in tags if is_chat_model(t)]
+               "default": model_installed(active, [t["name"]]),
+               "installed": True,
+               "loaded": any(model_installed(t["name"], [n]) for n in loaded),          # in Ollama's memory right now (/api/ps)
+               "capabilities": c,                                                      # Ollama's own list (None: this Ollama doesn't say)
+               "use": recommended_use(t["name"])}
+              for t, c in zip(chat, caps)]
     return {"ollama": True, "default": active, "default_installed": model_installed(active, names), "locked": locked, "models": models}
+
+
+async def _loaded_models(url: str) -> list[str]:
+    """Models Ollama has in memory now (/api/ps); [] when it can't say."""
+    try:
+        async with httpx.AsyncClient(timeout=2) as client:
+            return [m.get("name", "") for m in (await client.get(f"{url}/api/ps")).json().get("models", [])]
+    except Exception:                                        # noqa: BLE001 - informational only
+        return []
+
+
+_CAPS: dict[str, list[str] | None] = {}
+
+
+async def _capabilities(url: str, name: str, digest: str) -> list[str] | None:
+    """What the model can do, from Ollama's /api/show "capabilities" (e.g. completion, tools, vision, thinking), cached per
+    digest. None when this Ollama doesn't report it: nothing is assumed (no "vision" unless Ollama says so)."""
+    key = f"{name}@{digest}"
+    if key in _CAPS:
+        return _CAPS[key]
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            caps = (await client.post(f"{url}/api/show", json={"model": name})).json().get("capabilities")
+        _CAPS[key] = [str(c) for c in caps] if isinstance(caps, list) else None
+    except Exception:                                        # noqa: BLE001
+        return None
+    return _CAPS[key]
+
+
+# Short, honest notes for well-known families (shown as "good for"); unknown models get none rather than a guess.
+_USE = (("qwen2.5-coder", "Coding"), ("qwen2.5", "All-round: reasoning, writing, code, many languages"), ("qwen3", "All-round with step-by-step thinking"),
+        ("llama3.2", "Fast and light: quick answers on modest hardware"), ("llama3.1", "General chat and writing"),
+        ("mistral", "General chat, fast"), ("phi4", "Reasoning and maths for its size"), ("phi3", "Light reasoning"),
+        ("gemma", "General chat"), ("deepseek-r1", "Step-by-step reasoning (slower)"), ("codellama", "Coding"), ("llava", "Describing images"))
+
+
+def recommended_use(name: str) -> str | None:
+    n = name.lower()
+    return next((u for k, u in _USE if n.startswith(k)), None)
+
+
+async def delete_model(name: str) -> dict[str, Any]:
+    """7.0 Model Library: removes an installed model through Ollama's /api/delete. Refuses the default chat model and the
+    embedding model (the app would stop answering / searching). Returns the refreshed chat_models()."""
+    url = get_settings().ollama_base_url
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            tags = (await client.get(f"{url}/api/tags")).json().get("models", [])
+    except Exception as e:
+        raise ConnectionError(f"Ollama isn't reachable ({type(e).__name__}).") from e
+    real = next((t["name"] for t in tags if model_installed(name, [t["name"]])), None)
+    if not real:
+        raise ValueError(f"The model '{name}' is not installed.")
+    act = active_models()
+    if model_installed(act["llm"], [real]):
+        raise ValueError(f"{real} is the default chat model. Choose another default first.")
+    if model_installed(act["embed"], [real]):
+        raise ValueError(f"{real} is the embedding model used by your knowledge base, so it can't be removed here.")
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.request("DELETE", f"{url}/api/delete", json={"model": real})
+    if r.status_code >= 400:
+        raise ValueError(f"Ollama couldn't remove {real} (HTTP {r.status_code}).")
+    return {"deleted": real, **(await chat_models())}
 
 
 async def resolve_chat_model(name: str) -> str:

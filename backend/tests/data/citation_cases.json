@@ -1,0 +1,440 @@
+{
+  "about": "7.0.1 citation integrity: shared cases for backend/citations.py and Android intel/Realtime.kt (Citations). Each case: sources (the registry), the model's answer, and what the checked answer must / must not contain plus the report counts.",
+  "sources": {
+    "ai": [
+      {
+        "id": "W1",
+        "title": "OpenAI releases GPT-5.5 with faster reasoning",
+        "publisher": "The Verge",
+        "url": "https://www.theverge.com/ai/gpt-5-5",
+        "published_at": 1795000000000,
+        "retrieved_at": 1795020000000,
+        "snippet": "OpenAI on Monday released GPT-5.5, saying it answers 40% faster than its predecessor."
+      },
+      {
+        "id": "W2",
+        "title": "Google DeepMind unveils Gemini 4 with a 2 million token context window",
+        "publisher": "Reuters",
+        "url": "https://www.reuters.com/tech/gemini-4",
+        "published_at": 1795003600000,
+        "retrieved_at": 1795020000000,
+        "snippet": "Gemini 4 can read 2 million tokens at once and is available to developers from today."
+      }
+    ],
+    "weather": [
+      {
+        "id": "W1",
+        "title": "Weather in Pune, Maharashtra, India",
+        "publisher": "Open-Meteo",
+        "url": "https://open-meteo.com/",
+        "published_at": 1795019000000,
+        "retrieved_at": 1795020000000,
+        "snippet": "22.7°C; feels like 22.1°C; clear sky; humidity 50%; today: 18.6–30.2°C, chance of rain 0%"
+      },
+      {
+        "id": "W2",
+        "title": "USD → INR reference rate for 2026-11-17",
+        "publisher": "European Central Bank via Frankfurter",
+        "url": "https://frankfurter.dev/",
+        "published_at": null,
+        "retrieved_at": 1795020000000,
+        "snippet": "1 USD = 93.4800 INR (daily reference rate published for 2026-11-17, not a live market price)"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "correct citation is kept",
+      "sources": "weather",
+      "answer": "Right now Pune is 22.7°C with clear skies [W1].",
+      "contains": [
+        "[W1]",
+        "22.7"
+      ],
+      "absent": [
+        "[unsupported]"
+      ],
+      "verified": 1,
+      "remapped": 0,
+      "unsupported": 0,
+      "invalid": 0
+    },
+    {
+      "name": "small model puts a fact under the wrong number: corrected",
+      "sources": "ai",
+      "answer": "Google DeepMind unveiled Gemini 4 with a 2 million token context window [W1].",
+      "contains": [
+        "[W2]"
+      ],
+      "absent": [
+        "[W1]",
+        "[unsupported]"
+      ],
+      "verified": 1,
+      "remapped": 1,
+      "unsupported": 0,
+      "invalid": 0
+    },
+    {
+      "name": "wrong number on a figure: corrected by the number",
+      "sources": "ai",
+      "answer": "GPT-5.5 answers 40% faster than before [W2].",
+      "contains": [
+        "[W1]"
+      ],
+      "absent": [
+        "[W2]"
+      ],
+      "verified": 1,
+      "remapped": 1,
+      "unsupported": 0,
+      "invalid": 0
+    },
+    {
+      "name": "citation to a source that doesn't exist is removed",
+      "sources": "ai",
+      "answer": "OpenAI released GPT-5.5 [W7].",
+      "contains": [
+        "OpenAI released GPT-5.5"
+      ],
+      "absent": [
+        "[W7]"
+      ],
+      "verified": 0,
+      "remapped": 0,
+      "unsupported": 0,
+      "invalid": 1
+    },
+    {
+      "name": "claim no source supports is marked unsupported",
+      "sources": "ai",
+      "answer": "Apple bought Anthropic for 90 billion dollars [W1].",
+      "contains": [
+        "[unsupported]"
+      ],
+      "absent": [
+        "[W1]"
+      ],
+      "verified": 0,
+      "remapped": 0,
+      "unsupported": 1,
+      "invalid": 0
+    },
+    {
+      "name": "a number the source doesn't contain is unsupported",
+      "sources": "weather",
+      "answer": "One US dollar is 95.10 rupees today [W2].",
+      "contains": [
+        "[unsupported]"
+      ],
+      "absent": [
+        "[W2]"
+      ],
+      "verified": 0,
+      "remapped": 0,
+      "unsupported": 1,
+      "invalid": 0
+    },
+    {
+      "name": "grouped markers are split and each checked",
+      "sources": "ai",
+      "answer": "OpenAI released GPT-5.5 and Google unveiled Gemini 4 [W1, W2].",
+      "contains": [
+        "[W1]",
+        "[W2]"
+      ],
+      "absent": [
+        "[W1, W2]",
+        "[unsupported]"
+      ],
+      "verified": 1,
+      "remapped": 0,
+      "unsupported": 0,
+      "invalid": 0
+    },
+    {
+      "name": "a model's [W2](#) link wrapper becomes the plain marker",
+      "sources": "ai",
+      "answer": "Gemini 4 reads 2 million tokens at once [W2](#).",
+      "contains": [
+        "[W2]"
+      ],
+      "absent": [
+        "(#)"
+      ],
+      "verified": 1,
+      "remapped": 0,
+      "unsupported": 0,
+      "invalid": 0
+    },
+    {
+      "name": "an invented URL is removed, a retrieved one kept",
+      "sources": "ai",
+      "answer": "GPT-5.5 is out [W1]. Details: https://openai-news.example.com/gpt55 and https://www.theverge.com/ai/gpt-5-5",
+      "contains": [
+        "(link removed: not a retrieved source)",
+        "https://www.theverge.com/ai/gpt-5-5"
+      ],
+      "absent": [
+        "openai-news.example.com"
+      ],
+      "verified": 1,
+      "remapped": 0,
+      "unsupported": 0,
+      "invalid": 0,
+      "urls_removed": 1
+    },
+    {
+      "name": "markers with no sources at all are removed",
+      "sources": null,
+      "answer": "Python 3.14 is the latest release [W1].",
+      "contains": [
+        "Python 3.14 is the latest release"
+      ],
+      "absent": [
+        "[W1]"
+      ],
+      "verified": 0,
+      "remapped": 0,
+      "unsupported": 0,
+      "invalid": 1
+    },
+    {
+      "name": "uncited sentences are left alone",
+      "sources": "ai",
+      "answer": "Here is a summary. Gemini 4 can read 2 million tokens [W2].",
+      "contains": [
+        "Here is a summary.",
+        "[W2]"
+      ],
+      "absent": [
+        "[unsupported]"
+      ],
+      "verified": 1,
+      "remapped": 0,
+      "unsupported": 0,
+      "invalid": 0
+    },
+    {
+      "name": "a marker after the full stop refers to the sentence before it",
+      "sources": "ai",
+      "answer": "OpenAI released GPT-5.5, which answers 40% faster. [W1]",
+      "contains": [
+        "[W1]"
+      ],
+      "absent": [
+        "[unsupported]"
+      ],
+      "verified": 1,
+      "remapped": 0,
+      "unsupported": 0,
+      "invalid": 0
+    },
+    {
+      "name": "a lone marker at the end of a paragraph checks that paragraph",
+      "sources": "ai",
+      "answer": "**Gemini 4 arrives**\nGoogle DeepMind's new model can read 2 million tokens. It is available to developers.\n[W1]\n\nNext topic.",
+      "contains": [
+        "[W2]"
+      ],
+      "absent": [
+        "[W1]",
+        "[unsupported]"
+      ],
+      "verified": 1,
+      "remapped": 1,
+      "unsupported": 0,
+      "invalid": 0
+    },
+    {
+      "name": "a sentence with its own words is judged alone, not rescued by the paragraph",
+      "sources": "ai",
+      "answer": "Gemini 4 reads 2 million tokens [W2]. Apple bought Anthropic for 90 billion dollars [W2].",
+      "contains": [
+        "[W2]",
+        "[unsupported]"
+      ],
+      "absent": [],
+      "verified": 1,
+      "remapped": 0,
+      "unsupported": 1,
+      "invalid": 0
+    },
+    {
+      "name": "a remark naming a source is kept as a reference, not marked unsupported",
+      "sources": "ai",
+      "answer": "Please note that the information on [W1] is from an article published on Monday.",
+      "contains": [
+        "[W1]"
+      ],
+      "absent": [
+        "[unsupported]"
+      ],
+      "verified": 0,
+      "remapped": 0,
+      "unsupported": 0,
+      "invalid": 0,
+      "references": 1
+    },
+    {
+      "name": "'In [W1], …' is a claim and is still checked",
+      "sources": "ai",
+      "answer": "In [W1], Apple bought Anthropic for 90 billion dollars.",
+      "contains": [
+        "[unsupported]"
+      ],
+      "absent": [
+        "[W1]"
+      ],
+      "verified": 0,
+      "remapped": 0,
+      "unsupported": 1,
+      "invalid": 0
+    },
+    {
+      "name": "a reference remark with a number the source lacks is still unsupported",
+      "sources": "ai",
+      "answer": "The details in [W2] say it costs 99 dollars.",
+      "contains": [
+        "[unsupported]"
+      ],
+      "absent": [
+        "[W2]"
+      ],
+      "verified": 0,
+      "remapped": 0,
+      "unsupported": 1,
+      "invalid": 0
+    },
+    {
+      "name": "'According to [W2], …' is still checked (and corrected when wrong)",
+      "sources": "ai",
+      "answer": "According to [W2], OpenAI released GPT-5.5, which answers 40% faster.",
+      "contains": [
+        "[W1]"
+      ],
+      "absent": [
+        "[W2]"
+      ],
+      "verified": 1,
+      "remapped": 1,
+      "unsupported": 0,
+      "invalid": 0
+    },
+    {
+      "name": "a remark about source ages is checked against the real publication times (correct)",
+      "sources": "ai",
+      "answer": "Note that the information on [W1] is from 5 hours ago, and the details in [W2] are from 4 hours ago.",
+      "contains": [
+        "[W1]",
+        "[W2]"
+      ],
+      "absent": [
+        "[unsupported]"
+      ],
+      "verified": 0,
+      "remapped": 0,
+      "unsupported": 0,
+      "invalid": 0,
+      "references": 1
+    },
+    {
+      "name": "chained references with ages ('on [W1] and [W2] … 5 and 4 hours ago')",
+      "sources": "ai",
+      "answer": "The information on [W1] and [W2] is from 5 and 4 hours ago.",
+      "contains": [
+        "[W1]",
+        "[W2]"
+      ],
+      "absent": [
+        "[unsupported]"
+      ],
+      "verified": 0,
+      "remapped": 0,
+      "unsupported": 0,
+      "invalid": 0,
+      "references": 1
+    },
+    {
+      "name": "a wrong age in a remark about a source is unsupported",
+      "sources": "ai",
+      "answer": "Please note that the information on [W1] is from 3 days ago.",
+      "contains": [
+        "[unsupported]"
+      ],
+      "absent": [
+        "[W1]"
+      ],
+      "verified": 0,
+      "remapped": 0,
+      "unsupported": 1,
+      "invalid": 0
+    },
+    {
+      "name": "a marker followed by the source's own publisher and date is an attribution, not a claim",
+      "sources": "ai",
+      "answer": "OpenAI released GPT-5.5, which answers 40% faster. [W1] The Verge, published 2026-11-18 11:06 (5 h ago)",
+      "contains": [
+        "[W1] The Verge"
+      ],
+      "absent": [
+        "[unsupported]"
+      ],
+      "verified": 1,
+      "remapped": 0,
+      "unsupported": 0,
+      "invalid": 0
+    },
+    {
+      "name": "an attribution with a wrong publication date is still checked (unsupported)",
+      "sources": "ai",
+      "answer": "OpenAI released GPT-5.5, which answers 40% faster. [W1] The Verge, published 2025-01-03 10:00",
+      "contains": [
+        "[unsupported]"
+      ],
+      "absent": [
+        "[W1]"
+      ],
+      "verified": 0,
+      "remapped": 0,
+      "unsupported": 1,
+      "invalid": 0
+    }
+  ],
+  "unverified_cases": [
+    {
+      "name": "a link given as a source without retrieval is labelled",
+      "answer": "Google announced a model. (Source: https://aiweekly.co/)",
+      "contains": [
+        "aiweekly.co",
+        "(unverified: from the model's memory, not retrieved)"
+      ],
+      "absent": [
+        "https://aiweekly.co"
+      ],
+      "flagged": 1
+    },
+    {
+      "name": "a markdown source link keeps its text, loses the link",
+      "answer": "According to [AI News](https://aienews.org/news.html), models improved.",
+      "contains": [
+        "AI News (aienews.org) (unverified"
+      ],
+      "absent": [
+        "https://aienews.org"
+      ],
+      "flagged": 1
+    },
+    {
+      "name": "an ordinary link that isn't a citation is left alone",
+      "answer": "Download Python from https://python.org/downloads.",
+      "contains": [
+        "https://python.org/downloads"
+      ],
+      "absent": [
+        "unverified"
+      ],
+      "flagged": 0
+    }
+  ]
+}

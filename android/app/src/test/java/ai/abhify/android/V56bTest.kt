@@ -44,7 +44,8 @@ class CompanionTest {
         assertTrue(vm.contains("val rq = ai.abhify.android.chat.Companion.retrievalQuery(question, history)"))
         assertTrue(vm.contains("RagIndex.retrieve(g.db, docIds, rq, 8") && vm.contains("brain.resolve(rq,"))
         // online prompts get the earlier-turn summary only when chat history may go online
-        assertTrue(vm.contains("Companion.turn(question, if (g.prefs.getBoolean(\"online_history\", true)) history else emptyList(), win)"))
+        // 7.2.1: the default is PrivacyDefaults.ONLINE_HISTORY_NEW_INSTALL (off for new installs; existing installs keep theirs)
+        assertTrue(vm.contains("Companion.turn(question, if (g.prefs.getBoolean(\"online_history\", ai.abhify.android.settings.PrivacyDefaults.ONLINE_HISTORY_NEW_INSTALL)) history else emptyList(), win)"))
     }
 }
 
@@ -82,12 +83,12 @@ class SpeechStreamTest {
     }
 }
 
-/** 5.6 Neural Futuristic tokens (shared with the web's :root). */
+/** Brand tokens (shared with the web's :root). 7.0 replaced the 5.6 "Neural" values with the approved "Synapse" set. */
 class NeuralTokensTest {
     @Test fun charcoalVioletAndElectricCyan() {
-        assertEquals(Color(0xFF07080D), Brand.Bg1); assertEquals(Color(0xFF131620), Brand.Surface); assertEquals(Color(0xFF22D3EE), Brand.Cyan)
-        assertEquals(Color(0xFF6D4AFF), Brand.Violet)
-        assertTrue(srcOf("ui/Aurora.kt").contains("Brand.Cyan, Color(0xFFA855F7)"))
+        assertEquals(Color(0xFF06070D), Brand.Bg1); assertEquals(Color(0xFF0E1020), Brand.Surface); assertEquals(Color(0xFF3DE0FF), Brand.Cyan)
+        assertEquals(Color(0xFF7350F5), Brand.Violet); assertEquals(Color(0xFF9D7BFF), Brand.Synapse)
+        assertTrue(srcOf("ui/Aurora.kt").contains("Triple(Color(0xFFF1ECFF), Brand.Synapse, Color(0xFF1B1450))"))   // the Synapse core
     }
 }
 

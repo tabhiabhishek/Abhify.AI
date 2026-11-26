@@ -1,0 +1,428 @@
+{
+ "spec": "docs/specs/ABHIFY_SYNC_PROTOCOL_V1.md",
+ "note": "deterministic test vectors; never real keys",
+ "b32c": [
+  {
+   "hex": "",
+   "out": ""
+  },
+  {
+   "hex": "00",
+   "out": "00"
+  },
+  {
+   "hex": "ff",
+   "out": "ZW"
+  },
+  {
+   "hex": "0102030405",
+   "out": "04106105"
+  },
+  {
+   "hex": "ffffffffffffffffffff",
+   "out": "ZZZZZZZZZZZZZZZZ"
+  },
+  {
+   "hex": "8f3a9c",
+   "out": "HWX9R"
+  }
+ ],
+ "recovery_keys": [
+  {
+   "raw": "0000000000000000000000000000000000000000",
+   "canonical": "00000000000000000000000000000000VS3W",
+   "display": "0000-0000-0000-0000-0000-0000-0000-0000-VS3W",
+   "qr": "abhify-rk:1:00000000000000000000000000000000VS3W"
+  },
+  {
+   "raw": "ffffffffffffffffffffffffffffffffffffffff",
+   "canonical": "ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZKA6W",
+   "display": "ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZ-KA6W",
+   "qr": "abhify-rk:1:ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZKA6W"
+  },
+  {
+   "raw": "c49acf6ed9b977c2f4e58e467d95f887d4d95056",
+   "canonical": "RJDCYVPSQ5VW5X75HS37V5FRGZADJM2PM8A7",
+   "display": "RJDC-YVPS-Q5VW-5X75-HS37-V5FR-GZAD-JM2P-M8A7",
+   "qr": "abhify-rk:1:RJDCYVPSQ5VW5X75HS37V5FRGZADJM2PM8A7"
+  }
+ ],
+ "normalize": [
+  {
+   "in": "RJDC-YVPS-Q5VW-5X75-HS37-V5FR-GZAD-JM2P-M8A7",
+   "out": "RJDCYVPSQ5VW5X75HS37V5FRGZADJM2PM8A7"
+  },
+  {
+   "in": "rjdc-yvps-q5vw-5x75-hs37-v5fr-gzad-jm2p-m8a7",
+   "out": "RJDCYVPSQ5VW5X75HS37V5FRGZADJM2PM8A7"
+  },
+  {
+   "in": " RJDC YVPS Q5VW 5X75 HS37 V5FR GZAD JM2P M8A7 ",
+   "out": "RJDCYVPSQ5VW5X75HS37V5FRGZADJM2PM8A7"
+  },
+  {
+   "in": "RJDC-YVPS-Q5VW-5X75-HS37-V5FR-GZAD-JM2P-M8A7",
+   "out": "RJDCYVPSQ5VW5X75HS37V5FRGZADJM2PM8A7"
+  },
+  {
+   "in": "RJDC-YVPS-Q5VW-5X75-HS37-V5FR-GZAD-JM2P-M8A7",
+   "out": "RJDCYVPSQ5VW5X75HS37V5FRGZADJM2PM8A7"
+  },
+  {
+   "in": "RJDCYVPSQ5VW5X75HS37V5FRGZADJM2PM8A0",
+   "error": "typo"
+  },
+  {
+   "in": "RJDCYVPSQ5VW5X75HS37V5FRGZADJM2PM8A",
+   "error": "typo"
+  },
+  {
+   "in": "RJDCYVPSQ5UW5X75HS37V5FRGZADJM2PM8A7",
+   "error": "typo"
+  },
+  {
+   "in": "",
+   "error": "typo"
+  }
+ ],
+ "kdf": [
+  {
+   "password": "correct horse battery",
+   "salt": "00112233445566778899aabbccddeeff",
+   "iter": 100000,
+   "key": "adf1dcf6ba5942bcf129121f5caa94f62df7785bd7283f84a95b73591e671250"
+  },
+  {
+   "password": "RJDCYVPSQ5VW5X75HS37V5FRGZADJM2PM8A7",
+   "salt": "ffeeddccbbaa99887766554433221100",
+   "iter": 100000,
+   "key": "25b579fa736d6ef742d0c5b6c04a2449552faa7581f0fc9a371fcc530f049cdb"
+  },
+  {
+   "password": "pässwörd ✓ नमस्ते",
+   "salt": "0102030405060708090a0b0c0d0e0f10",
+   "iter": 100000,
+   "key": "e2a64718cf593f7177fca59d51f774f7d87100b32f4472478b88d152383f8c7a"
+  }
+ ],
+ "aead": [
+  {
+   "key": "0000000000000000000000000000000000000000000000000000000000000000",
+   "iv": "000000000000000000000000",
+   "pt": "",
+   "aad": "x",
+   "ct": "En7v34o8ipXYJhidIRUpig=="
+  },
+  {
+   "key": "1111111111111111111111111111111111111111111111111111111111111111",
+   "iv": "222222222222222222222222",
+   "pt": "68656c6c6f",
+   "aad": "abhify-sync-ops|1|v|1|d|1|0",
+   "ct": "f5JrJa8kaGGtcRlmyq2fgKYS8ihr"
+  },
+  {
+   "key": "741d7d6f653e4d092980f84b4bcec44f36584ab6ea59cd409833a42c553a6ed5",
+   "iv": "57e120abd9d1b0c0e7f1d8c1",
+   "pt": "65323963393332303465366637363631",
+   "aad": "aad ✓",
+   "ct": "RPAbRwZ4L8UwA6naCveiqbBYVGK6jqCXZqCeeAQ95bY="
+  }
+ ],
+ "vault": {
+  "recovery_key": "RJDCYVPSQ5VW5X75HS37V5FRGZADJM2PM8A7",
+  "wrong_recovery_key": "00000000000000000000000000000000VS3W",
+  "doc_epoch1": {
+   "format": "abhify-vault",
+   "v": 1,
+   "vault_id": "acab673092975ea000d7b6b37e12deb1",
+   "created": 1763900000000,
+   "epoch": 1,
+   "kdf": {
+    "alg": "PBKDF2-SHA256",
+    "iter": 100000,
+    "salt": "h/Rhw8jGN4Us5T1LE3xkvw=="
+   },
+   "wrap": {
+    "iv": "yL7HHuzSfiAoxddj",
+    "ct": "eIN0GGvpverycBdrpNAnKkRehLk9q3njTX+2vN7qJ1J9qxV3+63lZBCmqnIcghf3"
+   },
+   "chain": []
+  },
+  "keys_epoch1": {
+   "1": "de108a9af5a720dd83704a81f68e38f9f864200ec11cd23447594d6a41af4640"
+  },
+  "doc_epoch2": {
+   "format": "abhify-vault",
+   "v": 1,
+   "vault_id": "acab673092975ea000d7b6b37e12deb1",
+   "created": 1763900000000,
+   "epoch": 2,
+   "kdf": {
+    "alg": "PBKDF2-SHA256",
+    "iter": 100000,
+    "salt": "uIlLMnp5OHgDyV8RYYp0rw=="
+   },
+   "wrap": {
+    "iv": "BSBN8jAH1K7uvGTm",
+    "ct": "pt8BS/Njh7XEL9ageDCPhYJ8+w5j9Oi84vogrMLEvoURjnAnkpYFCcHvXOGBEVQu"
+   },
+   "chain": [
+    {
+     "epoch": 1,
+     "iv": "23GRcS5ROOXoN0+X",
+     "ct": "PseGeSHF0nHBp6fVfxEwUynKelqHLSNVaa/emmhi4sv5JW8okIT9OvACQVqdFmh1"
+    }
+   ]
+  },
+  "keys_epoch2": {
+   "1": "de108a9af5a720dd83704a81f68e38f9f864200ec11cd23447594d6a41af4640",
+   "2": "bc3cd79f64cf9b843aca0a7900b612e37d2aa1eb3ce75d8e7c48643aa44f9304"
+  }
+ },
+ "ops": {
+  "file": "{\"format\":\"abhify-sync-ops\",\"v\":1,\"vault_id\":\"acab673092975ea000d7b6b37e12deb1\",\"epoch\":2,\"device\":\"aaaaaaaaaaaaaaaa\",\"seq\":7,\"created\":1763900000010,\"iv\":\"1TlDwgmHMPbetOzd\",\"ct\":\"Pc8YQAMj+PFgH3vy6fBYgWt3MF/G+p1D7XlTp02af13haAyz15zTYdogiaWiqawSReSkIc7ftgNT0XGh2mGdwdHrOJoTrlVwyAzpAdbq619n8DiRMZqIAq3CmfEcsaueoiVMTtiyYWNdidRwTR0IWU3FFFFxwlTsjBcPH82A0Sq+A4vjofTX8NbV4zg7pYeWWapOyxv0fgiBRSSgubkawZrY4whbD2klRMxoI929vMSy+76w2q+LBn/NudpBavuNJNSxstI6E8bQSSv0DuWWVhOnKzJC2ydaWBGn1dh9V/SshUXMdpFvJxvbmHPCu1wn0/O57/F/v1XzlaIA/K1n1qf7XRjvln3Um3gSsV5Z88I2x71WtNmF8ZdGtPgUNqIXsQURZ/dv3XG/jx8yJO6e42SX1qdl8s8ebAMqbFcfWgESYXTcKGLJ13n6SiynBvQP/larAC1r9649HCo0n2XPjdinbsSS5jcq1SrUCPX3CNs0q3X0vhtFJcNnQQHc3SgwVWg=\"}",
+  "name": "op-aaaaaaaaaaaaaaaa-00000007.abx",
+  "expect": {
+   "device": "aaaaaaaaaaaaaaaa",
+   "seq": 7,
+   "epoch": 2,
+   "created": 1763900000010,
+   "records": [
+    {
+     "rid": "aaaaaaaaaaaaaaaa",
+     "kind": "device",
+     "ver": {
+      "dev": "aaaaaaaaaaaaaaaa",
+      "n": 1
+     },
+     "base": null,
+     "at": 1763900000001,
+     "del": false,
+     "data": {
+      "name": "Test PC",
+      "platform": "windows",
+      "added": 1763900000000
+     }
+    },
+    {
+     "rid": "c-0001-conversation",
+     "kind": "conversation",
+     "ver": {
+      "dev": "aaaaaaaaaaaaaaaa",
+      "n": 1
+     },
+     "base": null,
+     "at": 1763900000002,
+     "del": false,
+     "data": {
+      "title": "Trip ✈ plan",
+      "created": 1763900000000
+     }
+    },
+    {
+     "rid": "m-0001-message",
+     "kind": "message",
+     "ver": {
+      "dev": "aaaaaaaaaaaaaaaa",
+      "n": 1
+     },
+     "base": null,
+     "at": 1763900000003,
+     "del": false,
+     "data": {
+      "conv": "c-0001-conversation",
+      "role": "user",
+      "content": "नमस्ते — hello",
+      "created": 1763900000001
+     }
+    },
+    {
+     "rid": "mem-0001-memory",
+     "kind": "memory",
+     "ver": {
+      "dev": "aaaaaaaaaaaaaaaa",
+      "n": 2
+     },
+     "base": {
+      "dev": "aaaaaaaaaaaaaaaa",
+      "n": 1
+     },
+     "at": 1763900000004,
+     "del": false,
+     "data": {
+      "content": "Prefers short answers",
+      "created": 1763800000000,
+      "category": "preference"
+     }
+    },
+    {
+     "rid": "mem-0002-memory",
+     "kind": "memory",
+     "ver": {
+      "dev": "aaaaaaaaaaaaaaaa",
+      "n": 3
+     },
+     "base": {
+      "dev": "aaaaaaaaaaaaaaaa",
+      "n": 2
+     },
+     "at": 1763900000005,
+     "del": true,
+     "data": {}
+    }
+   ]
+  },
+  "file_epoch1": "{\"format\":\"abhify-sync-ops\",\"v\":1,\"vault_id\":\"acab673092975ea000d7b6b37e12deb1\",\"epoch\":1,\"device\":\"bbbbbbbbbbbbbbbb\",\"seq\":1,\"created\":1763800000000,\"iv\":\"XPDN1HkV7L9+48rI\",\"ct\":\"8hW+oi6lBagG5fy5m7kcqg49V75OW6s8oNVdofJUdfrRP1TqnVk+b/22ju88po9FNfohGsaETzdNtpUomycFN9dX+X3bv7oxP8gIR/1bvu1eMN2X+Qb+EU0HllgNn7gzt1EyFERUxxdxjHLlS8aCa6y3phez1tFDXLw0G5RdOm1whbplwf2wdcNM+xXW1pBWezFguKyvXyW6DKaGcQELLLV/lT5cke7TDIkFlWF8v/tkT8bBVvkXT3LDnHryrPffKSlFqCP1b8qRZGmx0gsZlit8g53xyIxS0p0gSiuHxdKInr6f8b2vCpx8wPQD8byoILQkbfrs/IhcFg3K3k9FNHrafX2SfxvAecI9lA==\"}",
+  "expect_epoch1_records": [
+   {
+    "rid": "c-0001-conversation",
+    "kind": "conversation",
+    "ver": {
+     "dev": "aaaaaaaaaaaaaaaa",
+     "n": 1
+    },
+    "base": null,
+    "at": 1763900000002,
+    "del": false,
+    "data": {
+     "title": "Trip ✈ plan",
+     "created": 1763900000000
+    }
+   },
+   {
+    "rid": "m-0001-message",
+    "kind": "message",
+    "ver": {
+     "dev": "aaaaaaaaaaaaaaaa",
+     "n": 1
+    },
+    "base": null,
+    "at": 1763900000003,
+    "del": false,
+    "data": {
+     "conv": "c-0001-conversation",
+     "role": "user",
+     "content": "नमस्ते — hello",
+     "created": 1763900000001
+    }
+   }
+  ],
+  "tampered": [
+   {
+    "what": "seq",
+    "file": "{\"format\":\"abhify-sync-ops\",\"v\":1,\"vault_id\":\"acab673092975ea000d7b6b37e12deb1\",\"epoch\":2,\"device\":\"aaaaaaaaaaaaaaaa\",\"seq\":8,\"created\":1763900000010,\"iv\":\"1TlDwgmHMPbetOzd\",\"ct\":\"Pc8YQAMj+PFgH3vy6fBYgWt3MF/G+p1D7XlTp02af13haAyz15zTYdogiaWiqawSReSkIc7ftgNT0XGh2mGdwdHrOJoTrlVwyAzpAdbq619n8DiRMZqIAq3CmfEcsaueoiVMTtiyYWNdidRwTR0IWU3FFFFxwlTsjBcPH82A0Sq+A4vjofTX8NbV4zg7pYeWWapOyxv0fgiBRSSgubkawZrY4whbD2klRMxoI929vMSy+76w2q+LBn/NudpBavuNJNSxstI6E8bQSSv0DuWWVhOnKzJC2ydaWBGn1dh9V/SshUXMdpFvJxvbmHPCu1wn0/O57/F/v1XzlaIA/K1n1qf7XRjvln3Um3gSsV5Z88I2x71WtNmF8ZdGtPgUNqIXsQURZ/dv3XG/jx8yJO6e42SX1qdl8s8ebAMqbFcfWgESYXTcKGLJ13n6SiynBvQP/larAC1r9649HCo0n2XPjdinbsSS5jcq1SrUCPX3CNs0q3X0vhtFJcNnQQHc3SgwVWg=\"}",
+    "error": "wrong_key"
+   },
+   {
+    "what": "device",
+    "file": "{\"format\":\"abhify-sync-ops\",\"v\":1,\"vault_id\":\"acab673092975ea000d7b6b37e12deb1\",\"epoch\":2,\"device\":\"cccccccccccccccc\",\"seq\":7,\"created\":1763900000010,\"iv\":\"1TlDwgmHMPbetOzd\",\"ct\":\"Pc8YQAMj+PFgH3vy6fBYgWt3MF/G+p1D7XlTp02af13haAyz15zTYdogiaWiqawSReSkIc7ftgNT0XGh2mGdwdHrOJoTrlVwyAzpAdbq619n8DiRMZqIAq3CmfEcsaueoiVMTtiyYWNdidRwTR0IWU3FFFFxwlTsjBcPH82A0Sq+A4vjofTX8NbV4zg7pYeWWapOyxv0fgiBRSSgubkawZrY4whbD2klRMxoI929vMSy+76w2q+LBn/NudpBavuNJNSxstI6E8bQSSv0DuWWVhOnKzJC2ydaWBGn1dh9V/SshUXMdpFvJxvbmHPCu1wn0/O57/F/v1XzlaIA/K1n1qf7XRjvln3Um3gSsV5Z88I2x71WtNmF8ZdGtPgUNqIXsQURZ/dv3XG/jx8yJO6e42SX1qdl8s8ebAMqbFcfWgESYXTcKGLJ13n6SiynBvQP/larAC1r9649HCo0n2XPjdinbsSS5jcq1SrUCPX3CNs0q3X0vhtFJcNnQQHc3SgwVWg=\"}",
+    "error": "wrong_key"
+   },
+   {
+    "what": "created",
+    "file": "{\"format\":\"abhify-sync-ops\",\"v\":1,\"vault_id\":\"acab673092975ea000d7b6b37e12deb1\",\"epoch\":2,\"device\":\"aaaaaaaaaaaaaaaa\",\"seq\":7,\"created\":1763900000011,\"iv\":\"1TlDwgmHMPbetOzd\",\"ct\":\"Pc8YQAMj+PFgH3vy6fBYgWt3MF/G+p1D7XlTp02af13haAyz15zTYdogiaWiqawSReSkIc7ftgNT0XGh2mGdwdHrOJoTrlVwyAzpAdbq619n8DiRMZqIAq3CmfEcsaueoiVMTtiyYWNdidRwTR0IWU3FFFFxwlTsjBcPH82A0Sq+A4vjofTX8NbV4zg7pYeWWapOyxv0fgiBRSSgubkawZrY4whbD2klRMxoI929vMSy+76w2q+LBn/NudpBavuNJNSxstI6E8bQSSv0DuWWVhOnKzJC2ydaWBGn1dh9V/SshUXMdpFvJxvbmHPCu1wn0/O57/F/v1XzlaIA/K1n1qf7XRjvln3Um3gSsV5Z88I2x71WtNmF8ZdGtPgUNqIXsQURZ/dv3XG/jx8yJO6e42SX1qdl8s8ebAMqbFcfWgESYXTcKGLJ13n6SiynBvQP/larAC1r9649HCo0n2XPjdinbsSS5jcq1SrUCPX3CNs0q3X0vhtFJcNnQQHc3SgwVWg=\"}",
+    "error": "wrong_key"
+   },
+   {
+    "what": "epoch",
+    "file": "{\"format\":\"abhify-sync-ops\",\"v\":1,\"vault_id\":\"acab673092975ea000d7b6b37e12deb1\",\"epoch\":1,\"device\":\"aaaaaaaaaaaaaaaa\",\"seq\":7,\"created\":1763900000010,\"iv\":\"1TlDwgmHMPbetOzd\",\"ct\":\"Pc8YQAMj+PFgH3vy6fBYgWt3MF/G+p1D7XlTp02af13haAyz15zTYdogiaWiqawSReSkIc7ftgNT0XGh2mGdwdHrOJoTrlVwyAzpAdbq619n8DiRMZqIAq3CmfEcsaueoiVMTtiyYWNdidRwTR0IWU3FFFFxwlTsjBcPH82A0Sq+A4vjofTX8NbV4zg7pYeWWapOyxv0fgiBRSSgubkawZrY4whbD2klRMxoI929vMSy+76w2q+LBn/NudpBavuNJNSxstI6E8bQSSv0DuWWVhOnKzJC2ydaWBGn1dh9V/SshUXMdpFvJxvbmHPCu1wn0/O57/F/v1XzlaIA/K1n1qf7XRjvln3Um3gSsV5Z88I2x71WtNmF8ZdGtPgUNqIXsQURZ/dv3XG/jx8yJO6e42SX1qdl8s8ebAMqbFcfWgESYXTcKGLJ13n6SiynBvQP/larAC1r9649HCo0n2XPjdinbsSS5jcq1SrUCPX3CNs0q3X0vhtFJcNnQQHc3SgwVWg=\"}",
+    "error": "wrong_key"
+   },
+   {
+    "what": "ciphertext bit",
+    "file": "{\"format\":\"abhify-sync-ops\",\"v\":1,\"vault_id\":\"acab673092975ea000d7b6b37e12deb1\",\"epoch\":2,\"device\":\"aaaaaaaaaaaaaaaa\",\"seq\":7,\"created\":1763900000010,\"iv\":\"1TlDwgmHMPbetOzd\",\"ct\":\"Pc8YQAMi+PFgH3vy6fBYgWt3MF/G+p1D7XlTp02af13haAyz15zTYdogiaWiqawSReSkIc7ftgNT0XGh2mGdwdHrOJoTrlVwyAzpAdbq619n8DiRMZqIAq3CmfEcsaueoiVMTtiyYWNdidRwTR0IWU3FFFFxwlTsjBcPH82A0Sq+A4vjofTX8NbV4zg7pYeWWapOyxv0fgiBRSSgubkawZrY4whbD2klRMxoI929vMSy+76w2q+LBn/NudpBavuNJNSxstI6E8bQSSv0DuWWVhOnKzJC2ydaWBGn1dh9V/SshUXMdpFvJxvbmHPCu1wn0/O57/F/v1XzlaIA/K1n1qf7XRjvln3Um3gSsV5Z88I2x71WtNmF8ZdGtPgUNqIXsQURZ/dv3XG/jx8yJO6e42SX1qdl8s8ebAMqbFcfWgESYXTcKGLJ13n6SiynBvQP/larAC1r9649HCo0n2XPjdinbsSS5jcq1SrUCPX3CNs0q3X0vhtFJcNnQQHc3SgwVWg=\"}",
+    "error": "wrong_key"
+   },
+   {
+    "what": "vault_id",
+    "file": "{\"format\":\"abhify-sync-ops\",\"v\":1,\"vault_id\":\"00000000000000000000000000000000\",\"epoch\":2,\"device\":\"aaaaaaaaaaaaaaaa\",\"seq\":7,\"created\":1763900000010,\"iv\":\"1TlDwgmHMPbetOzd\",\"ct\":\"Pc8YQAMj+PFgH3vy6fBYgWt3MF/G+p1D7XlTp02af13haAyz15zTYdogiaWiqawSReSkIc7ftgNT0XGh2mGdwdHrOJoTrlVwyAzpAdbq619n8DiRMZqIAq3CmfEcsaueoiVMTtiyYWNdidRwTR0IWU3FFFFxwlTsjBcPH82A0Sq+A4vjofTX8NbV4zg7pYeWWapOyxv0fgiBRSSgubkawZrY4whbD2klRMxoI929vMSy+76w2q+LBn/NudpBavuNJNSxstI6E8bQSSv0DuWWVhOnKzJC2ydaWBGn1dh9V/SshUXMdpFvJxvbmHPCu1wn0/O57/F/v1XzlaIA/K1n1qf7XRjvln3Um3gSsV5Z88I2x71WtNmF8ZdGtPgUNqIXsQURZ/dv3XG/jx8yJO6e42SX1qdl8s8ebAMqbFcfWgESYXTcKGLJ13n6SiynBvQP/larAC1r9649HCo0n2XPjdinbsSS5jcq1SrUCPX3CNs0q3X0vhtFJcNnQQHc3SgwVWg=\"}",
+    "error": "malformed"
+   }
+  ]
+ },
+ "backup": {
+  "file": "{\"format\":\"abhify-vault-backup\",\"v\":2,\"platform\":\"windows\",\"app_version\":\"7.2.0-dev.1\",\"created\":1763900000020,\"kdf\":{\"alg\":\"PBKDF2-SHA256\",\"iter\":100000,\"salt\":\"0JcL4PSzvuvp3PssjEmdGQ==\"},\"iv\":\"Ownf/yzrk7AZ4H7K\",\"ct\":\"YXkQOdpTrAk2aJ2pqRmPFCXljPVryrLkRCUi8F2aK4dNZNukecJr5hf65M+JrmSFq7vxiYap7b4HkdChd6ARVUc/RvCopsq7bw/zGUjQ+UU9nOeVOOlNS1+A8hc5alltOr8cW3f1QUxfx4lrp+df8jRIv090KR1NNlb+ZDuQ+lvHu0mqbFc6ANpb2JKFebz9CyGYE/stv8vTtF+2qm/5i94UJ6CI11Hn1gOs5yeuhGJBd7DY59gK0+hcpUAwQSx3srl+OTxNntIHm+OcOZZ/TbrMzF4urLtyYAil3IDdu1RoRNQe2GSncWiv/cv0LHgbOD3aXl0hYIMN6mwnwKyyFmlQpb1Y9LWCRbULY8qFZH0a9m9f/RfsaG5+NyTAfU/e8u1CLcdob4l9ljMbycB1duPbdmm0Ly7kRras4AldgN5ISVeOUh6QRG47glmQ7nm92g5Dv+e1N5j1dBSRXpug9NDq6+HC1j0imrJqS2eNr9Dae7idkaYBdMJNuzRdoF7MWz1lsFVgxOjKatGO49MmNXrqZpVWYtk3/mvq\"}",
+  "passphrase": "correct horse battery",
+  "wrong_passphrase": "correct horse batterY",
+  "expect": {
+   "header": {
+    "platform": "windows",
+    "app_version": "7.2.0-dev.1",
+    "created": 1763900000020
+   },
+   "manifest": {
+    "categories": [
+     "Conversations",
+     "Personal memory"
+    ],
+    "counts": {
+     "conversation": 1,
+     "message": 1,
+     "memory": 1
+    },
+    "platform": "windows",
+    "app_version": "7.2.0-dev.1",
+    "created": 1763900000020
+   },
+   "records": {
+    "conversation": [
+     {
+      "rid": "c-0001-conversation",
+      "kind": "conversation",
+      "ver": {
+       "dev": "aaaaaaaaaaaaaaaa",
+       "n": 1
+      },
+      "base": null,
+      "at": 1763900000002,
+      "del": false,
+      "data": {
+       "title": "Trip ✈ plan",
+       "created": 1763900000000
+      }
+     }
+    ],
+    "message": [
+     {
+      "rid": "m-0001-message",
+      "kind": "message",
+      "ver": {
+       "dev": "aaaaaaaaaaaaaaaa",
+       "n": 1
+      },
+      "base": null,
+      "at": 1763900000003,
+      "del": false,
+      "data": {
+       "conv": "c-0001-conversation",
+       "role": "user",
+       "content": "नमस्ते — hello",
+       "created": 1763900000001
+      }
+     }
+    ],
+    "memory": [
+     {
+      "rid": "mem-0001-memory",
+      "kind": "memory",
+      "ver": {
+       "dev": "aaaaaaaaaaaaaaaa",
+       "n": 2
+      },
+      "base": {
+       "dev": "aaaaaaaaaaaaaaaa",
+       "n": 1
+      },
+      "at": 1763900000004,
+      "del": false,
+      "data": {
+       "content": "Prefers short answers",
+       "created": 1763800000000,
+       "category": "preference"
+      }
+     }
+    ]
+   }
+  }
+ }
+}

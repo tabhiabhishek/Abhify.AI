@@ -50,7 +50,9 @@ DOWNLOADS = {
              "file": "nsis-3.10.zip",
              "sha256": "fcdce3229717a2a148e7cda0ab5bdb667f39d8fb33ede1da8dabc336bd5ad110"},
 }
-APP_ALLOW = {"backend": ["*.py", "requirements.txt", "news_sources.json"],   # 6.1: news_center.CATALOG_FILE (dev.8 package lacked it: /news/categories 500)
+APP_ALLOW = {"backend": ["*.py", "requirements.txt", "news_sources.json",    # 6.1: news_center.CATALOG_FILE (dev.8 package lacked it: /news/categories 500)
+                          "model_catalog.json",                               # 7.0.2: hardware_advisor.CATALOG_PATH (first 7.0.2 build lacked it: /setup/advice 500)
+                          "study_tracks.json", "skills_taxonomy.json"],       # 7.2 Study: course outlines and the skills taxonomy
               "desktop": ["launcher.pyw"], "frontend": ["**/*"]}
 DEV_ONLY = {"pip", "setuptools", "wheel", "pytest", "_pytest", "pluggy", "iniconfig", "py.py",
             "_distutils_hack", "distutils-precedence.pth"}
@@ -228,7 +230,8 @@ def verify_runtime(rt: Path) -> None:
 
 APP_MODULES = ("main, agent, knowledge, document_indexer, folder_watcher, generators, system_service, "
                "companion, log_redaction, transcribe, memory_service, local_file_service, database, membership, "
-               "setup_manager, updates, ed25519_verify")
+               "setup_manager, updates, ed25519_verify, providers, identity, wakeword, "
+               "vault_crypto, sync_core, drive_client, google_oauth, secure_store, datasync_local, datasync_service, study_core, study, study_plus, study_sync, career_mcq")   # 7.1: providers (DPAPI); 7.1.0-dev.2: identity, wake phrase; 7.2 work (hidden in 7.1.0-rc.1, imported by main)
 
 
 def verify_app() -> None:

@@ -250,23 +250,154 @@ def test_missing_key_is_needs_key(monkeypatch, online, data_root):
     assert "could NOT be retrieved" in live["block"]
 
 
-# --------------------------------------------------------------------------- weather and exchange rates (off by default)
-def test_weather_and_fx_are_off_by_default(data_root, online, monkeypatch):
-    install_http(monkeypatch, lambda req: pytest.fail("no request while off"))
+# --------------------------------------------------------------------------- weather (on when asked) and exchange rates (off by default)
+def test_weather_is_on_and_fx_is_off_by_default(data_root, online, monkeypatch):
+    install_http(monkeypatch, lambda req: pytest.fail("no request without a city or while off"))
     st = {c["id"]: c for c in run(R.status())["connectors"]}
-    assert st["weather"]["state"] == "off" and st["fx"]["state"] == "off"
+    assert st["weather"]["state"] == "ready" and st["fx"]["state"] == "off"
     assert st["news"]["state"] == "ready" and st["web"]["state"] == "ready"
     assert {st[k]["state"] for k in ("projects", "tasks", "system")} == {"ready"}
-    w = run(R.lookup("What is the weather now?"))
-    assert w["state"] == "unavailable" and "Weather is off" in w["problems"][0]
+    w = run(R.lookup("What is the weather now?"))                                      # no city named or saved: ask for one
+    assert w["state"] == "unavailable" and "Which city?" in w["problems"][0]
     f = run(R.lookup("dollar exchange rate today"))
     assert f["state"] == "unavailable" and "Exchange rates are off" in f["problems"][0]
-    R.save_settings({"weather": True})                                                  # on, but no place yet
-    assert "needs a place" in run(R.lookup("What is the weather now?"))["problems"][0]
+    R.save_settings({"weather": False})                                                 # the switch still blocks it completely
+    assert "turned off" in run(R.lookup("weather in Pune today"))["problems"][0]
+
+
+def test_place_from_the_question_any_case_with_state():
+    assert R.place_in("weather forecast for pune maharashtra today") == "pune maharashtra"
+    assert R.place_in("how is the weather in Pune, Maharashtra tomorrow") == "Pune, Maharashtra"
+    assert R.place_in("pune weather") == "pune"
+    assert R.place_in("will it rain today in mumbai?") == "mumbai"
+    assert R.place_in("what is the weather today") == "" and R.place_in("today weather forecast") == ""
+
+
+PLACE_CASES = json.loads((Path(__file__).parent / "data" / "realtime_intents.json").read_text(encoding="utf-8"))["place_cases"]
+
+
+@pytest.mark.parametrize("case", PLACE_CASES, ids=[c["q"][:40] for c in PLACE_CASES])
+def test_shared_place_cases(case):
+    """7.1 (shared with Android RealtimeTest): "my location" / "here" / "near me" name no place."""
+    assert R.place_in(case["q"]) == case["place"]
+
+
+def test_my_location_asks_for_the_city_and_is_never_saved(monkeypatch, online, data_root):
+    """7.1 regression: "weather in my location" geocoded the word "location" (a US town), answered for it and saved it."""
+    asked = []
+    install_http(monkeypatch, lambda req: asked.append(str(req.url)) or httpx.Response(500))
+    live = run(R.lookup("What is today's weather in my location?"))
+    assert asked == [] and live["state"] == "unavailable" and "Which city?" in live["problems"][0]
+    assert R.settings()["place"] == ""
+    reply = R.unavailable_reply(live)
+    assert reply.startswith("Which city should I check?") and "never reads your device's location" in reply
+
+
+def test_a_bad_place_saved_by_an_older_build_is_ignored(monkeypatch, online, data_root):
+    R.save_settings({"place": "location"})
+    assert R.saved_place(R.settings()) == "" and R.saved_place({"place": "Pune"}) == "Pune"
+    live = run(R.lookup("what is the weather now?"))
+    assert live["state"] == "unavailable" and "Which city?" in live["problems"][0]
+
+
+def test_missing_reading_gets_the_apps_own_answer_never_a_remembered_number(monkeypatch, online, migrated):
+    """7.1 regression: with exchange rates off the model said "around 80 INR per USD"; now the model isn't asked at all."""
+    import agent
+    called = []
+
+    class Boom:
+        async def ainvoke(self, *a, **k):
+            called.append(1)
+            raise AssertionError("the model must not be asked")
+
+        async def astream(self, *a, **k):
+            called.append(1)
+            raise AssertionError("the model must not be asked")
+            yield
+    for name in ("get_agent", "_live_agent", "_mode_agent"):
+        monkeypatch.setattr(agent, name, lambda *a, **k: Boom())
+    monkeypatch.setattr(agent, "record_inference", lambda *a, **k: None)
+    monkeypatch.setattr(agent, "active_models", lambda: {"llm": "qwen2.5", "embed": "x"})
+    r = run(agent.run_agent("What is the current USD to INR exchange rate?", None))
+    assert called == [] and "won't guess a number" in r["answer"] and "Exchange rates are off" in r["answer"]
+    assert not any(ch.isdigit() for ch in r["answer"])
+    g = run(agent.run_guest("What is the current USD to INR exchange rate?"))
+    assert called == [] and "won't guess a number" in g["answer"]
+
+    async def collect():
+        return [e async for e in agent.stream_agent("What is the current USD to INR exchange rate?", None)]
+    ev = run(collect())
+    assert called == [] and [e["type"] for e in ev] == ["live", "live", "token", "done"] and "won't guess" in ev[2]["text"]
+    # a question that ALSO needs news or the web still goes to the model (it has something to answer from)
+    assert R.unavailable_reply({"needed": ["fx", "news"], "sources": [], "problems": ["x"]}) is None
+    assert R.unavailable_reply({"needed": ["fx"], "sources": [{"id": "W1"}], "problems": []}) is None
+
+
+def test_calculations_and_code_are_not_web_searched_by_the_prompt():
+    import agent
+    assert "Never search the" in agent.SYSTEM_PROMPT and "calculations" in agent.SYSTEM_PROMPT
+
+
+@pytest.mark.parametrize("q,want", [
+    ("A train travels 120 km in 1.5 hours and then 80 km in 1 hour. What is its average speed for the whole trip?", True),
+    ("What is 15% of 2400?", True),
+    ("I get TypeError on x = d.get('a'); print(x[0]). Why?", True),
+    ("Write a Python function to reverse a list", True),
+    ("What is the latest version of Python?", False),
+    ("How many people live in Pune?", False),
+    ("What is the current price of gold?", False),
+    ("How many days until 2027?", False),
+    ("Explain recursion", False),
+])
+def test_self_solvable_questions_get_no_search_tool(q, want):
+    """7.1 regression: qwen2.5 web-searched a plain average-speed word problem although the prompt said not to."""
+    import agent
+    import intelligence
+    assert agent.self_solvable(q, intelligence.detect(q)) is want
+
+
+def test_a_word_problem_is_answered_without_tools(monkeypatch, migrated):
+    import agent
+    used = {}
+
+    class NoTools:
+        async def ainvoke(self, inputs, config=None):
+            return {"messages": [*inputs["messages"], AIMessage("200 km / 2.5 h = 80 km/h.")]}
+    monkeypatch.setattr(agent, "_live_agent", lambda *a, **k: used.setdefault("agent", "no-tools") and NoTools())
+    class ToolAgent:
+        async def ainvoke(self, *a, **k):
+            raise AssertionError("the tool agent must not answer")
+    monkeypatch.setattr(agent, "get_agent", lambda *a, **k: ToolAgent())
+    monkeypatch.setattr(agent, "record_inference", lambda *a, **k: None)
+    monkeypatch.setattr(agent, "active_models", lambda: {"llm": "qwen2.5", "embed": "x"})
+    r = run(agent.run_agent("A train travels 120 km in 1.5 hours and then 80 km in 1 hour. What is its average speed?", None))
+    assert used == {"agent": "no-tools"} and r["tools_used"] == [] and "80 km/h" in r["answer"]
+
+
+def test_city_and_state_without_a_comma_is_found_and_remembered(monkeypatch, online, data_root):
+    asked = []
+
+    def handler(req):
+        asked.append(dict(req.url.params))
+        if req.url.host == "geocoding-api.open-meteo.com":
+            if req.url.params["name"] != "pune":
+                return httpx.Response(200, json={"generationtime_ms": 0.2})                # the real API: no hits for "pune maharashtra"
+            return httpx.Response(200, json={"results": [
+                {"name": "Pune", "admin1": "Some State", "country": "Elsewhere", "latitude": 1.0, "longitude": 1.0},
+                {"name": "Pune", "admin1": "Maharashtra", "country": "India", "latitude": 18.52, "longitude": 73.86}]})
+        return httpx.Response(200, json={"utc_offset_seconds": 19800, "current": {"time": "2026-11-18T15:30", "temperature_2m": 27.4, "weather_code": 0},
+                                         "daily": {"weather_code": [0, 61], "temperature_2m_max": [30.1, 29.0], "temperature_2m_min": [17.9, 17.0],
+                                                   "precipitation_probability_max": [5, 60]}})
+    install_http(monkeypatch, handler)
+    live = run(R.lookup("weather forecast for pune maharashtra tomorrow"))
+    assert live["state"] == "verified" and asked[2]["latitude"] == "18.52"               # the Maharashtra hit, not the first one
+    assert "Maharashtra" in live["sources"][0]["title"] and "tomorrow: 17.0–29.0°C, light rain, chance of rain 60%" in live["sources"][0]["snippet"]
+    assert R.settings()["place"] == "pune maharashtra"                                    # remembered for "what's the weather?" next time
+    assert run(R.lookup("what is the weather now?", refresh=True))["state"] == "verified"
 
 
 def test_weather_parsing(monkeypatch, online, data_root):
-    R.save_settings({"weather": True, "place": "Pune"})
+    R.save_settings({"place": "Pune"})
     asked = []
 
     def handler(req):
@@ -610,7 +741,7 @@ def test_realtime_routes_are_local_only_never_cached_and_documented():
     assert found == want
     sw = (ROOT / "frontend" / "sw.js").read_text(encoding="utf-8")
     assert "'/realtime'" in sw
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme = (ROOT / "docs" / "ABHIFY_AI_COMPLETE_DOCUMENTATION.md").read_text(encoding="utf-8")   # API table (7.2.1)
     for p in ("/realtime/status", "/realtime/settings", "/realtime/lookup"):
         assert p in readme, p
 

@@ -132,17 +132,16 @@ class ScheduledBackupTest {
     }
 
     @Test fun scheduleRulesAndRoundTrip() {
-        val c = BackupSchedule(enabled = true, toDrive = true, categories = listOf("Personal memory"))
-        assertTrue(c.problem(hasPassphrase = false, driveConnected = true)!!.contains("encrypted"))          // Drive needs a passphrase
-        assertTrue(c.problem(true, driveConnected = false)!!.contains("Connect"))
+        val c = BackupSchedule(enabled = true, categories = listOf("Personal memory"), folderUri = "content://tree/x")
         assertNull(c.problem(true, true))
-        assertTrue(c.copy(toDrive = false).problem(true, true)!!.contains("where to save"))
-        assertNull(c.copy(toDrive = false, folderUri = "content://tree/x").problem(hasPassphrase = false, driveConnected = false))   // local may be unencrypted
+        assertTrue(c.copy(folderUri = null).problem(true, true)!!.contains("folder on this phone"))       // 7.2: a local folder is the only destination
+        assertNull(c.problem(hasPassphrase = false, driveConnected = false))                            // local may be unencrypted
         assertTrue(c.copy(categories = emptyList()).problem(true, true)!!.contains("at least one"))
         assertNull(BackupSchedule().problem(false, false))                                                // disabled: nothing to check
         assertFalse(BackupSchedule().enabled)                                                           // off by default
         val back = BackupSchedule.parse(c.copy(folderUri = "content://t", folderName = "Docs", keep = 7, weekly = true).json())
         assertEquals(c.copy(folderUri = "content://t", folderName = "Docs", keep = 7, weekly = true), back)
+        assertFalse(c.json().contains("toDrive"))
         assertEquals(BackupSchedule(), BackupSchedule.parse("not json"))
     }
 

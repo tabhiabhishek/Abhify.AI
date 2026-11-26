@@ -108,7 +108,7 @@ fun PersonalMemoryScreen(vm: AppViewModel) {
                 OutlinedButton({ save("abhify-memory.md", m.exportMd().toByteArray()) }) { Text("Export Markdown") }
                 OutlinedButton({ vm.backup.toDrive(memoryOnly = true) }, enabled = vm.drive.busy.value == null) { Text("Back up to Drive") }
             }
-            Muted("A memory backup contains only your memories (set a passphrase in Backup & restore to encrypt it). Nothing is uploaded automatically.")
+            Muted("A memory backup contains only your memories. Backups for Google Drive are always encrypted: set a passphrase (8+ characters) in Backup & restore first. Nothing is uploaded automatically.")
             if (m.items.isNotEmpty()) TextButton({ clearAll = true }) { Text("Delete all memories", color = LocalExtra.current.bad) }
         }
     }
@@ -328,9 +328,9 @@ fun BackupScreen(vm: AppViewModel) {
         SettingsGroup("Create a backup") {
             Backup.CATEGORIES.keys.forEach { c -> Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(c in b.selected, { on -> if (on) b.selected += c else b.selected -= c }); Text(c) } }
-            OutlinedTextField(b.passphrase.value, { b.passphrase.value = it }, Modifier.fillMaxWidth(), label = { Text("Passphrase (optional, 8+ characters, encrypts the file)") },
+            OutlinedTextField(b.passphrase.value, { b.passphrase.value = it }, Modifier.fillMaxWidth(), label = { Text("Passphrase (8+ characters; required for Drive, optional for a file)") },
                 visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(), singleLine = true)
-            Muted("Never included: API keys, Google tokens, passwords, signing keys, the AI model. Without a passphrase the file is readable by anyone who has it.")
+            Muted("Never included: API keys, Google tokens, passwords, signing keys, the AI model. Uploads to Google Drive are always encrypted (no passphrase, no upload). A file saved without a passphrase is readable by anyone who has it.")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button({ scope.launch { try { val (n, bytes) = b.create(); save(n, bytes); b.record("This phone (file)", b.selected.toList(), bytes) } catch (e: IllegalArgumentException) { b.message.value = e.message } } },
                     enabled = b.selected.isNotEmpty()) { Text("Save to a file") }
@@ -416,24 +416,20 @@ private fun ScheduleCard(vm: AppViewModel) {
         Backup.CATEGORIES.keys.forEach { c -> Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(c in cfg.categories, { on -> cfg = cfg.copy(categories = if (on) cfg.categories + c else cfg.categories - c) }); Text(c) } }
         Text("Save to", style = MaterialTheme.typography.labelLarge)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(cfg.toDrive, { cfg = cfg.copy(toDrive = it) }, enabled = vm.drive.connected.value)
-            Text("Google Drive (Abhify.AI/Application Backups)" + if (!vm.drive.connected.value) " — connect Drive first" else "", Modifier.weight(1f))
-        }
+        if (cfg.driveRemoved) Muted("This schedule used to upload to Google Drive. Since 7.2 scheduled backups stay on this phone; to put a backup on Drive, use \"Upload to Drive\" above (always encrypted).")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(cfg.folderUri != null, { on -> if (on) folderPicker.launch(null) else cfg = cfg.copy(folderUri = null, folderName = null) })
             Text("A folder on this phone" + (cfg.folderName?.let { ": $it" } ?: ""), Modifier.weight(1f))
             if (cfg.folderUri != null) TextButton({ folderPicker.launch(null) }) { Text("Change") }
         }
-        if (cfg.toDrive) Row(verticalAlignment = Alignment.CenterVertically) { Switch(cfg.wifiOnly, { cfg = cfg.copy(wifiOnly = it) }); Spacer(Modifier.width(8.dp)); Text("Wi-Fi only") }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("Keep the newest"); TextButton({ cfg = cfg.copy(keep = (cfg.keep - 1).coerceAtLeast(1)) }, Modifier.semantics { contentDescription = "Keep one fewer" }) { Text("−") }
             Text("${cfg.keep}", fontWeight = FontWeight.SemiBold); TextButton({ cfg = cfg.copy(keep = (cfg.keep + 1).coerceAtMost(30)) }, Modifier.semantics { contentDescription = "Keep one more" }) { Text("+") }
             Text("per place")
         }
-        Muted("Older scheduled backups beyond this number are removed — only ones Abhify made for this schedule (Drive: moved to trash). Manual backups and other files are never touched. The newest always stays.")
+        Muted("Older scheduled backups beyond this number are removed — only ones Abhify made for this schedule in that folder. Manual backups and other files are never touched. The newest always stays.")
         OutlinedTextField(pass, { pass = it }, Modifier.fillMaxWidth(), singleLine = true,
-            label = { Text(if (b.schedulePassSet.value) "Passphrase is saved (type to change)" else "Passphrase (8+; required for Drive)") },
+            label = { Text(if (b.schedulePassSet.value) "Passphrase is saved (type to change)" else "Passphrase (8+, recommended)") },
             visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation())
         Muted("Stored encrypted with this phone's Keystore so backups can run unattended. Without it, a backup can't be restored — keep it somewhere safe.")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

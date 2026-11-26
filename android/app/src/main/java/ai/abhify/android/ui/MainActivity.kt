@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
               androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides
                   androidx.compose.ui.unit.Density(dens.density, dens.fontScale * vm.textSize.value.scale)) {
                 BrandBackground {
-                    Box(Modifier.safeDrawingPadding()) { Router(vm, ::askNotifications, ::withMic, ::exportAll); StudioOverlays(vm); VoiceOverlay(vm); AgentOverlay(vm); BriefingSheet(vm) }
+                    Box(Modifier.safeDrawingPadding()) { Router(vm, ::askNotifications, ::withMic, ::exportAll); StudioOverlays(vm); VoiceOverlay(vm); WakeIndicator(vm); AgentOverlay(vm); BriefingSheet(vm) }
                     androidx.compose.runtime.LaunchedEffect(Unit) { if (intent?.getBooleanExtra(BriefingWorker.EXTRA, false) == true) vm.openBriefing(); handleReminder(intent) }
                 }
                 androidx.compose.animation.AnimatedVisibility(splash, enter = androidx.compose.animation.EnterTransition.None,
@@ -79,6 +79,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onResume() { super.onResume(); vm.refreshDevice(); vm.refreshPending() }
+    /** 7.1.1: leaving the app releases the microphone (tap-to-talk, conversation and wake listening). Never in the background. */
+    override fun onStop() { super.onStop(); vm.releaseMicrophone() }
+    override fun onStart() { super.onStart(); vm.onAppForeground() }
 
     /** 5.6: a to-do reminder's Snooze (1 hour) or tap (opens Home → Today). */
     private fun handleReminder(i: android.content.Intent?) {
@@ -88,6 +91,11 @@ class MainActivity : ComponentActivity() {
             runCatching { getSystemService(android.app.NotificationManager::class.java).cancel(TaskReminders.notificationId(snooze)) }
             vm.studio.message.value = "Reminder snoozed until %02d:%02d.".format(at.hour, at.minute); i?.removeExtra(TaskReminders.EXTRA_SNOOZE) }
         if (open >= 0 || snooze >= 0) { vm.tab.value = AppViewModel.Tab.HOME; i?.removeExtra(TaskReminders.EXTRA_OPEN) }
+        // 7.2.0-dev.2: the study reminder or the Study widget opens Study → Prepare → Today
+        if (i?.getBooleanExtra(ai.abhify.android.learn.StudyReminderWorker.EXTRA_OPEN_STUDY, false) == true) {
+            i.removeExtra(ai.abhify.android.learn.StudyReminderWorker.EXTRA_OPEN_STUDY)
+            vm.home(); vm.tab.value = AppViewModel.Tab.STUDY; vm.learnMode.value = 8; vm.study.open(StudyState.Section.TODAY)
+        }
     }
     override fun onNewIntent(intent: android.content.Intent) { super.onNewIntent(intent); setIntent(intent); handleReminder(intent) }
 
@@ -118,7 +126,7 @@ private fun Router(vm: AppViewModel, askNotifications: () -> Unit, withMic: (() 
         AppViewModel.Route.ACCOUNT -> AccountScreen(vm)
         AppViewModel.Route.SYNC -> SyncScreen(vm)
         AppViewModel.Route.PRIVACY -> PrivacyScreen(vm)
-        AppViewModel.Route.SETTINGS -> SettingsScreen(vm)
+        AppViewModel.Route.SETTINGS -> SettingsScreen(vm, withMic)
         AppViewModel.Route.ABOUT -> AboutScreen(vm)
         AppViewModel.Route.SETUP -> SetupScreen(vm)
         AppViewModel.Route.RESUME -> ResumeScreen(vm)

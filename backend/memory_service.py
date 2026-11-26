@@ -42,17 +42,38 @@ def ensure_conversation(conversation_id: str | None, first_message: str = "") ->
 
 
 def add_message(conversation_id: str, role: str, content: str,
-                tools: list[str] | None = None, sources: list[str] | None = None) -> None:
+                tools: list[str] | None = None, sources: list[str] | None = None, model: str | None = None) -> None:
+    """[model]: for assistant messages, the model that actually wrote the answer (7.0)."""
     with db.connect() as c:
-        c.execute("INSERT INTO messages (conversation_id, role, content, tools, sources) VALUES (?, ?, ?, ?, ?)",
-                  (conversation_id, role, content, json.dumps(tools or []), json.dumps(sources or [])))
+        if model is None:                                     # no model to record: the pre-v6 statement (works on any schema)
+            c.execute("INSERT INTO messages (conversation_id, role, content, tools, sources) VALUES (?, ?, ?, ?, ?)",
+                      (conversation_id, role, content, json.dumps(tools or []), json.dumps(sources or [])))
+        else:
+            c.execute("INSERT INTO messages (conversation_id, role, content, tools, sources, model) VALUES (?, ?, ?, ?, ?, ?)",
+                      (conversation_id, role, content, json.dumps(tools or []), json.dumps(sources or []), model))
         c.execute("UPDATE conversations SET updated_at = datetime('now') WHERE id = ?", (conversation_id,))
+
+
+def conversation_model(conversation_id: str | None) -> str | None:
+    """7.0: the model chosen for this conversation (None = it follows the global default)."""
+    if not conversation_id:
+        return None
+    with db.connect() as c:
+        row = c.execute("SELECT model FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
+    return (row["model"] or None) if row else None
+
+
+def set_conversation_model(conversation_id: str, model: str | None) -> None:
+    """7.0: remembers [model] for this conversation (None = follow the default again). Creates the row if needed."""
+    with db.connect() as c:
+        c.execute("INSERT OR IGNORE INTO conversations (id, title) VALUES (?, 'New conversation')", (conversation_id,))
+        c.execute("UPDATE conversations SET model = ? WHERE id = ?", (model, conversation_id))
 
 
 def recent_messages(conversation_id: str, limit: int = 12) -> list[dict[str, Any]]:
     """Last `limit` messages of a conversation, oldest first."""
     with db.connect() as c:
-        rows = c.execute("SELECT role, content, tools, sources, created_at FROM messages WHERE conversation_id = ? "
+        rows = c.execute("SELECT role, content, tools, sources, model, created_at FROM messages WHERE conversation_id = ? "
                          "ORDER BY id DESC LIMIT ?", (conversation_id, limit)).fetchall()
     return [{**dict(r), "tools": json.loads(r["tools"] or "[]"), "sources": json.loads(r["sources"] or "[]")}
             for r in reversed(rows)]
@@ -73,7 +94,7 @@ def drop_last_exchange(conversation_id: str, user_text: str) -> bool:
 def list_conversations(limit: int = 50) -> list[dict[str, Any]]:
     with db.connect() as c:
         return [dict(r) for r in c.execute(
-            "SELECT c.id, c.title, c.created_at, c.updated_at, COUNT(m.id) AS messages FROM conversations c "
+            "SELECT c.id, c.title, c.created_at, c.updated_at, c.model, COUNT(m.id) AS messages FROM conversations c "
             "LEFT JOIN messages m ON m.conversation_id = c.id GROUP BY c.id ORDER BY c.updated_at DESC LIMIT ?",
             (limit,))]
 

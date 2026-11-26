@@ -53,7 +53,7 @@ class DriveCentralFolderTest {
         assertEquals("https://drive.google.com/drive/folders/abc", DriveApi.folderUrl("abc"))
         val f = FakeDrive(); val a = api(f)
         assertEquals(DriveApi.Account("perm-1", "tester@example.com", "Tester"), a.account())
-        val up = a.upload("Application Backups", "old.json", "application/json", byteArrayOf(1)) as DriveApi.Upload.Done
+        val up = a.upload("Application Backups", "old.json", "application/json", ai.abhify.android.backup.Backup.encrypt(byteArrayOf(1), "passphrase-1")) as DriveApi.Upload.Done   // 7.2: Backups only takes encrypted files
         assertEquals(a.folder("Backups"), f.files.getValue(up.item.id).parent)                                     // legacy name still lands in Backups
         val exports = a.folder("Exports")
         a.move(up.item.id, exports, a.folder("Backups"))

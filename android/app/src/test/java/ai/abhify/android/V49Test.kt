@@ -162,7 +162,7 @@ class NavigationSettingsTest {
         assertTrue(more.contains("rerunSetup()")); assertFalse(settings.contains("rerunSetup()"))
         for (s in listOf("MemoryProfileCard(vm)", "Copy diagnostics (no keys)")) { assertTrue(s, settings.contains(s)); assertFalse(s, more.contains(s)) }
         for (g in listOf("\"AI\"", "\"Performance\"", "\"Appearance\"", "\"Diagnostics\"")) assertTrue(g, settings.contains("SettingsGroup($g"))
-        assertTrue(settings.contains("VoiceSettingsGroup(vm)"))                                   // 5.4: Voice & Conversation (was Voice & audio)
+        assertTrue(settings.contains("VoiceSettingsGroup(vm"))                                    // 7.1.1: (vm, withMic) for the wake-word permission                                   // 5.4: Voice & Conversation (was Voice & audio)
         for (g in listOf("\"Knowledge\"", "\"Workspace\"", "\"Career\"", "\"AI & System\"", "\"Settings & Privacy\"")) assertTrue(g, more.contains("SettingsGroup($g"))
         // every route in More appears once
         Regex("""Route\.([A-Z]+)\)""").findAll(more).map { it.groupValues[1] }.groupingBy { it }.eachCount().forEach { (r, n) -> assertEquals("Route.$r once", 1, n) }

@@ -274,6 +274,8 @@ Java_ai_abhify_android_llm_LlamaBridge_nativeGenerate(JNIEnv *env, jobject, jobj
             jboolean go = env->CallBooleanMethod(callback, onBytes, arr);
             env->DeleteLocalRef(arr);
             pending.erase(0, ok);
+            // 7.1.0: a Java exception in the callback must not stay pending (the next JNI call would abort the app)
+            if (env->ExceptionCheck()) { env->ExceptionClear(); stopped = "cancelled"; n_gen++; break; }
             if (!go) { stopped = "cancelled"; n_gen++; break; }
         }
         if (llama_decode(g_ctx, llama_batch_get_one(&tok, 1)) != 0) { stopped = "error"; break; }

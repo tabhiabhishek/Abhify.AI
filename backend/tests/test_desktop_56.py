@@ -304,7 +304,7 @@ def test_new_paths_are_never_cached_and_documented():
     root = Path(__file__).resolve().parents[2]
     sw = (root / "frontend" / "sw.js").read_text(encoding="utf-8")
     assert "'/agent'" in sw and "'/eval'" in sw
-    readme = (root / "README.md").read_text(encoding="utf-8")
+    readme = (root / "docs" / "ABHIFY_AI_COMPLETE_DOCUMENTATION.md").read_text(encoding="utf-8")   # API table (7.2.1)
     for p in ("/projects/{pid}/overview", "/agent/plan", "/agent/apply", "/agent/undo", "/agent/tools", "/eval/retrieval"):
         assert p in readme, p
 

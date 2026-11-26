@@ -91,7 +91,7 @@ class TaskRemindersTest {
         assertTrue(code("ui/MainActivity.kt").contains("TaskReminders.snooze(this, snooze)"))
         val manifest = File("src/main/AndroidManifest.xml").readText()
         assertFalse(manifest.contains("SCHEDULE_EXACT_ALARM") || manifest.contains("USE_EXACT_ALARM"))   // no new permission
-        assertEquals(7, Regex("<uses-permission ").findAll(manifest).count())                   // same as 5.5 (libraries add the other 3)
+        assertEquals(6, Regex("<uses-permission ").findAll(manifest).count())                   // 7.2.1: REQUEST_INSTALL_PACKAGES removed (libraries add the other 3)
     }
 }
 

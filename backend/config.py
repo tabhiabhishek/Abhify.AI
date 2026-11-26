@@ -39,7 +39,9 @@ class Settings(BaseSettings):
         "http://localhost:3000,http://127.0.0.1:3000,"
         "tauri://localhost,http://tauri.localhost,https://tauri.localhost"
     )
-    cors_origin_regex: str | None = r"https://.*\.(netlify|vercel)\.app"
+    # 7.1 security: no pattern by default. The former r"https://.*\.(netlify|vercel)\.app" let ANY site hosted there read
+    # this computer's API. Hosting the PWA elsewhere: add that exact origin to CORS_ORIGINS instead.
+    cors_origin_regex: str | None = None
     # Admin endpoints (backup/restore, data relocation, model downloads) only
     # accept requests from the local machine unless this is turned on.
     allow_remote_admin: bool = False

@@ -43,31 +43,33 @@ import androidx.compose.ui.unit.sp
  * WCAG-checked in ContrastTest.
  */
 object Brand {
-    // 5.6 "Neural Futuristic": near-black charcoal surfaces (shared with frontend/styles.css :root --bg-0/--surface/...)
-    val Bg1 = Color(0xFF07080D)          // near-black: dark background
-    val Bg2 = Color(0xFF1A1E2B)          // raised charcoal (dialogs, sheets, composer)
-    val Surface = Color(0xFF131620)      // charcoal cards
-    val Glass = Color(0xE6131620)        // cards over the ambient light: 90 % surface, the light shows through slightly
+    // 7.0 "Synapse": obsidian layers, violet intelligence, electric-cyan live data (shared with frontend/styles.css :root)
+    val Bg1 = Color(0xFF06070D)          // obsidian: dark background
+    val Bg2 = Color(0xFF161A33)          // raised indigo-charcoal (dialogs, sheets, composer)
+    val Surface = Color(0xFF0E1020)      // cards
+    val Glass = Color(0xE60E1020)        // cards over the ambient light: 90 % surface, the light shows through slightly
     val GlassStrong = Bg2
-    val Line = Color(0xFF30364A)
-    val Text = Color(0xFFF3F5FA)
-    val Muted = Color(0xFFA3A9BE)
-    val Violet = Color(0xFF6D4AFF)       // brand: primary buttons, active navigation (white text 5.1:1)
-    val Violet2 = Color(0xFFA594FF)      // brand-coloured text on the night (>= 4.5:1); use colorScheme.tertiary outside this file
+    val Line = Color(0xFF2C3052)         // violet-tinted hairline
+    val Text = Color(0xFFEEF0FF)
+    val Muted = Color(0xFFAEB4D6)
+    val Violet = Color(0xFF7350F5)       // brand fill: primary buttons, selected chips (white text 5.0:1)
+    val Violet2 = Color(0xFFB9A3FF)      // brand-coloured text on obsidian (>= 4.5:1); use colorScheme.tertiary outside this file
+    val Synapse = Color(0xFF9D7BFF)      // 7.0 signature violet: the neural core, rings, gradients (not for small text on light)
+    val CyanText = Color(0xFF8FEFFF)     // live-data text (source chips, "checked … ago")
     val Azure = Color(0xFF3B82F6)
     val Mint = Color(0xFF2DD4BF)
     val Coral = Color(0xFFFF7A6B)
-    val Lavender = Color(0xFFB9A8FF)
-    val Cyan = Color(0xFF22D3EE)         // 5.6 electric cyan: the second brand colour (ready states, the neural core, waveform)
+    val Lavender = Color(0xFFC9B8FF)
+    val Cyan = Color(0xFF3DE0FF)         // 7.0 electric cyan: live data, the core's outer ring, waveform
     val LightBg = Color(0xFFF6F5FF)
     val Green = Color(0xFF34D399)
     val Red = Color(0xFFFF8A8A)
     val Amber = Color(0xFFFBBF24)
     /** The brand gradient (violet → cyan), used sparingly: the launch ring, the send buttons. Icons only on it (no text). */
-    val Accent = Brush.linearGradient(listOf(Violet, Color(0xFF4F7BFF), Cyan))
+    val Accent = Brush.linearGradient(listOf(Synapse, Cyan))
     /** The deep aurora (violet → indigo → azure): surfaces with white text on them (your chat bubbles); >= 6:1 everywhere. */
     val Deep = Brush.linearGradient(listOf(Color(0xFF5B3BF0), Color(0xFF4338CA), Color(0xFF1D4ED8)))
-    val Radius = 20.dp                   // cards (4.6: softer)
+    val Radius = 16.dp                   // cards (7.0 Synapse)
 }
 
 /**
@@ -140,8 +142,8 @@ internal val lightExtraPublic get() = lightExtra
 // text-safe status colours (WCAG AA on the card surfaces of each theme)
 private val darkExtra = Extra(Brand.Glass, Brand.GlassStrong, Brand.Line, Brand.Muted, Brand.Green, Brand.Amber, Brand.Red,
     SolidColor(Brand.Bg1), Brand.Deep, Color(0xFF0A0B11), Brand.Cyan,
-    // 5.6: restrained ambient light (violet and cyan, lower than 4.6's aurora) so surfaces read as premium, not noisy
-    auroraA = Brand.Violet.copy(alpha = 0.22f), auroraB = Brand.Cyan.copy(alpha = 0.09f), auroraC = Brand.Violet.copy(alpha = 0.07f))
+    // 7.0 Synapse: a violet glow top-left and a cyan glow low right, restrained so surfaces read as premium, not noisy
+    auroraA = Brand.Synapse.copy(alpha = 0.16f), auroraB = Brand.Cyan.copy(alpha = 0.07f), auroraC = Brand.Cyan.copy(alpha = 0.06f))
 
 private val lightExtra = Extra(Color(0xF2FFFFFF), Color.White, Color(0xFFE6E3F7), Color(0xFF5A5C7A), Color(0xFF047857), Color(0xFFA14A06), Color(0xFFB91C1C),
     SolidColor(Brand.LightBg), Brand.Deep, Color(0xFFEFEDFB), Color(0xFF0F766E), dark = false,
@@ -154,9 +156,9 @@ private val dark: ColorScheme = darkColorScheme(
     secondary = Brand.Lavender, onSecondary = Color(0xFF1E1240), secondaryContainer = Color(0xFF2C2470), onSecondaryContainer = Color(0xFFE8E4FF),
     tertiary = Brand.Violet2,
     background = Brand.Bg1, onBackground = Brand.Text, surface = Brand.Bg1, onSurface = Brand.Text,
-    surfaceVariant = Brand.Bg2, onSurfaceVariant = Brand.Muted, surfaceContainerLowest = Color(0xFF0A0B11), surfaceContainerLow = Brand.Surface,
-    surfaceContainer = Brand.Surface, surfaceContainerHigh = Brand.Bg2, surfaceContainerHighest = Color(0xFF232838),
-    outline = Color(0xFF3B4157), outlineVariant = Brand.Line,
+    surfaceVariant = Brand.Bg2, onSurfaceVariant = Brand.Muted, surfaceContainerLowest = Color(0xFF090A13), surfaceContainerLow = Brand.Surface,
+    surfaceContainer = Brand.Surface, surfaceContainerHigh = Brand.Bg2, surfaceContainerHighest = Color(0xFF1E2240),
+    outline = Color(0xFF3A3F66), outlineVariant = Brand.Line,
     error = Brand.Red, onError = Color(0xFF2A0A0A), errorContainer = Color(0xFF3B1218), onErrorContainer = Color(0xFFFECACA),
 )
 
@@ -176,13 +178,34 @@ private fun inter(w: Int) = Font(R.font.inter, FontWeight(w), variationSettings 
 @OptIn(ExperimentalTextApi::class)
 val Inter = FontFamily(inter(400), inter(500), inter(600), inter(700))
 
+@OptIn(ExperimentalTextApi::class)
+private fun grotesk(w: Int) = Font(R.font.space_grotesk, FontWeight(w), variationSettings = FontVariation.Settings(FontVariation.weight(w)))
+
+/** 7.0 Synapse display face: headings, big numbers, the wordmark. */
+@OptIn(ExperimentalTextApi::class)
+val Grotesk = FontFamily(grotesk(500), grotesk(600), grotesk(700))
+
+@OptIn(ExperimentalTextApi::class)
+private fun mono(w: Int) = Font(R.font.jetbrains_mono, FontWeight(w), variationSettings = FontVariation.Settings(FontVariation.weight(w)))
+
+/** 7.0 Synapse data face: anything factual (times, sources, model names, eyebrow labels) and code. */
+@OptIn(ExperimentalTextApi::class)
+val Mono = FontFamily(mono(400), mono(500), mono(600))
+
+/** Eyebrow label: mono, uppercase by the caller, wide tracking (section labels on cards). */
+val EyebrowStyle = TextStyle(fontFamily = Mono, fontSize = 11.sp, lineHeight = 14.sp, letterSpacing = 1.3.sp, fontWeight = FontWeight(500))
+/** Metadata: source chips, timestamps, model names. */
+val MetaStyle = TextStyle(fontFamily = Mono, fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight(400))
+
 private val type = Typography().let { t ->
     fun TextStyle.inter(size: Int, weight: Int, line: Int) = copy(fontFamily = Inter, fontSize = size.sp, fontWeight = FontWeight(weight), lineHeight = line.sp)
+    fun TextStyle.grotesk(size: Int, weight: Int, line: Int) = copy(fontFamily = Grotesk, fontSize = size.sp, fontWeight = FontWeight(weight), lineHeight = line.sp, letterSpacing = (-0.2).sp)
     Typography(
         // 4.5 scale: display 34 (launch, greeting), page title 22–24, section 18, card title 16, body 16, secondary 14, caption 13
-        displaySmall = t.displaySmall.inter(34, 700, 40), headlineMedium = t.headlineMedium.inter(28, 700, 34),
-        headlineSmall = t.headlineSmall.inter(24, 700, 30), titleLarge = t.titleLarge.inter(22, 700, 28),
-        titleMedium = t.titleMedium.inter(18, 600, 24), titleSmall = t.titleSmall.inter(16, 600, 22),
+        // 7.0 Synapse: Space Grotesk for display, headlines and titles; Inter for body and labels
+        displaySmall = t.displaySmall.grotesk(34, 700, 40), headlineMedium = t.headlineMedium.grotesk(28, 700, 34),
+        headlineSmall = t.headlineSmall.grotesk(24, 600, 30), titleLarge = t.titleLarge.grotesk(22, 600, 28),
+        titleMedium = t.titleMedium.grotesk(18, 600, 24), titleSmall = t.titleSmall.inter(16, 600, 22),
         bodyLarge = t.bodyLarge.inter(16, 400, 24), bodyMedium = t.bodyMedium.inter(15, 400, 22), bodySmall = t.bodySmall.inter(14, 400, 20),
         labelLarge = t.labelLarge.inter(16, 600, 20), labelMedium = t.labelMedium.inter(14, 500, 18), labelSmall = t.labelSmall.inter(13, 500, 16),
     )
@@ -241,7 +264,7 @@ object ThemeTokens {
 val glassBorder @Composable get() = BorderStroke(1.dp, LocalExtra.current.line)
 
 /** Monospace text for code (blocks and inline), sized to stay readable on phones. */
-val CodeStyle = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 14.sp, lineHeight = 20.sp)
+val CodeStyle = TextStyle(fontFamily = Mono, fontSize = 14.sp, lineHeight = 20.sp)
 
 /** Syntax colours that stay readable on both code backgrounds (dark: #0A0C1C, light: #EFEDFB). */
 data class CodeColors(val keyword: Color, val string: Color, val comment: Color, val number: Color, val function: Color)

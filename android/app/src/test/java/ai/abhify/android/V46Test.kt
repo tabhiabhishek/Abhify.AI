@@ -48,7 +48,8 @@ class AuroraDesignTest {
 
     @Test fun navigationIsColouredAnimatedAndComplete() {
         val nav = ui.getValue("Aurora.kt").substringAfter("fun AuroraNavBar(").substringBefore("\n}\n")
-        assertTrue(nav.contains("animateColorAsState") && nav.contains("a.g1") && nav.contains("role = Role.Tab") && nav.contains("this.selected = on"))
+        // 7.0 Synapse: one violet pill for every tab (4.6 used each feature's colour, a.g1)
+        assertTrue(nav.contains("animateColorAsState") && nav.contains("pillOn") && nav.contains("role = Role.Tab") && nav.contains("this.selected = on"))
         val home = ui.getValue("HomeScreens.kt")
         assertTrue(home.contains("AuroraNavBar(tab.barParent, AppViewModel.Tab.entries.filter { it.inBar }") && home.contains("PageTransition(tab)"))
         val pt = ui.getValue("Aurora.kt").substringAfter("fun <T : Enum<T>> PageTransition(").substringBefore("\n}\n")

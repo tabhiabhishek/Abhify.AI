@@ -1,0 +1,155 @@
+{
+  "format": "abhify-study-tracks-1",
+  "note": "Course outlines for Study (7.2). Written by hand, not generated, so every course works offline and is the same on Windows, Web and Android (android/app/src/main/assets/study_tracks.json must be an identical copy). Lesson content and questions are generated on the device when a lesson is opened. 'skills' use names from skills_taxonomy.json.",
+  "tracks": [
+    {
+      "id": "aiml", "title": "AI / ML Engineer", "summary": "Math, ML, deep learning, NLP, LLMs and MLOps for AI/ML engineering roles.", "icon": "🤖",
+      "modules": [
+        {"id": "aiml-math", "title": "Maths for ML", "skills": ["Statistics", "Machine Learning"], "lessons": [
+          {"id": "aiml-math-1", "title": "Linear algebra you actually use: vectors, matrices, dot products"},
+          {"id": "aiml-math-2", "title": "Probability and distributions for ML"},
+          {"id": "aiml-math-3", "title": "Gradients, derivatives and the chain rule"},
+          {"id": "aiml-math-4", "title": "Bias, variance and the bias-variance trade-off"}]},
+        {"id": "aiml-ml", "title": "Core machine learning", "skills": ["Machine Learning", "scikit-learn"], "lessons": [
+          {"id": "aiml-ml-1", "title": "Supervised vs unsupervised learning"},
+          {"id": "aiml-ml-2", "title": "Linear and logistic regression"},
+          {"id": "aiml-ml-3", "title": "Decision trees, random forests and gradient boosting"},
+          {"id": "aiml-ml-4", "title": "Overfitting, regularisation and cross-validation"},
+          {"id": "aiml-ml-5", "title": "Evaluation metrics: precision, recall, F1, ROC-AUC"}]},
+        {"id": "aiml-dl", "title": "Deep learning", "skills": ["Deep Learning", "PyTorch", "TensorFlow"], "lessons": [
+          {"id": "aiml-dl-1", "title": "Neural networks, activations and backpropagation"},
+          {"id": "aiml-dl-2", "title": "Optimisers, learning rates and batch normalisation"},
+          {"id": "aiml-dl-3", "title": "Convolutional neural networks"},
+          {"id": "aiml-dl-4", "title": "Recurrent networks and sequence models"}]},
+        {"id": "aiml-nlp", "title": "NLP and transformers", "skills": ["Natural Language Processing", "Transformers", "Hugging Face"], "lessons": [
+          {"id": "aiml-nlp-1", "title": "Tokenisation and embeddings"},
+          {"id": "aiml-nlp-2", "title": "Attention and the transformer architecture"},
+          {"id": "aiml-nlp-3", "title": "Fine-tuning pretrained models"}]},
+        {"id": "aiml-llm", "title": "LLMs and generative AI", "skills": ["Large Language Models", "Generative AI", "RAG", "Prompt Engineering", "LangChain"], "lessons": [
+          {"id": "aiml-llm-1", "title": "How large language models work"},
+          {"id": "aiml-llm-2", "title": "Prompt engineering patterns"},
+          {"id": "aiml-llm-3", "title": "Retrieval-augmented generation (RAG)"},
+          {"id": "aiml-llm-4", "title": "Evaluating and guarding LLM applications"}]},
+        {"id": "aiml-ops", "title": "MLOps and deployment", "skills": ["MLOps", "Model Deployment", "Docker"], "lessons": [
+          {"id": "aiml-ops-1", "title": "Serving models behind an API"},
+          {"id": "aiml-ops-2", "title": "Experiment tracking and model versioning"},
+          {"id": "aiml-ops-3", "title": "Monitoring, drift and retraining"}]}
+      ]
+    },
+    {
+      "id": "swe", "title": "Software Engineer", "summary": "Data structures, algorithms, OOP, system design and web for software engineering interviews.", "icon": "💻",
+      "modules": [
+        {"id": "swe-dsa", "title": "Data structures", "skills": ["Problem Solving", "Python", "Java"], "lessons": [
+          {"id": "swe-dsa-1", "title": "Arrays, strings and hashing"},
+          {"id": "swe-dsa-2", "title": "Linked lists, stacks and queues"},
+          {"id": "swe-dsa-3", "title": "Trees and binary search trees"},
+          {"id": "swe-dsa-4", "title": "Heaps and priority queues"},
+          {"id": "swe-dsa-5", "title": "Graphs: BFS and DFS"}]},
+        {"id": "swe-algo", "title": "Algorithms", "skills": ["Problem Solving"], "lessons": [
+          {"id": "swe-algo-1", "title": "Big-O: time and space complexity"},
+          {"id": "swe-algo-2", "title": "Sorting and binary search"},
+          {"id": "swe-algo-3", "title": "Two pointers and sliding window"},
+          {"id": "swe-algo-4", "title": "Recursion and backtracking"},
+          {"id": "swe-algo-5", "title": "Dynamic programming"}]},
+        {"id": "swe-oop", "title": "Object-oriented design", "skills": ["Java", "Python", "C#"], "lessons": [
+          {"id": "swe-oop-1", "title": "Classes, inheritance and polymorphism"},
+          {"id": "swe-oop-2", "title": "SOLID principles"},
+          {"id": "swe-oop-3", "title": "Common design patterns"}]},
+        {"id": "swe-sd", "title": "System design", "skills": ["System Design", "Microservices", "Redis", "Kafka"], "lessons": [
+          {"id": "swe-sd-1", "title": "How to approach a system design interview"},
+          {"id": "swe-sd-2", "title": "Scaling: load balancing, caching and replication"},
+          {"id": "swe-sd-3", "title": "Databases: SQL vs NoSQL, indexing and sharding"},
+          {"id": "swe-sd-4", "title": "Message queues and asynchronous processing"},
+          {"id": "swe-sd-5", "title": "Designing a URL shortener"}]},
+        {"id": "swe-web", "title": "Backend and APIs", "skills": ["REST APIs", "Backend Development", "SQL"], "lessons": [
+          {"id": "swe-web-1", "title": "REST API design"},
+          {"id": "swe-web-2", "title": "Authentication and authorisation"},
+          {"id": "swe-web-3", "title": "SQL joins, transactions and isolation"}]},
+        {"id": "swe-prac", "title": "Engineering practice", "skills": ["Git", "Unit Testing", "CI/CD"], "lessons": [
+          {"id": "swe-prac-1", "title": "Git workflows and code review"},
+          {"id": "swe-prac-2", "title": "Testing: unit, integration and mocks"},
+          {"id": "swe-prac-3", "title": "Concurrency basics: threads, locks and races"}]}
+      ]
+    },
+    {
+      "id": "ds", "title": "Data Scientist / Analyst", "summary": "Statistics, SQL, Python, ML and visualisation for data science and analyst roles.", "icon": "📊",
+      "modules": [
+        {"id": "ds-stats", "title": "Statistics", "skills": ["Statistics"], "lessons": [
+          {"id": "ds-stats-1", "title": "Descriptive statistics and distributions"},
+          {"id": "ds-stats-2", "title": "Hypothesis testing and p-values"},
+          {"id": "ds-stats-3", "title": "Confidence intervals"},
+          {"id": "ds-stats-4", "title": "A/B testing and experiment design"}]},
+        {"id": "ds-sql", "title": "SQL for analysis", "skills": ["SQL", "PostgreSQL"], "lessons": [
+          {"id": "ds-sql-1", "title": "Aggregation and GROUP BY"},
+          {"id": "ds-sql-2", "title": "Joins and subqueries"},
+          {"id": "ds-sql-3", "title": "Window functions"}]},
+        {"id": "ds-py", "title": "Python for data", "skills": ["Pandas", "NumPy", "Data Analysis"], "lessons": [
+          {"id": "ds-py-1", "title": "pandas: selecting, filtering and grouping"},
+          {"id": "ds-py-2", "title": "Cleaning data and handling missing values"},
+          {"id": "ds-py-3", "title": "NumPy and vectorised operations"}]},
+        {"id": "ds-ml", "title": "Machine learning for data science", "skills": ["Machine Learning", "scikit-learn", "XGBoost"], "lessons": [
+          {"id": "ds-ml-1", "title": "Feature engineering"},
+          {"id": "ds-ml-2", "title": "Choosing and validating a model"},
+          {"id": "ds-ml-3", "title": "Explaining model results to stakeholders"}]},
+        {"id": "ds-viz", "title": "Visualisation and storytelling", "skills": ["Data Visualization", "Tableau", "Power BI"], "lessons": [
+          {"id": "ds-viz-1", "title": "Choosing the right chart"},
+          {"id": "ds-viz-2", "title": "Dashboards and KPIs"},
+          {"id": "ds-viz-3", "title": "Business case studies and metrics"}]}
+      ]
+    },
+    {
+      "id": "cloud", "title": "Cloud Technology", "summary": "Cloud fundamentals, networking, containers, infrastructure as code and architecture.", "icon": "☁️",
+      "modules": [
+        {"id": "cloud-fund", "title": "Cloud fundamentals", "skills": ["Cloud Computing", "AWS", "Azure", "Google Cloud"], "lessons": [
+          {"id": "cloud-fund-1", "title": "IaaS, PaaS, SaaS and the shared responsibility model"},
+          {"id": "cloud-fund-2", "title": "Regions, availability zones and high availability"},
+          {"id": "cloud-fund-3", "title": "Compute: virtual machines, containers and serverless"},
+          {"id": "cloud-fund-4", "title": "Storage: object, block and file"}]},
+        {"id": "cloud-net", "title": "Networking and security", "skills": ["Networking", "Cybersecurity", "AWS"], "lessons": [
+          {"id": "cloud-net-1", "title": "Virtual networks, subnets and security groups"},
+          {"id": "cloud-net-2", "title": "Identity and access management (IAM)"},
+          {"id": "cloud-net-3", "title": "Load balancers, DNS and CDNs"}]},
+        {"id": "cloud-cont", "title": "Containers and orchestration", "skills": ["Docker", "Kubernetes"], "lessons": [
+          {"id": "cloud-cont-1", "title": "Docker images and containers"},
+          {"id": "cloud-cont-2", "title": "Kubernetes: pods, deployments and services"},
+          {"id": "cloud-cont-3", "title": "Scaling and health checks in Kubernetes"}]},
+        {"id": "cloud-iac", "title": "DevOps and infrastructure as code", "skills": ["Terraform", "CI/CD", "DevOps", "GitHub Actions"], "lessons": [
+          {"id": "cloud-iac-1", "title": "Infrastructure as code with Terraform"},
+          {"id": "cloud-iac-2", "title": "CI/CD pipelines"},
+          {"id": "cloud-iac-3", "title": "Observability: logs, metrics and alerts"}]},
+        {"id": "cloud-arch", "title": "Cloud architecture", "skills": ["Cloud Computing", "System Design", "Microservices"], "lessons": [
+          {"id": "cloud-arch-1", "title": "Designing for scale and failure"},
+          {"id": "cloud-arch-2", "title": "Cost optimisation"},
+          {"id": "cloud-arch-3", "title": "Serverless and event-driven architecture"}]}
+      ]
+    },
+    {
+      "id": "behav", "title": "Behavioural / HR", "summary": "STAR stories, core behavioural themes and closing the interview well.", "icon": "🗣️",
+      "modules": [
+        {"id": "behav-star", "title": "Answering with STAR", "skills": ["Communication"], "lessons": [
+          {"id": "behav-star-1", "title": "The STAR method: situation, task, action, result"},
+          {"id": "behav-star-2", "title": "Tell me about yourself"},
+          {"id": "behav-star-3", "title": "Why this company, why this role"}]},
+        {"id": "behav-core", "title": "Core competencies", "skills": ["Leadership", "Communication", "Problem Solving"], "lessons": [
+          {"id": "behav-core-1", "title": "Leadership and taking ownership"},
+          {"id": "behav-core-2", "title": "Handling conflict and disagreement"},
+          {"id": "behav-core-3", "title": "Failure, mistakes and what you learned"},
+          {"id": "behav-core-4", "title": "Working under pressure and deadlines"},
+          {"id": "behav-core-5", "title": "Teamwork and stakeholder management"}]},
+        {"id": "behav-close", "title": "Closing the interview", "skills": ["Communication"], "lessons": [
+          {"id": "behav-close-1", "title": "Questions to ask the interviewer"},
+          {"id": "behav-close-2", "title": "Salary expectations and negotiation"}]}
+      ]
+    }
+  ],
+  "competencies": [
+    {"id": "leadership", "title": "Leadership / ownership", "question": "Tell me about a time you took the lead."},
+    {"id": "conflict", "title": "Conflict", "question": "Tell me about a disagreement with a colleague and how you handled it."},
+    {"id": "failure", "title": "Failure", "question": "Tell me about a time you failed."},
+    {"id": "pressure", "title": "Pressure / deadlines", "question": "Tell me about a time you worked under a tight deadline."},
+    {"id": "teamwork", "title": "Teamwork", "question": "Tell me about a successful team project."},
+    {"id": "problem", "title": "Problem solving", "question": "Tell me about a hard problem you solved."},
+    {"id": "learning", "title": "Learning fast", "question": "Tell me about a time you had to learn something quickly."},
+    {"id": "impact", "title": "Impact", "question": "What is the achievement you are most proud of?"}
+  ]
+}

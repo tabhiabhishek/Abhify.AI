@@ -29,11 +29,11 @@ function extractConst(name) {
 }
 
 const out = {};
-const ctx = { URL, URLSearchParams, Set, Object, String, Math, console, answerStore: [], state: { engine: 'pc' } };
+const ctx = { URL, URLSearchParams, Set, Object, String, Math, console, answerStore: [], state: { engine: 'pc' }, reader: { ok: true } };   // 7.1: msgTools offers Listen when read-aloud exists
 vm.createContext(ctx);
 const esc = extract('esc');
 vm.runInContext([esc, extractConst('HL_SETS'), extractConst('HL_ALIAS'), extractConst('HL_KW'), extractConst('HL_RE'), extract('highlight'),
-  extractConst('unesc'), extract('codeBlockHtml'), extract('md'), extract('contextHtml'), extractConst('ICON_COPY'), extractConst('ICON_REGEN'),
+  extractConst('unesc'), extract('codeBlockHtml'), extract('md'), extract('contextHtml'), extractConst('ICON_COPY'), extractConst('ICON_REGEN'), extractConst('ICON_SPEAK'),
   extract('msgTools'), extract('followUps'), extract('chatRetryHtml'), extractConst('TAB_NAMES'), extractConst('PATH_TABS'), extract('tabFromUrl')].join('\n'), ctx);
 
 // markdown + code blocks

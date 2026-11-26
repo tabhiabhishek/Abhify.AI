@@ -140,9 +140,51 @@ def running_instance(wait: float = 15) -> dict | None:
         time.sleep(1)
 
 
+def app_window_browser() -> str | None:
+    """7.1.0: a browser that can show Abhify.AI as its own app window: Microsoft Edge (part of Windows), else Chrome."""
+    if os.name != "nt":
+        return None
+    for base in (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"), os.environ.get("LOCALAPPDATA")):
+        for rel in (r"Microsoft\Edge\Application\msedge.exe", r"Google\Chrome\Application\chrome.exe"):
+            if base and (Path(base) / rel).is_file():
+                return str(Path(base) / rel)
+    return None
+
+
+def window_mode() -> str:
+    """'app' (default since 7.1.0: its own window, no tabs or address bar) or 'browser' (a normal browser tab)."""
+    try:
+        return "browser" if (lfs.load_settings().get("desktop") or {}).get("window") == "browser" else "app"
+    except Exception:
+        return "app"
+
+
+def set_window_mode(mode: str) -> None:
+    try:
+        lfs.update_settings(desktop={"window": "browser" if mode == "browser" else "app"})
+    except OSError:
+        pass
+
+
+def ui_command(url: str, mode: str, exe: str | None) -> list[str] | None:
+    """The command that opens [url] as an app window, or None for the default browser. Pure (tested)."""
+    if mode != "app" or not exe:
+        return None
+    return [exe, f"--app={url}", "--new-window"]
+
+
 def open_ui(port: int) -> None:
-    if not os.environ.get("ABHIFY_NO_BROWSER"):
-        webbrowser.open(APP_URL.format(port=port))
+    if os.environ.get("ABHIFY_NO_BROWSER"):
+        return
+    url = APP_URL.format(port=port)
+    cmd = ui_command(url, window_mode(), app_window_browser())
+    if cmd:
+        try:
+            subprocess.Popen(cmd, close_fds=True, creationflags=getattr(subprocess, "DETACHED_PROCESS", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+            return
+        except OSError:
+            pass                                                  # fall back to the default browser
+    webbrowser.open(url)
 
 
 # --------------------------------------------------------------------------- commands
@@ -252,6 +294,8 @@ def start_tray(port: int, server) -> object | None:
 
     menu = pystray.Menu(
         pystray.MenuItem("Open Abhify.AI", lambda: open_ui(port), default=True),
+        pystray.MenuItem("Open as an app window", lambda: set_window_mode("browser" if window_mode() == "app" else "app"),
+                         checked=lambda item: window_mode() == "app"),
         pystray.MenuItem("Open data folder", lambda: open_folder(lfs.root())),
         pystray.MenuItem("Open knowledge folder", lambda: open_folder(lfs.knowledge_folder())),
         pystray.Menu.SEPARATOR,

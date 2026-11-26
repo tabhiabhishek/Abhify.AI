@@ -178,6 +178,7 @@ def _fallback_setup(monkeypatch):
     import agent
     monkeypatch.setattr(agent, "get_agent", lambda *a, **k: _EmptyAgent())
     monkeypatch.setattr(agent, "_mode_agent", lambda *a, **k: _EmptyAgent())
+    monkeypatch.setattr(agent, "_live_agent", lambda *a, **k: _EmptyAgent())            # 7.1: code questions get the no-tools agent
     monkeypatch.setattr(agent, "get_llm", lambda temperature=None, json_mode=False, model=None, num_predict=None: _PlainLLM(model, temperature=temperature, num_predict=num_predict))
     monkeypatch.setattr(agent, "record_inference", lambda *a, **k: None)
     monkeypatch.setattr(agent, "active_models", lambda: {"llm": "qwen2.5", "embed": "x"})
@@ -255,7 +256,7 @@ def test_shell_guards_for_6_1():
     sw = (_ROOT / "frontend" / "sw.js").read_text(encoding="utf-8")
     html = (_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
     css = (_ROOT / "frontend" / "styles.css").read_text(encoding="utf-8")
-    assert "const SHELL_REV = 'ui62.1';" in sw and "abhify-v2.0.0-dev.8" in sw          # 6.2 real-time UI bumped the shell revision
+    assert "const SHELL_REV = 'ui72.5';" in sw and "abhify-v7.2.1'" in sw   # 7.2.1 final
     for mode in ("quick", "deep", "planning", "creative"):
         assert f'<option value="{mode}"' in html                                  # the modes reuse the chat focus selector
     assert "bubble.onclick = (e) => { if (e.target.closest('.chat-stop')) ctrl.abort(); }" in app   # Stop works while streaming

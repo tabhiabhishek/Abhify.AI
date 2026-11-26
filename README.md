@@ -2,7 +2,21 @@
 
 **Your personal AI that runs on your own device: Windows, Android and the browser.**
 
-**Release `7.2.1`** is stable and has been validated on a real laptop and phone. It is not production-signed yet (see [Release status](#release-status)).
+### ▶️ [Try it in your browser: tabhiabhishek.github.io/Abhify.AI](https://tabhiabhishek.github.io/Abhify.AI/)
+
+There's nothing to install. The AI runs inside your browser on your own device, and your data never leaves it. Use a recent Chrome or Edge with WebGPU. The first chat asks before a one-time model download (about 869 MB).
+
+**Release `7.2.1`** is stable and has been validated on a real laptop and phone (see [Release status](#release-status)).
+
+<p align="center">
+  <img src="docs/images/desktop-home-dark.png" alt="Abhify.AI home screen, desktop, dark theme" width="49%">
+  <img src="docs/images/desktop-study-dark.png" alt="Abhify.AI Study screen, desktop, dark theme" width="49%">
+</p>
+<p align="center">
+  <img src="docs/images/phone-home-light.png" alt="Abhify.AI home screen on a phone, light theme" width="24%">
+  &nbsp;&nbsp;
+  <img src="docs/images/phone-study-light.png" alt="Abhify.AI Study screen on a phone, light theme" width="24%">
+</p>
 
 Abhify.AI is a **local-first, privacy-first personal AI workspace**. It covers chat, voice, learning and interview preparation, a personal knowledge base, news, projects and tasks. AI runs on your own device by default. Online providers are optional, off by default and used only after you configure them.
 
@@ -103,7 +117,11 @@ Deleting an upload removes it from search and moves the original to a Trash fold
 
 ## Install
 
-Download the packages from the [GitHub Releases](../../releases) page (tag `v7.2.1`).
+**Public availability:**
+- **Web** is public. Use it at [tabhiabhishek.github.io/Abhify.AI](https://tabhiabhishek.github.io/Abhify.AI/), or host it yourself with `Abhify.AI-7.2.1-Web.zip` from [Releases](../../releases).
+- **The Windows and Android packages are not published.** They stay private until production code signing is in place.
+
+The steps below are for the owner's private builds.
 
 **Windows:**
 - Run `Abhify.AI-7.2.1-Setup.exe`. It installs per user, without admin rights.
@@ -114,7 +132,7 @@ Download the packages from the [GitHub Releases](../../releases) page (tag `v7.2
 - Install `Abhify.AI-7.2.1-debug.apk` (sideload).
 - To upgrade, install over the existing app. Do **not** uninstall first.
 
-**Web:** serve the release folder's `web/standalone/` over HTTPS or localhost. It is `frontend/` with `abhify-platform=web` and needs no backend. The first chat asks before downloading a model.
+**Web (self-hosting):** serve the contents of `Abhify.AI-7.2.1-Web.zip` (the release folder's `web/standalone/`) over HTTPS or localhost. It is `frontend/` with `abhify-platform=web` and needs no backend. The first chat asks before downloading a model.
 
 ```mermaid
 flowchart LR

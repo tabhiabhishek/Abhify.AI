@@ -1,8 +1,22 @@
 # Abhify.AI
 
-**Release `7.2.1`**: stable for the owner's own use. The owner has validated it on a real laptop and phone. It is not production-signed (see [Release status](#release-status)).
+**Your personal AI that runs on your own device: Windows, Android and the browser.**
+
+**Release `7.2.1`** is stable and has been validated on a real laptop and phone. It is not production-signed yet (see [Release status](#release-status)).
 
 Abhify.AI is a **local-first, privacy-first personal AI workspace**. It covers chat, voice, learning and interview preparation, a personal knowledge base, news, projects and tasks. AI runs on your own device by default. Online providers are optional, off by default and used only after you configure them.
+
+## Features
+
+- **AI assistant on your device.** It chats with local models: Ollama on Windows, llama.cpp on Android, WebLLM in the browser. Online providers (your own keys) are optional, and what is sent to them is filtered.
+- **Voice.** Talk to it and have answers read aloud. It has microphone diagnostics that tell you clearly when no sound or no speech was detected.
+- **Study.** Courses, lessons and quizzes, mock interviews, resume tailoring and progress reports. On Android it adds reminders, offline packs and a home-screen widget.
+- **Knowledge base (RAG).** Upload documents or watch a folder, then ask questions. Answers come with sources, and everything stays in a local index.
+- **Memory with consent.** It remembers only what you ask it to. Memory can be switched off globally or per project, and it is never sent to online providers.
+- **Projects and Task Runner.** Project-scoped chats, documents and memory, plus multi-step tasks run by a local agent.
+- **Live news and real-time answers.** News, web, weather and currency rates, with citation checks.
+- **Phone companion (optional).** Pair a phone browser with the desktop over your LAN, using a token and invite-only membership.
+- **Backups and safe upgrades.** One-click backups. The installer backs up your data before every upgrade and never deletes Ollama models or your files.
 
 It ships as **three independent installations**. They share no runtime, no database and no automatic sync:
 
@@ -89,6 +103,8 @@ Deleting an upload removes it from search and moves the original to a Trash fold
 
 ## Install
 
+Download the packages from the [GitHub Releases](../../releases) page (tag `v7.2.1`).
+
 **Windows:**
 - Run `Abhify.AI-7.2.1-Setup.exe`. It installs per user, without admin rights.
 - The setup wizard checks your hardware, then offers to install Ollama and a recommended model. Every download is confirmed first.
@@ -112,7 +128,7 @@ flowchart LR
 
 Upgrades never touch your data, which is backed up first. Ollama models are never removed.
 
-Full steps: [release/Abhify.AI-7.2.1/INSTALL.md](release/Abhify.AI-7.2.1/INSTALL.md).
+Full steps: [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Build from source
 
@@ -129,7 +145,7 @@ Full steps: [release/Abhify.AI-7.2.1/INSTALL.md](release/Abhify.AI-7.2.1/INSTALL
 |---|---|
 | Automated tests | Backend, JS harnesses, Android unit tests and lint, browser E2E, privacy captures, Windows Sandbox install and upgrade. Results: [final release report](docs/ABHIFY_7_2_1_FINAL_RELEASE_REPORT.md) |
 | Physical validation | **Passed** (owner-reported, 2026-11-26): laptop checklist W1–W14, phone checklist A1–A8 |
-| Signing | Android: development certificate. Windows: unsigned. See [signing guide](release/Abhify.AI-7.2.1/SIGNING_GUIDE.md) |
+| Signing | Android: development certificate. Windows: unsigned. See [signing guide](docs/SIGNING_GUIDE.md) |
 | Feature freeze | 7.2.1 is the protected baseline. New work goes into 7.3+ milestones |
 
 ## Documentation

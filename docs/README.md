@@ -11,6 +11,8 @@ Historical per-version reports (1.x to 7.2.1-dev) were removed at the 7.2.1 stab
 | [ABHIFY_AI_COMPLETE_DOCUMENTATION.md](ABHIFY_AI_COMPLETE_DOCUMENTATION.md) | Architecture, features and their status, data, API, security, testing, limitations |
 | [ABHIFY_7_2_1_FINAL_RELEASE_REPORT.md](ABHIFY_7_2_1_FINAL_RELEASE_REPORT.md) | 7.2.1 packages, checksums, verification results |
 | [ABHIFY_7_2_1_FINAL_AUDIT.md](ABHIFY_7_2_1_FINAL_AUDIT.md) | Stage A audit before the 7.2.1 release |
+| [INSTALL.md](INSTALL.md) | Install and upgrade steps for 7.2.1 (Windows, Android, Web) |
+| [SIGNING_GUIDE.md](SIGNING_GUIDE.md) | Production signing steps for the owner (no keys included) |
 
 ## Roadmap and planned design (not implemented)
 
